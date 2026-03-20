@@ -1,0 +1,38 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: novo_afi_backend
+    working_dir: /app/backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://novo_afi:novo_afi@db:5432/novo_afi
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    container_name: novo_afi_db
+    environment:
+      POSTGRES_DB: novo_afi
+      POSTGRES_USER: novo_afi
+      POSTGRES_PASSWORD: novo_afi
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novo_afi -d novo_afi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
