@@ -79,14 +79,14 @@ Objetivo: substituir a pagina estatica temporaria por um frontend real, buildado
 
 ### Subetapas
 
-- [ ] Escolher a stack de frontend mais adequada ao MVP e coerente com a manutencao futura.
-- [ ] Inicializar o frontend em `frontend/` com build de producao servivel pelo backend.
-- [ ] Definir a estrutura base de layout, estilos globais e organizacao de componentes.
-- [ ] Implementar tela principal com secao de upload preparada para um ou mais PDFs.
-- [ ] Implementar estrutura visual para tabela de notas persistidas.
-- [ ] Implementar estados vazios, carregamento e erro basicos.
-- [ ] Garantir responsividade minima para desktop e mobile.
-- [ ] Atualizar a documentacao do frontend, se a estrutura mudar de forma relevante.
+- [x] Escolher a stack de frontend mais adequada ao MVP e coerente com a manutencao futura.
+- [x] Inicializar o frontend em `frontend/` com build de producao servivel pelo backend.
+- [x] Definir a estrutura base de layout, estilos globais e organizacao de componentes.
+- [x] Implementar tela principal com secao de upload preparada para um ou mais PDFs.
+- [x] Implementar estrutura visual para tabela de notas persistidas.
+- [x] Implementar estados vazios, carregamento e erro basicos.
+- [x] Garantir responsividade minima para desktop e mobile.
+- [x] Atualizar a documentacao do frontend, se a estrutura mudar de forma relevante.
 
 ### Testes
 

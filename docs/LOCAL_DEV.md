@@ -4,6 +4,7 @@
 
 - Docker
 - Docker Compose
+- Node.js e npm, caso voce queira buildar o frontend fora do Docker
 
 ## Subir a stack
 
@@ -12,6 +13,8 @@ No PowerShell, a partir da raiz do projeto:
 ```powershell
 .\scripts\start.ps1
 ```
+
+Esse script instala as dependencias do frontend, gera o build estatico e depois sobe os containers.
 
 ## Parar a stack
 
@@ -28,10 +31,23 @@ No PowerShell, a partir da raiz do projeto:
 ## O que esta pronto nesta fase
 
 - Backend FastAPI com ponto de entrada em `backend/app/main.py`
-- Pagina HTML estatica temporaria servida em `/`
+- Frontend React + Vite em `frontend/`
+- Build estatico do frontend servido pelo backend em `/`
 - Chamada de frontend para a API em `/api/hello`
 - PostgreSQL preparado no `docker-compose.yml` para as proximas etapas
 
 ## Observacao
 
 O parser legado continua em `backend/app/main_v9.py` e ainda nao foi integrado ao backend web nesta fase.
+
+## Build local do frontend
+
+Se quiser gerar os assets localmente fora do Docker:
+
+```powershell
+cd frontend
+npm install
+npm run build
+```
+
+O build e emitido em `backend/app/static`, que e o diretorio servido pelo FastAPI.

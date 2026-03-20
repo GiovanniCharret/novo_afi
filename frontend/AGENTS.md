@@ -1,16 +1,43 @@
 # Frontend Notes
 
-## Estado Atual
+## Stack Atual
 
-O diretorio `frontend/` existe, mas esta vazio no momento.
+O frontend agora usa:
 
-## Implicacoes
+- React 19
+- Vite 7
+- JavaScript
 
-- Ainda nao ha stack de frontend escolhida ou inicializada.
-- Ainda nao ha componentes, build, assets, testes ou configuracoes neste diretorio.
-- Qualquer implementacao futura do frontend deve seguir o plano definido em `docs/PLAN.md`.
+## Estrutura
 
-## Observacoes para Proximas Etapas
+- `src/main.jsx`: ponto de entrada do frontend.
+- `src/App.jsx`: composicao principal da tela inicial do MVP.
+- `src/styles.css`: estilos globais e layout da aplicacao.
+- `vite.config.js`: configuracao de build estatico.
+- `package.json`: scripts e dependencias do frontend.
 
-- Quando o frontend for criado, este arquivo deve ser atualizado para descrever a stack adotada, a estrutura de pastas, os comandos principais e os pontos de integracao com o backend.
-- Este arquivo nao deve antecipar codigo inexistente; ele deve sempre refletir o estado real do diretorio.
+## Objetivo desta Fase
+
+Nesta etapa, o frontend entrega:
+
+- uma landing page real servida pelo backend em `/`
+- estrutura visual pronta para upload de PDFs
+- estrutura visual pronta para tabela persistida
+- estados basicos de carregamento e vazio
+- integracao simples com a API atual para confirmar comunicacao com o backend
+
+## Limitacoes Atuais
+
+- Ainda nao ha login real nesta fase.
+- Ainda nao ha upload real para o backend.
+- Ainda nao ha consulta persistida de notas fiscais.
+- O parser legado ainda nao esta integrado a interface.
+
+## Proximas Atualizacoes Esperadas
+
+Este arquivo deve ser atualizado quando houver:
+
+- autenticacao
+- organizacao maior de componentes
+- integracao real com a API de notas
+- testes de frontend
