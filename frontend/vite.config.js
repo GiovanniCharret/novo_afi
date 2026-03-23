@@ -7,5 +7,18 @@ export default defineConfig({
   build: {
     outDir: "../backend/app/static",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/app.js",
+        chunkFileNames: "assets/[name].js",
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.names.includes("style.css")) {
+            return "assets/app.css";
+          }
+
+          return "assets/[name][extname]";
+        },
+      },
+    },
   },
 });

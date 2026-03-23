@@ -20,7 +20,8 @@ O frontend agora usa:
 
 Nesta etapa, o frontend entrega:
 
-- uma landing page real servida pelo backend em `/`
+- uma tela de login para o MVP
+- uma area logada servida pelo backend em `/`
 - estrutura visual pronta para upload de PDFs
 - estrutura visual pronta para tabela persistida
 - estados basicos de carregamento e vazio
@@ -28,10 +29,10 @@ Nesta etapa, o frontend entrega:
 
 ## Limitacoes Atuais
 
-- Ainda nao ha login real nesta fase.
 - Ainda nao ha upload real para o backend.
 - Ainda nao ha consulta persistida de notas fiscais.
 - O parser legado ainda nao esta integrado a interface.
+- A autenticacao atual usa credenciais ficticias fixas.
 
 ## Proximas Atualizacoes Esperadas
 

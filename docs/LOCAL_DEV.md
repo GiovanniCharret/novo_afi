@@ -27,6 +27,9 @@ Esse script instala as dependencias do frontend, gera o build estatico e depois 
 - Aplicacao: `http://localhost:8000/`
 - Healthcheck: `http://localhost:8000/api/health`
 - Exemplo de API: `http://localhost:8000/api/hello`
+- Sessao atual: `http://localhost:8000/api/auth/session`
+- Login: `POST http://localhost:8000/api/auth/login`
+- Logout: `POST http://localhost:8000/api/auth/logout`
 
 ## O que esta pronto nesta fase
 
@@ -34,11 +37,17 @@ Esse script instala as dependencias do frontend, gera o build estatico e depois 
 - Frontend React + Vite em `frontend/`
 - Build estatico do frontend servido pelo backend em `/`
 - Chamada de frontend para a API em `/api/hello`
+- Login simples por sessao com credenciais ficticias
 - PostgreSQL preparado no `docker-compose.yml` para as proximas etapas
 
 ## Observacao
 
 O parser legado continua em `backend/app/main_v9.py` e ainda nao foi integrado ao backend web nesta fase.
+
+## Credenciais do MVP
+
+- Usuario: `user`
+- Senha: `password`
 
 ## Build local do frontend
 

@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 
 const initialRows = [];
+const defaultLoginForm = {
+  username: "user",
+  password: "password",
+};
 
 function formatSelectedFiles(files) {
   if (files.length === 0) {
@@ -15,18 +19,95 @@ function formatSelectedFiles(files) {
 }
 
 export default function App() {
-  const [apiStatus, setApiStatus] = useState({
+  const [authState, setAuthState] = useState({
     loading: true,
-    message: "Conectando ao backend...",
+    isAuthenticated: false,
+    user: null,
+    error: "",
+  });
+  const [apiStatus, setApiStatus] = useState({
+    loading: false,
+    message: "Aguardando autenticacao.",
   });
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [loginForm, setLoginForm] = useState(defaultLoginForm);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
 
   useEffect(() => {
     let active = true;
 
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/auth/session", {
+          credentials: "same-origin",
+        });
+
+        if (response.status === 401) {
+          if (!active) {
+            return;
+          }
+
+          setAuthState({
+            loading: false,
+            isAuthenticated: false,
+            user: null,
+            error: "",
+          });
+          setApiStatus({
+            loading: false,
+            message: "Aguardando autenticacao.",
+          });
+          return;
+        }
+
+        const data = await response.json();
+        if (!active) {
+          return;
+        }
+
+        setAuthState({
+          loading: false,
+          isAuthenticated: true,
+          user: data.user,
+          error: "",
+        });
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setApiStatus({
+          loading: false,
+          message: `Nao foi possivel consultar a sessao: ${error.message}.`,
+        });
+        setAuthState({
+          loading: false,
+          isAuthenticated: false,
+          user: null,
+          error: "Nao foi possivel verificar a autenticacao.",
+        });
+      }
+    }
+
+    loadSession();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authState.isAuthenticated) {
+      return;
+    }
+
+    let active = true;
+
     async function loadStatus() {
       try {
-        const response = await fetch("/api/hello");
+        const response = await fetch("/api/hello", {
+          credentials: "same-origin",
+        });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -35,10 +116,9 @@ export default function App() {
         if (!active) {
           return;
         }
-
         setApiStatus({
           loading: false,
-          message: `Backend conectado: ${data.app} respondeu "${data.message}".`,
+          message: `Backend conectado: ${data.app} respondeu "${data.message}" para ${data.username}.`,
         });
       } catch (error) {
         if (!active) {
@@ -52,33 +132,184 @@ export default function App() {
       }
     }
 
+    setApiStatus({
+      loading: true,
+      message: "Conectando ao backend...",
+    });
     loadStatus();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [authState.isAuthenticated]);
 
   function handleFileSelection(event) {
     const files = Array.from(event.target.files ?? []);
     setSelectedFiles(files);
   }
 
+  function handleLoginChange(event) {
+    const { name, value } = event.target;
+    setLoginForm((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  }
+
+  async function handleLoginSubmit(event) {
+    event.preventDefault();
+    setIsSubmittingLogin(true);
+    setAuthState((current) => ({
+      ...current,
+      error: "",
+    }));
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify(loginForm),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail ?? `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setAuthState({
+        loading: false,
+        isAuthenticated: true,
+        user: data.user,
+        error: "",
+      });
+    } catch (error) {
+      setAuthState({
+        loading: false,
+        isAuthenticated: false,
+        user: null,
+        error: `Falha no login: ${error.message}.`,
+      });
+    } finally {
+      setIsSubmittingLogin(false);
+    }
+  }
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    });
+
+    setSelectedFiles([]);
+    setAuthState({
+      loading: false,
+      isAuthenticated: false,
+      user: null,
+      error: "",
+    });
+    setApiStatus({
+      loading: false,
+      message: "Aguardando autenticacao.",
+    });
+  }
+
+  if (authState.loading) {
+    return (
+      <div className="auth-shell">
+        <section className="auth-card">
+          <p className="eyebrow">Autenticacao</p>
+          <h1>Verificando sua sessao.</h1>
+          <p className="auth-text">Preparando a area logada do Novo AFI.</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (!authState.isAuthenticated) {
+    return (
+      <div className="auth-shell">
+        <section className="auth-card">
+          <p className="eyebrow">Demonstração</p>
+          <h1>Novo AFI</h1>
+          <p className="auth-text">
+            MVP do novo sistema de administração de contratos.
+          </p>
+
+          <form className="login-form" onSubmit={handleLoginSubmit}>
+            <label>
+              <span>Usuario</span>
+              <input
+                name="username"
+                type="text"
+                value={loginForm.username}
+                onChange={handleLoginChange}
+                autoComplete="username"
+              />
+            </label>
+
+            <label>
+              <span>Senha</span>
+              <input
+                name="password"
+                type="password"
+                value={loginForm.password}
+                onChange={handleLoginChange}
+                autoComplete="current-password"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={isSubmittingLogin}
+              style={{ cursor: isSubmittingLogin ? "not-allowed" : "pointer" }}
+            >
+              {isSubmittingLogin ? "Entrando..." : "Entrar"}
+            </button>
+          </form>
+
+          <div className="auth-note">
+            <strong>Como entrar no site?</strong>
+            <p>
+              usuario: <code>user</code> | senha: <code>password</code>
+            </p>
+          </div>
+
+          {authState.error ? <p className="auth-error">{authState.error}</p> : null}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page-shell">
       <header className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">MVP em construcao</p>
-          <h1>Novo AFI para notas fiscais em PDF.</h1>
+          <p className="eyebrow">Ambiente de upload de NFs</p>
+          <h1>Novo AFI</h1>
           <p className="hero-text">
-            Esta interface ja esta pronta para evoluir para upload em lote,
-            autenticacao e consulta persistida. Nesta fase, ela confirma o
-            frontend real servido pelo backend e prepara o fluxo visual do
-            produto.
+            Interface pronta para upload em lote,
+            autenticacao e consulta persistida.
           </p>
         </div>
 
         <aside className="hero-panel">
+          <div className="hero-panel-top">
+            <span className="user-chip">
+              Logado como {authState.user?.username ?? "user"}
+            </span>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={handleLogout}
+              style={{ cursor: "pointer" }}
+            >
+              Sair
+            </button>
+          </div>
           <span className={`status-pill ${apiStatus.loading ? "is-loading" : ""}`}>
             {apiStatus.loading ? "Sincronizando" : "Backend online"}
           </span>
@@ -118,9 +349,9 @@ export default function App() {
 
           <div className="action-row">
             <button type="button" disabled>
-              Upload sera habilitado na integracao real
+              Upload real está desabilitado
             </button>
-            <p>Estrutura pronta para a futura chamada da API de processamento.</p>
+            {/* <p>Estrutura pronta para a futura chamada da API de processamento.</p> */}
           </div>
         </section>
 

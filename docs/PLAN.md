@@ -107,14 +107,14 @@ Objetivo: adicionar uma experiencia simples de autenticacao para proteger a area
 
 ### Subetapas
 
-- [ ] Definir abordagem de sessao simples no backend.
-- [ ] Criar endpoint de login com credenciais fixas `"user"` e `"password"`.
-- [ ] Criar endpoint de logout.
-- [ ] Proteger a rota principal ou a consulta inicial de dados para exigir autenticacao.
-- [ ] Implementar tela e formulario de login no frontend.
-- [ ] Implementar persistencia da sessao no cliente de forma simples e previsivel.
-- [ ] Implementar logout visivel na area autenticada.
-- [ ] Garantir que o frontend redirecione corretamente entre login e area logada.
+- [x] Definir abordagem de sessao simples no backend.
+- [x] Criar endpoint de login com credenciais fixas `"user"` e `"password"`.
+- [x] Criar endpoint de logout.
+- [x] Proteger a rota principal ou a consulta inicial de dados para exigir autenticacao.
+- [x] Implementar tela e formulario de login no frontend.
+- [x] Implementar persistencia da sessao no cliente de forma simples e previsivel.
+- [x] Implementar logout visivel na area autenticada.
+- [x] Garantir que o frontend redirecione corretamente entre login e area logada.
 
 ### Testes
 
