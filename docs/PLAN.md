@@ -135,13 +135,13 @@ Objetivo: definir e documentar a persistencia de notas, itens, uploads e vinculo
 
 ### Subetapas
 
-- [ ] Inspecionar a estrutura de dados produzida pelo parser para identificar entidades persistentes.
-- [ ] Propor schema inicial para usuarios, notas fiscais, itens da nota e historico de processamento por arquivo.
-- [ ] Definir como representar a chave de negocio de deduplicacao.
-- [ ] Definir restricoes unicas e indices necessarios.
-- [ ] Definir relacionamento entre usuario autenticado e historico de uploads sem transformar a sessao em fonte de verdade.
-- [ ] Documentar o modelo em `docs/`.
-- [ ] Submeter a modelagem para aprovacao do usuario antes de implementar.
+- [x] Inspecionar a estrutura de dados produzida pelo parser para identificar entidades persistentes.
+- [x] Propor schema inicial para usuarios, notas fiscais, itens da nota e historico de processamento por arquivo.
+- [x] Definir como representar a chave de negocio de deduplicacao.
+- [x] Definir restricoes unicas e indices necessarios.
+- [x] Definir relacionamento entre usuario autenticado e historico de uploads sem transformar a sessao em fonte de verdade.
+- [x] Documentar o modelo em `docs/`.
+- [x] Submeter a modelagem para aprovacao do usuario antes de implementar.
 
 ### Testes
 
