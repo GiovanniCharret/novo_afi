@@ -155,24 +155,25 @@ Objetivo: definir e documentar a persistencia de notas, itens, uploads e vinculo
 - A deduplicacao por chave de negocio fica clara e aplicavel no banco.
 - O usuario aprova a modelagem antes da implementacao.
 
+
 ## Parte 6: Backend
 
 Objetivo: transformar o parser legado em uma capacidade reutilizavel do backend web, com persistencia e processamento em lote.
 
 ### Subetapas
 
-- [ ] Isolar o parser em um adaptador interno com interface clara para o backend.
-- [ ] Identificar e tratar dependencias do parser legado que impedem uso por requisicao.
-- [ ] Implementar criacao automatica do banco e migrations iniciais ou estrategia equivalente para o MVP.
-- [ ] Implementar endpoint para upload em lote de PDFs compativeis.
-- [ ] Validar tipo de arquivo e rejeitar entradas fora do escopo do MVP.
-- [ ] Processar cada arquivo individualmente, capturando status por arquivo.
-- [ ] Persistir notas e itens alinhados ao retorno do parser.
-- [ ] Aplicar deduplicacao no backend antes da insercao e reforcar no banco.
-- [ ] Registrar status `processado`, `duplicado`, `rejeitado` e `erro de parsing`.
-- [ ] Implementar endpoint de consulta das notas persistidas.
-- [ ] Implementar endpoint de consulta do historico ou ultimo resultado de processamento, se necessario para o frontend.
-- [ ] Cobrir o backend com testes unitarios e de integracao.
+- [x] Isolar o parser em um adaptador interno com interface clara para o backend.
+- [x] Identificar e tratar dependencias do parser legado que impedem uso por requisicao.
+- [x] Implementar criacao automatica do banco e migrations iniciais ou estrategia equivalente para o MVP.
+- [x] Implementar endpoint para upload em lote de PDFs compativeis.
+- [x] Validar tipo de arquivo e rejeitar entradas fora do escopo do MVP.
+- [x] Processar cada arquivo individualmente, capturando status por arquivo.
+- [x] Persistir notas e itens alinhados ao retorno do parser.
+- [x] Aplicar deduplicacao no backend antes da insercao e reforcar no banco.
+- [x] Registrar status `processado`, `duplicado`, `rejeitado` e `erro de parsing`.
+- [x] Implementar endpoint de consulta das notas persistidas.
+- [x] Implementar endpoint de consulta do historico ou ultimo resultado de processamento, se necessario para o frontend.
+- [x] Cobrir o backend com testes unitarios e de integracao.
 
 ### Testes
 

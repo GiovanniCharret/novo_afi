@@ -1,26 +1,18 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-
-def test_healthcheck() -> None:
-    client = TestClient(app)
+def test_healthcheck(client) -> None:
     response = client.get("/api/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_hello_requires_authentication() -> None:
-    client = TestClient(app)
+def test_hello_requires_authentication(client) -> None:
     response = client.get("/api/hello")
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Not authenticated"
 
 
-def test_root_serves_html() -> None:
-    client = TestClient(app)
+def test_root_serves_html(client) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
@@ -28,9 +20,7 @@ def test_root_serves_html() -> None:
     assert "Novo AFI" in response.text
 
 
-def test_login_logout_flow() -> None:
-    client = TestClient(app)
-
+def test_login_logout_flow(client) -> None:
     login_response = client.post(
         "/api/auth/login",
         json={"username": "user", "password": "password"},
@@ -54,9 +44,7 @@ def test_login_logout_flow() -> None:
     assert session_after_logout.status_code == 401
 
 
-def test_login_rejects_invalid_credentials() -> None:
-    client = TestClient(app)
-
+def test_login_rejects_invalid_credentials(client) -> None:
     response = client.post(
         "/api/auth/login",
         json={"username": "user", "password": "wrong"},

@@ -10,7 +10,7 @@ services:
       - "8000:8000"
     environment:
       APP_ENV: development
-      DATABASE_URL: postgresql://novo_afi:novo_afi@db:5432/novo_afi
+      DATABASE_URL: postgresql+psycopg://novo_afi:novo_afi@db:5432/novo_afi
     volumes:
       - ./backend:/app/backend
     depends_on:

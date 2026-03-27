@@ -141,7 +141,8 @@ Campos sugeridos:
 - `status` TEXT NOT NULL
 - `status_reason` TEXT NULL
 - `parser_error` TEXT NULL
-- `nf_entry_id` UUID NULL FK -> `nf_entries.id`
+- `inserted_count` INTEGER NOT NULL DEFAULT 0
+- `duplicate_count` INTEGER NOT NULL DEFAULT 0
 - `created_at` TIMESTAMPTZ NOT NULL DEFAULT now()
 
 Valores esperados para `status`:
@@ -153,8 +154,8 @@ Valores esperados para `status`:
 
 Observacoes:
 
-- `nf_entry_id` fica preenchido quando o arquivo leva a uma linha persistida
-- em caso de duplicado, ele pode apontar para a linha ja existente
+- um unico arquivo pode gerar varias linhas consolidadas
+- por isso, no MVP, `upload_files` guarda o resumo do resultado do arquivo em vez de apontar para apenas uma linha
 - `file_sha256` e util para rastreabilidade e diagnostico, mas a deduplicacao principal nao deve depender apenas dele
 
 ## Estrategia de Deduplicacao
@@ -264,7 +265,8 @@ Para o resultado do upload:
 - `status`
 - `status_reason`
 - `parser_error`
-- `nf_entry_id`
+- `inserted_count`
+- `duplicate_count`
 
 ## Decisoes Deliberadamente Adiadas
 
@@ -320,7 +322,8 @@ create table upload_files (
   status text not null,
   status_reason text,
   parser_error text,
-  nf_entry_id uuid references nf_entries(id),
+  inserted_count integer not null default 0,
+  duplicate_count integer not null default 0,
   created_at timestamptz not null default now()
 );
 ```

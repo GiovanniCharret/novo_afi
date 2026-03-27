@@ -30,6 +30,9 @@ Esse script instala as dependencias do frontend, gera o build estatico e depois 
 - Sessao atual: `http://localhost:8000/api/auth/session`
 - Login: `POST http://localhost:8000/api/auth/login`
 - Logout: `POST http://localhost:8000/api/auth/logout`
+- Lancamentos persistidos: `GET http://localhost:8000/api/nf-entries`
+- Upload em lote: `POST http://localhost:8000/api/uploads`
+- Detalhe de lote: `GET http://localhost:8000/api/upload-batches/{batch_id}`
 
 ## O que esta pronto nesta fase
 
@@ -38,6 +41,7 @@ Esse script instala as dependencias do frontend, gera o build estatico e depois 
 - Build estatico do frontend servido pelo backend em `/`
 - Chamada de frontend para a API em `/api/hello`
 - Login simples por sessao com credenciais ficticias
+- Endpoints protegidos para upload, listagem persistida e historico por lote
 - PostgreSQL preparado no `docker-compose.yml` para as proximas etapas
 
 ## Observacao

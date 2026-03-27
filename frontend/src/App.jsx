@@ -223,7 +223,7 @@ export default function App() {
         <section className="auth-card">
           <p className="eyebrow">Autenticacao</p>
           <h1>Verificando sua sessao.</h1>
-          <p className="auth-text">Preparando a area logada do Novo AFI.</p>
+          <p className="auth-text">Sistema de recolhimento de NF</p>
         </section>
       </div>
     );
@@ -234,7 +234,7 @@ export default function App() {
       <div className="auth-shell">
         <section className="auth-card">
           <p className="eyebrow">Demonstração</p>
-          <h1>Novo AFI</h1>
+          <h1>Recolhimento de documentos</h1>
           <p className="auth-text">
             MVP do novo sistema de administração de contratos.
           </p>
@@ -289,7 +289,7 @@ export default function App() {
       <header className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Ambiente de upload de NFs</p>
-          <h1>Novo AFI</h1>
+          <h1>Recolhimento de documentos</h1>
           <p className="hero-text">
             Interface pronta para upload em lote,
             autenticacao e consulta persistida.
