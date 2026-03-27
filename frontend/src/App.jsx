@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 
-const initialRows = [];
 const defaultLoginForm = {
   username: "user",
   password: "password",
@@ -18,6 +18,28 @@ function formatSelectedFiles(files) {
   return `${files.length} arquivos prontos para envio em lote.`;
 }
 
+function exportEntriesToExcel(rows) {
+  const worksheetRows = rows.map((row) => ({
+    descricao: row.descricao,
+    ncm: row.ncm,
+    quant: row.quantidade,
+    preco_unitario: row.preco_unitario,
+    numero_nf: row.numero_nf,
+    tipo_nota: row.tipo_nota,
+    data_emissao: row.data_emissao,
+    cnpj: row.cnpj,
+    fornecedor: row.fornecedor,
+    valor: row.valor_total,
+    contrato: row.contrato,
+  }));
+
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.json_to_sheet(worksheetRows);
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Notas");
+  XLSX.writeFile(workbook, "tabela_persistida_notas.xlsx");
+}
+
 export default function App() {
   const [authState, setAuthState] = useState({
     loading: true,
@@ -30,6 +52,20 @@ export default function App() {
     message: "Aguardando autenticacao.",
   });
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [entriesState, setEntriesState] = useState({
+    loading: false,
+    rows: [],
+    error: "",
+  });
+  const [uploadState, setUploadState] = useState({
+    submitting: false,
+    error: "",
+    results: [],
+    batchId: null,
+    progress: 0,
+    phase: "idle",
+    progressMessage: "",
+  });
   const [loginForm, setLoginForm] = useState(defaultLoginForm);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
 
@@ -143,6 +179,59 @@ export default function App() {
     };
   }, [authState.isAuthenticated]);
 
+  useEffect(() => {
+    if (!authState.isAuthenticated) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadEntries() {
+      setEntriesState((current) => ({
+        ...current,
+        loading: true,
+        error: "",
+      }));
+
+      try {
+        const response = await fetch("/api/nf-entries", {
+          credentials: "same-origin",
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const rows = await response.json();
+        if (!active) {
+          return;
+        }
+
+        setEntriesState({
+          loading: false,
+          rows,
+          error: "",
+        });
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setEntriesState({
+          loading: false,
+          rows: [],
+          error: `Nao foi possivel carregar os lancamentos: ${error.message}.`,
+        });
+      }
+    }
+
+    loadEntries();
+
+    return () => {
+      active = false;
+    };
+  }, [authState.isAuthenticated]);
+
   function handleFileSelection(event) {
     const files = Array.from(event.target.files ?? []);
     setSelectedFiles(files);
@@ -205,6 +294,20 @@ export default function App() {
     });
 
     setSelectedFiles([]);
+    setUploadState({
+      submitting: false,
+      error: "",
+      results: [],
+      batchId: null,
+      progress: 0,
+      phase: "idle",
+      progressMessage: "",
+    });
+    setEntriesState({
+      loading: false,
+      rows: [],
+      error: "",
+    });
     setAuthState({
       loading: false,
       isAuthenticated: false,
@@ -215,6 +318,158 @@ export default function App() {
       loading: false,
       message: "Aguardando autenticacao.",
     });
+  }
+
+  async function refreshEntries() {
+    const response = await fetch("/api/nf-entries", {
+      credentials: "same-origin",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const rows = await response.json();
+    setEntriesState({
+      loading: false,
+      rows,
+      error: "",
+    });
+  }
+
+  function uploadFilesWithProgress(files, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const formData = new FormData();
+
+      files.forEach((file) => {
+        formData.append("files", file);
+      });
+
+      xhr.open("POST", "/api/uploads");
+      xhr.withCredentials = true;
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return;
+        }
+
+        const percent = Math.min(75, Math.round((event.loaded / event.total) * 75));
+        onProgress({
+          progress: percent,
+          phase: "uploading",
+          message: `Enviando arquivos... ${percent}%`,
+        });
+      };
+
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          try {
+            const payload = JSON.parse(xhr.responseText);
+            reject(new Error(payload.detail ?? `HTTP ${xhr.status}`));
+          } catch {
+            reject(new Error(`HTTP ${xhr.status}`));
+          }
+          return;
+        }
+
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Resposta invalida do backend."));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new Error("Falha de rede durante o upload."));
+      };
+
+      xhr.send(formData);
+    });
+  }
+
+  async function handleUploadSubmit() {
+    if (selectedFiles.length === 0) {
+      setUploadState({
+        submitting: false,
+        error: "Selecione ao menos um PDF antes de enviar.",
+        results: [],
+        batchId: null,
+        progress: 0,
+        phase: "idle",
+        progressMessage: "",
+      });
+      return;
+    }
+
+    let processingTimer = null;
+
+    setUploadState({
+      submitting: true,
+      error: "",
+      results: [],
+      batchId: null,
+      progress: 2,
+      phase: "uploading",
+      progressMessage: "Preparando envio...",
+    });
+
+    try {
+      const payload = await uploadFilesWithProgress(selectedFiles, ({ progress, phase, message }) => {
+        setUploadState((current) => ({
+          ...current,
+          progress,
+          phase,
+          progressMessage: message,
+        }));
+      });
+
+      setUploadState((current) => ({
+        ...current,
+        progress: Math.max(current.progress, 78),
+        phase: "processing",
+        progressMessage: "Processando arquivos no backend...",
+      }));
+
+      processingTimer = window.setInterval(() => {
+        setUploadState((current) => {
+          if (current.phase !== "processing") {
+            return current;
+          }
+
+          return {
+            ...current,
+            progress: current.progress >= 96 ? current.progress : current.progress + 2,
+          };
+        });
+      }, 250);
+
+      setUploadState({
+        submitting: false,
+        error: "",
+        results: payload.files ?? [],
+        batchId: payload.batch_id ?? null,
+        progress: 100,
+        phase: "done",
+        progressMessage: "Processamento concluido.",
+      });
+      setSelectedFiles([]);
+      await refreshEntries();
+    } catch (error) {
+      setUploadState({
+        submitting: false,
+        error: `Falha no upload: ${error.message}.`,
+        results: [],
+        batchId: null,
+        progress: 0,
+        phase: "idle",
+        progressMessage: "",
+      });
+    } finally {
+      if (processingTimer) {
+        window.clearInterval(processingTimer);
+      }
+    }
   }
 
   if (authState.loading) {
@@ -347,12 +602,43 @@ export default function App() {
             <p>{formatSelectedFiles(selectedFiles)}</p>
           </div>
 
+          {uploadState.submitting || uploadState.phase === "done" ? (
+            <div className="progress-block">
+              <div className="progress-meta">
+                <strong>
+                  {uploadState.phase === "processing"
+                    ? "Processando no backend"
+                    : uploadState.phase === "done"
+                      ? "Upload concluido"
+                      : "Fazendo upload"}
+                </strong>
+                <span>{uploadState.progress}%</span>
+              </div>
+              <div
+                className={`progress-bar ${uploadState.phase === "processing" ? "is-processing" : ""}`}
+              >
+                <span style={{ width: `${uploadState.progress}%` }} />
+              </div>
+              <p className="progress-caption">{uploadState.progressMessage}</p>
+            </div>
+          ) : null}
+
           <div className="action-row">
-            <button type="button" disabled>
-              Upload real está desabilitado
+            <button
+              type="button"
+              disabled={uploadState.submitting}
+              onClick={handleUploadSubmit}
+              style={{ cursor: uploadState.submitting ? "not-allowed" : "pointer" }}
+            >
+              {uploadState.submitting ? "Enviando PDFs..." : "Enviar PDFs"}
             </button>
-            {/* <p>Estrutura pronta para a futura chamada da API de processamento.</p> */}
+            <p>
+              O backend processa cada arquivo individualmente e atualiza a base
+              persistida quando encontra linhas novas.
+            </p>
           </div>
+
+          {uploadState.error ? <p className="inline-error">{uploadState.error}</p> : null}
         </section>
 
         <section className="card processing-card">
@@ -361,26 +647,34 @@ export default function App() {
               <p className="section-kicker">Processamento</p>
               <h2>Status por arquivo</h2>
             </div>
+            {uploadState.batchId ? (
+              <span className="section-badge muted">Lote {uploadState.batchId.slice(0, 8)}</span>
+            ) : null}
           </div>
 
-          <div className="status-grid">
-            <article>
-              <strong>Processado</strong>
-              <p>Notas novas persistidas com sucesso.</p>
-            </article>
-            <article>
-              <strong>Duplicado</strong>
-              <p>Arquivos ja conhecidos pela chave de negocio.</p>
-            </article>
-            <article>
-              <strong>Rejeitado</strong>
-              <p>PDF fora do fluxo compativel do MVP.</p>
-            </article>
-            <article>
-              <strong>Erro de parsing</strong>
-              <p>Falha na extracao usando o parser legado.</p>
-            </article>
-          </div>
+          {uploadState.results.length === 0 ? (
+            <div className="empty-state compact">
+              <h3>Nenhum arquivo processado nesta sessao</h3>
+              <p>
+                Ao enviar um lote, esta area passara a mostrar o status retornado
+                pelo backend para cada arquivo.
+              </p>
+            </div>
+          ) : (
+            <div className="status-grid">
+              {uploadState.results.map((item) => (
+                <article key={`${item.filename}-${item.status}`}>
+                  <strong>{item.filename}</strong>
+                  <p>Status: {item.status}</p>
+                  <p>
+                    Novas linhas: {item.inserted_count} | Duplicadas: {item.duplicate_count}
+                  </p>
+                  {item.status_reason ? <p>Motivo: {item.status_reason}</p> : null}
+                  {item.parser_error ? <p>Erro: {item.parser_error}</p> : null}
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="card table-card">
@@ -389,15 +683,34 @@ export default function App() {
               <p className="section-kicker">Consulta</p>
               <h2>Tabela persistida de notas</h2>
             </div>
-            <span className="section-badge muted">Estado vazio nesta fase</span>
+            <div className="section-actions">
+              <span className="section-badge muted">
+                {entriesState.loading ? "Atualizando..." : `${entriesState.rows.length} linhas`}
+              </span>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={entriesState.loading || entriesState.rows.length === 0}
+                onClick={() => exportEntriesToExcel(entriesState.rows)}
+                style={{
+                  cursor: entriesState.loading || entriesState.rows.length === 0
+                    ? "not-allowed"
+                    : "pointer",
+                }}
+              >
+                Exportar Excel
+              </button>
+            </div>
           </div>
 
-          {initialRows.length === 0 ? (
+          {entriesState.error ? <p className="inline-error">{entriesState.error}</p> : null}
+
+          {!entriesState.loading && entriesState.rows.length === 0 ? (
             <div className="empty-state">
               <h3>Nenhuma nota carregada ainda</h3>
               <p>
-                Quando a API real de notas e o banco estiverem conectados, esta
-                area passara a refletir o estado persistido da aplicacao.
+                A base ainda nao possui linhas persistidas. Assim que um upload
+                processar lancamentos novos, a tabela sera atualizada automaticamente.
               </p>
             </div>
           ) : (
@@ -405,21 +718,33 @@ export default function App() {
               <table>
                 <thead>
                   <tr>
-                    <th>Numero</th>
+                    <th>Descricao</th>
+                    <th>NCM</th>
+                    <th>Quant</th>
+                    <th>Preco unitario</th>
+                    <th>Numero NF</th>
+                    <th>Tipo nota</th>
+                    <th>Data emissao</th>
                     <th>CNPJ</th>
-                    <th>Emissao</th>
                     <th>Fornecedor</th>
                     <th>Valor</th>
+                    <th>Contrato</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {initialRows.map((row) => (
+                  {entriesState.rows.map((row) => (
                     <tr key={row.id}>
+                      <td>{row.descricao}</td>
+                      <td>{row.ncm}</td>
+                      <td>{row.quantidade}</td>
+                      <td>{row.preco_unitario}</td>
                       <td>{row.numero_nf}</td>
-                      <td>{row.cnpj}</td>
+                      <td>{row.tipo_nota}</td>
                       <td>{row.data_emissao}</td>
+                      <td>{row.cnpj}</td>
                       <td>{row.fornecedor}</td>
-                      <td>{row.valor}</td>
+                      <td>{row.valor_total}</td>
+                      <td>{row.contrato}</td>
                     </tr>
                   ))}
                 </tbody>

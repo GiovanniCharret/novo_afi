@@ -19,7 +19,12 @@ def normalize_cnpj(value: object) -> str:
 
 
 def parse_brazilian_date(value: object):
-    return datetime.strptime(normalize_text(value), "%d/%m/%Y").date()
+    text = normalize_text(value)
+    match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
+    if not match:
+        raise ValueError(f"Data invalida: {text}")
+
+    return datetime.strptime(match.group(0), "%d/%m/%Y").date()
 
 
 def parse_brazilian_decimal(value: object) -> Decimal | None:

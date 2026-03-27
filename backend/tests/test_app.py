@@ -17,7 +17,7 @@ def test_root_serves_html(client) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "Novo AFI" in response.text
+    assert '<div id="root"></div>' in response.text
 
 
 def test_login_logout_flow(client) -> None:

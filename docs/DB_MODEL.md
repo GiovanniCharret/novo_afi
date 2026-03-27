@@ -7,17 +7,11 @@ O foco desta fase e alinhar persistencia, deduplicacao global de notas e histori
 
 Por decisao de produto para o MVP, a modelagem foi simplificada para favorecer:
 
-- debug por humanos
 - leitura direta no banco
 - menor complexidade de implementacao
 
-Com isso, nao teremos duas tabelas separadas para cabecalho de nota e itens.
 Cada lancamento consolidado extraido pelo parser sera persistido como uma linha em uma unica tabela principal.
 
-Tradeoff assumido:
-
-- alguns dados da nota podem se repetir entre linhas da mesma NF
-- isso e aceitavel no MVP
 - a unicidade global continua protegida por uma chave de negocio no nivel da linha persistida
 
 ## Objetivos

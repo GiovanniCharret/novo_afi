@@ -197,14 +197,14 @@ Objetivo: conectar a interface final ao backend real para entregar o fluxo compl
 
 ### Subetapas
 
-- [ ] Integrar o login do frontend com os endpoints reais do backend.
-- [ ] Integrar o upload em lote com feedback por arquivo.
-- [ ] Exibir no frontend os status de processamento retornados pela API.
-- [ ] Consultar e renderizar a tabela persistida de notas fiscais processadas.
-- [ ] Atualizar automaticamente a interface apos processamento bem-sucedido.
-- [ ] Tratar estados de erro, duplicidade e lista vazia de forma clara.
-- [ ] Refinar UX sem adicionar funcionalidades fora do escopo.
-- [ ] Executar testes end-to-end e ajustes finais.
+- [x] Integrar o login do frontend com os endpoints reais do backend.
+- [x] Integrar o upload em lote com feedback por arquivo.
+- [x] Exibir no frontend os status de processamento retornados pela API.
+- [x] Consultar e renderizar a tabela persistida de notas fiscais processadas.
+- [x] Atualizar automaticamente a interface apos processamento bem-sucedido.
+- [x] Tratar estados de erro, duplicidade e lista vazia de forma clara.
+- [x] Refinar UX sem adicionar funcionalidades fora do escopo.
+- [x] Executar testes end-to-end e ajustes finais.
 
 ### Testes
 

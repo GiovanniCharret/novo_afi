@@ -6,11 +6,10 @@ Separação do fracionando_nf em:
 
 1 - fracionando_nf_produto
 2 - fracionando_nf_servico
+3 - Refatoração de num_nf para ficar mais robusta
+4 - regex excluir "0" como num_or_price
 
 
-Vou deixar para revisar a construção das funções novas depois devido 
-
-a todas as fragilidade que julyana está provocando no projeto,
 """
 
 import pdfplumber
@@ -26,7 +25,7 @@ import json
 from ocr_reader import extrair_dados_nf_servico_do_pdf
 
 # DEPURADOR
-arquivo_investigado = 'CGB ENERGIA LTDA - NF 86.pdf'
+arquivo_investigado = 'MICROPOWER ENERGIA SA - NF 478.pdf'
 
 # DICIONÁRIO QUE RECEBERÁ OS DADOS DO PDF
 default_nf_template = {
@@ -169,7 +168,7 @@ def list_regex_filter(text):
     two_merged_price_pattern = re.compile(r'^\d+(?:[.,]\d+)*,\d{2}\d+(?:[.,]\d+)*,\d{2}$')
     material_description = re.compile(r"^(?=.*[a-zà-ÿ])[a-z0-9à-ÿº\s\-\.\(\)/,+]+$", flags=re.IGNORECASE)
     price = re.compile(r'(?<![\d,])\b\d{1,3}(?:\.\d{3})*,\d{2}\b(?![0-9%])')
-    number = re.compile(r'^[0-9.,]*[0-9]$') #r'^\d+(?:[.,]\d+)*$') #'^[1-9.,]*[1-9]$') #'^\d+(?:[.,]\d+)*$' #r'^\d+(?:\.\d+)*$')
+    number = re.compile(r'^(?=.*[1-9])[0-9.,]*[0-9]$') #r'^\d+(?:[.,]\d+)*$') #'^[1-9.,]*[1-9]$') #'^\d+(?:[.,]\d+)*$' #r'^\d+(?:\.\d+)*$')
     create_date = re.compile(r'\d{2}/\d{2}/\d{4}')
     cnpj = re.compile(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}')
     
@@ -181,7 +180,7 @@ def list_regex_filter(text):
         ("CNPJ", cnpj),
         ("data", create_date),
         #("price", price), #Price e num são parecidos. Por isso, essa regex precisa vir na frente
-        ("num_or_price", number),
+        ("num_or_price", number), # com join_lonely_charecte, linea 265
         ("descpt", material_description)
 
     ]           
@@ -247,22 +246,24 @@ def fix_merged_prices(df):
 
 def join_lonely_character(df):
     """
+    GLOBAIS QUE QUEBRA SE MEXER num_or_price, unindentfied, string_class, text
+    
     Concatena caracteres solitários à linha anterior apenas se:
-    1. Não for um número (caracteres numéricos são preservados).
-    2. A classificaÃ§Ã£o for 'unindentfied'.
+    1. Os dois números não foram mum_or_price (caracteres numéricos são preservados).
+    2. A classificação for 'unindentfied'.
     """
 
     indices_to_drop = []
     
-    # Iteramos a partir da segunda linha (Ã­ndice 1)
+    # Iteramos a partir da segunda linha (Í­ndice 1)
     for i in range(1, len(df)):
         current_text = str(df.iloc[i]['text']).strip()
         current_class = df.iloc[i]['string_class']
         least_class = df.iloc[i-1]['string_class']
         
-        # CRITÃ‰RIOS DE FUSÃƒO:
-        # Comprimento menor ou igual a 2 E nÃ£o Ã© nÃºmero E classificaÃ§Ã£o Ã© unindentfied
-        if len(current_text) <= 2 and not current_text.isdigit() and current_class == "unindentfied" and least_class !='num':
+        # CRITÉRIOS DE FUSÃO:
+        # Comprimento menor ou igual a 2 E não é número e classificação só unindentfied
+        if len(current_text) <= 2 and not current_text.isdigit() and current_class == "unindentfied" and least_class !='num_or_price':
             idx_prev = df.index[i-1]
             idx_curr = df.index[i]
             
@@ -398,383 +399,6 @@ def refine_table_classification(df):
             df.at[idx, 'Anchors'] = f"Alinhado a: {header_text} (Dist: {potential_headers.loc[best_match_idx, 'dist_total']:.2f}px)"
 
     return df
-
-
-# def fracionando_nf(df):
-#     """
-#     Retorna um dicionario com tres DataFrames.
-
-#     Se nao localizar "DADOS ADICIONAIS", usa fallback por salto de "top":
-#     detecta um gap anormal comparando o gap atual com a media movel
-#     dos gaps anteriores.
-#     """
-
-#     #Cada nota tem um espaçamento diferente. Entre a tabela e os dados adicionais. Daí que salto anormal precisa variar,
-#     # enquanto não confirmar que um conjunto de palavras não está no meio do df, bem tipo a 
-#     # função confirma_tipo_documento.
-#     def confirma_tipo_tabela_descricao_serviços(texto):
-#         """
-#         """
-
-#         texto = " ".join(texto["text"].fillna("").astype(str).tolist())
-
-#         def normalizar(s):
-#             s = "" if s is None else str(s)
-#             s = unicodedata.normalize("NFKD", s)
-#             s = "".join(c for c in s if not unicodedata.combining(c))
-#             return s.upper()
-
-#         texto_normalizado = normalizar(texto)
-
-#         chaves_documento_nota_fiscal = [
-#             "DESCRIÇÃO",
-#             'DISCRIMINAÇÃO',
-#             "DETALHADA",
-#             "SERVIÇOS",
-#         ]
-
-#         qtd_chaves_encontradas = sum(
-#             1 for chave in chaves_documento_nota_fiscal if normalizar(chave) in texto_normalizado
-#         )
-        
-#         is_service_descript = qtd_chaves_encontradas >= 1
-
-#         return is_service_descript
-
-
-#     dic_frac_nf = {
-#         "primeiro_terco": pd.DataFrame(columns=df.columns),
-#         "tabela_produtos": pd.DataFrame(columns=df.columns),
-#         "ultimo_terco": pd.DataFrame(columns=df.columns)
-#     }
-
-#     # Chaves de corte baseadas na estrutura padrao de Notas Fiscais
-#     chave_corta_primeiro_terco = [
-#         'DADOS',
-#         'SERVIÇOS',
-#         'PRODUTO',
-#         'DESCRIÇÃO',
-#         'DISCRIMINAÇÃO',
-#         'PRODUTOS',
-#         'PRODUTO',
-#         'PRESTADOS'        
-#     ]
-
-#     chave_corta_ultimo_terco = ['DADOS ADICIONAIS', 'INFORMAÇÕES ADICIONAIS', 'OUTRAS INFORMAÇÕES']
-
-#     idx_inicio_tabela = None
-#     idx_inicio_adicionais = None
-
-#     # 1. Inicio da tabela tem dois strings de chave_corta_primeiro_terco como separador
-#     for chave1 in chave_corta_primeiro_terco:
-#         for chave2 in chave_corta_primeiro_terco:
-#             if chave1 != chave2:
-#                 mask = (
-#                     df['text'].str.contains(chave1, case=False, na=False) &
-#                     df['text'].str.contains(chave2, case=False, na=False)
-#                 )
-#                 indices = df[mask].index
-#                 if not indices.empty:
-#                     idx_inicio_tabela = indices[0]
-#                     break
-    
-#     # 2. Chave que corta o último terço.
-#     # Localiza o inicio das informacoes adicionais por palavra-chave.
-#     for chave in chave_corta_ultimo_terco:
-#         mask = df['text'].str.contains(chave, case=False, na=False)
-#         indices = df[mask].index
-#         if not indices.empty:
-#             idx_inicio_adicionais = indices[0]
-#             break   
-
-#     # 2.1 Fallback: se nao achou "DADOS ADICIONAIS", usa salto de top
-#     if idx_inicio_tabela is not None and idx_inicio_adicionais is None and 'top' in df.columns:
-
-#         trecho = df.loc[idx_inicio_tabela:].copy()
-#         top_num = pd.to_numeric(trecho['top'], errors='coerce')
-#         gaps = top_num.diff().abs()
-        
-#         # Media movel dos gaps anteriores para reduzir falso positivo
-#         media_local = gaps.rolling(window=6, min_periods=3).mean().shift(1)
-
-#         for n in range(3, 10): #Vai aumentando o gap
-
-#             # Gap anormal: maior que o padrao local e acima de um piso em pixels
-#             salto_anormal = (gaps > (media_local * n)) & (gaps > 12)
-#             candidatos = trecho.index[salto_anormal.fillna(False)]
-#             idx_inicio_adicionais = candidatos[0]
-            
-#             if confirma_tipo_tabela_descricao_serviços(df.loc[idx_inicio_adicionais:].copy()):
-
-#                 break #Achou a dimensão que corta os dfs
-
-
-#     # Sem cabecalho da tabela: Fallback hardcoded corta de trás para frente
-#     # Procura a chave em string_class e Descrição em 'text'
-#     if idx_inicio_tabela is None:
-        
-#         if confirma_tipo_tabela_descricao_serviços(df):
-        
-#             chave_fallbak_parte_superior = [
-#                 'Descrição'
-#             ]
-
-#             chave_fallbak_parte_inferior = [
-#                 'VALOR TOTAL'
-#             ]
-          
-#             for chave in chave_fallbak_parte_inferior:
-#                 mask_inferior = df['string_class'].str.contains(chave, case=False, na=False)
-#                 indices_inferior = df[mask_inferior].index
-#                 if not indices_inferior.empty:
-#                     idx_inicio_adicionais = indices_inferior[0]
-#                     break
-
-#             df_superior = df.loc[:idx_inicio_adicionais - 1]
-
-#             for chave in chave_fallbak_parte_superior:
-#                 mask_superior = df_superior['text'].str.contains(chave, case=False, na=False)
-#                 indices_superior = df_superior[mask_superior].index
-#                 if not indices_superior.empty:
-#                     idx_inicio_tabela = indices_superior[0]
-#                     break
-
-#         if idx_inicio_tabela is None:
-#             raise ValueError('Não conseguiu dividir a tabela em 3 partes. O que aconteceu?')
-        
-
-#     dic_frac_nf['primeiro_terco'] = df.loc[:idx_inicio_tabela].iloc[:-1].copy()
-
-
-#     if idx_inicio_adicionais is None:
-#         # Sem adicionais: assume tabela ate o fim
-#         dic_frac_nf['tabela_produtos'] = df.loc[idx_inicio_tabela:].copy()
-
-#         return dic_frac_nf
-
-#     dic_frac_nf['tabela_produtos'] = df.loc[idx_inicio_tabela:idx_inicio_adicionais].iloc[:-1].copy()
-#     dic_frac_nf['ultimo_terco'] = df.loc[idx_inicio_adicionais:].copy()
-
-    
-    
-#     return dic_frac_nf
-
-# def fracionando_nf(df):
-#     """
-#     Retorna um dicionario com tres DataFrames.
-
-#     Se nao localizar "DADOS ADICIONAIS", usa fallback por salto de "top":
-#     detecta um gap anormal comparando o gap atual com a media movel
-#     dos gaps anteriores.
-#     """
-
-#     #Cada nota tem um espaçamento diferente. Entre a tabela e os dados adicionais. Daí que salto anormal precisa variar,
-#     # enquanto não confirmar que um conjunto de palavras não está no meio do df, bem tipo a 
-#     # função confirma_tipo_documento.
-#     def confirma_tipo_tabela_descricao_serviços(texto):
-#         """
-#         """
-
-#         texto = " ".join(texto["text"].fillna("").astype(str).tolist())
-
-#         def normalizar(s):
-#             s = "" if s is None else str(s)
-#             s = unicodedata.normalize("NFKD", s)
-#             s = "".join(c for c in s if not unicodedata.combining(c))
-#             return s.upper()
-
-#         texto_normalizado = normalizar(texto)
-
-#         chaves_documento_nota_fiscal = [
-#             "DESCRIÇÃO",
-#             'DISCRIMINAÇÃO',
-#             "DETALHADA",
-#             "SERVIÇOS",
-#         ]
-
-#         qtd_chaves_encontradas = sum(
-#             1 for chave in chaves_documento_nota_fiscal if normalizar(chave) in texto_normalizado
-#         )
-        
-#         is_service_descript = qtd_chaves_encontradas >= 1
-
-#         return is_service_descript
-
-#     def _normalizar_texto(texto):
-#         texto = "" if pd.isna(texto) else str(texto)
-#         texto = unicodedata.normalize("NFKD", texto)
-#         texto = "".join(c for c in texto if not unicodedata.combining(c))
-#         return texto.upper()
-
-#     def _candidato_muito_alto(idx):
-#         top_limite = pd.to_numeric(df['top'], errors='coerce').quantile(0.20)
-#         top_atual = pd.to_numeric(df.loc[idx, 'top'], errors='coerce')
-#         return pd.notna(top_limite) and pd.notna(top_atual) and top_atual < top_limite
-
-#     def _tem_cabecalho_estrutural(idx):
-#         if 'top' not in df.columns:
-#             texto_faixa = " ".join(df.loc[[idx], 'text'].fillna("").astype(str).tolist())
-#         else:
-#             top_ref = pd.to_numeric(df.loc[idx, 'top'], errors='coerce')
-#             faixa = df[(pd.to_numeric(df['top'], errors='coerce') - top_ref).abs() <= 8].copy()
-#             texto_faixa = " ".join(faixa['text'].fillna("").astype(str).tolist())
-
-#         texto_faixa = _normalizar_texto(texto_faixa)
-#         tem_item = any(chave in texto_faixa for chave in ['PRODUTO', 'PRODUTOS', 'SERVICO', 'SERVICOS'])
-#         tem_descricao = any(chave in texto_faixa for chave in ['DESCRICAO', 'DISCRIMINACAO'])
-#         tem_coluna_tabela = any(chave in texto_faixa for chave in ['NCM', 'CFOP', 'QUANT', 'QTD', 'UNIT', 'VALOR', 'TOTAL'])
-#         return tem_item and tem_descricao and tem_coluna_tabela
-
-#     def _tem_evidencia_produto_abaixo(idx):
-#         if 'top' not in df.columns:
-#             trecho = df.loc[idx:].head(25).copy()
-#         else:
-#             top_ref = pd.to_numeric(df.loc[idx, 'top'], errors='coerce')
-#             trecho = df[(pd.to_numeric(df['top'], errors='coerce') >= top_ref) & (pd.to_numeric(df['top'], errors='coerce') <= top_ref + 45)].copy()
-
-#         textos = trecho['text'].fillna("").astype(str).str.strip()
-#         tem_ncm = textos.str.replace(r'\D', '', regex=True).str.len().eq(8).any()
-#         tem_valor = textos.str.contains(r'\d{1,3}(?:\.\d{3})*,\d{2}', regex=True, na=False).any()
-#         tem_descricao = trecho['string_class'].astype(str).isin(['descpt', 'unindentfied']).any()
-#         return tem_ncm and tem_valor and tem_descricao
-
-#     def _eh_inicio_tabela_valido(idx):
-#         if _candidato_muito_alto(idx):
-#             #ValueError('Revise NF - tem keywords de tabela antes de 20% de extenção')
-#             return False
-#         if not _tem_cabecalho_estrutural(idx):
-#             ValueError('Revise NF - O cabeçalho não tem informações que parecem com nf de produto')
-#             return False 
-#         return _tem_evidencia_produto_abaixo(idx)
-
-
-#     dic_frac_nf = {
-#         "primeiro_terco": pd.DataFrame(columns=df.columns),
-#         "tabela_produtos": pd.DataFrame(columns=df.columns),
-#         "ultimo_terco": pd.DataFrame(columns=df.columns)
-#     }
-
-#     # Chaves de corte baseadas na estrutura padrao de Notas Fiscais
-#     chave_corta_primeiro_terco = [
-#         'DADOS',
-#         'SERVIÇOS',
-#         'PRODUTO',
-#         'DESCRIÇÃO',
-#         'DISCRIMINAÇÃO',
-#         'PRODUTOS',
-#         'PRODUTO',
-#         'PRESTADOS'        
-#     ]
-
-#     chave_corta_ultimo_terco = ['DADOS ADICIONAIS', 'INFORMAÇÕES ADICIONAIS', 'OUTRAS INFORMAÇÕES']
-
-#     idx_inicio_tabela = None
-#     idx_inicio_adicionais = None
-
-    
-
-#     # 1. Inicio da tabela tem dois strings de chave_corta_primeiro_terco como separador
-#     encontrou_inicio_valido = False
-#     for chave1 in chave_corta_primeiro_terco:
-#         for chave2 in chave_corta_primeiro_terco:
-#             if chave1 != chave2:
-#                 mask = (
-#                     df['text'].str.contains(chave1, case=False, na=False) &
-#                     df['text'].str.contains(chave2, case=False, na=False)
-#                 )
-#                 indices = df[mask].index
-#                 if not indices.empty:
-#                     for idx_candidato in indices:
-#                         if _eh_inicio_tabela_valido(idx_candidato):
-#                             print('_eh_inicio_tabela_valido:', _eh_inicio_tabela_valido(idx_candidato))
-#                             idx_inicio_tabela = idx_candidato
-#                             encontrou_inicio_valido = True
-#                             break
-#             if encontrou_inicio_valido:
-#                 break
-#         if encontrou_inicio_valido:
-#             break
-    
-#     # 2. Chave que corta o último terço.
-#     # Localiza o inicio das informacoes adicionais por palavra-chave.
-#     for chave in chave_corta_ultimo_terco:
-#         mask = df['text'].str.contains(chave, case=False, na=False)
-#         indices = df[mask].index
-#         if not indices.empty:
-#             idx_inicio_adicionais = indices[0]
-#             break   
-
-#     # 2.1 Fallback: se nao achou "DADOS ADICIONAIS", usa salto de top
-#     if idx_inicio_tabela is not None and idx_inicio_adicionais is None and 'top' in df.columns:
-
-#         trecho = df.loc[idx_inicio_tabela:].copy()
-#         top_num = pd.to_numeric(trecho['top'], errors='coerce')
-#         gaps = top_num.diff().abs()
-        
-#         # Media movel dos gaps anteriores para reduzir falso positivo
-#         media_local = gaps.rolling(window=6, min_periods=3).mean().shift(1)
-
-#         for n in range(3, 10): #Vai aumentando o gap
-
-#             # Gap anormal: maior que o padrao local e acima de um piso em pixels
-#             salto_anormal = (gaps > (media_local * n)) & (gaps > 12)
-#             candidatos = trecho.index[salto_anormal.fillna(False)]
-#             idx_inicio_adicionais = candidatos[0]
-            
-#             if confirma_tipo_tabela_descricao_serviços(df.loc[idx_inicio_adicionais:].copy()):
-
-#                 break #Achou a dimensão que corta os dfs
-
-
-#     # Sem cabecalho da tabela: Fallback hardcoded corta de trás para frente
-#     # Procura a chave em string_class e Descrição em 'text'
-#     if idx_inicio_tabela is None:
-        
-#         if confirma_tipo_tabela_descricao_serviços(df):
-        
-#             chave_fallbak_parte_superior = [
-#                 'Descrição'
-#             ]
-
-#             chave_fallbak_parte_inferior = [
-#                 'VALOR TOTAL'
-#             ]
-          
-#             for chave in chave_fallbak_parte_inferior:
-#                 mask_inferior = df['string_class'].str.contains(chave, case=False, na=False)
-#                 indices_inferior = df[mask_inferior].index
-#                 if not indices_inferior.empty:
-#                     idx_inicio_adicionais = indices_inferior[0]
-#                     break
-
-#             df_superior = df.loc[:idx_inicio_adicionais - 1]
-
-#             for chave in chave_fallbak_parte_superior:
-#                 mask_superior = df_superior['text'].str.contains(chave, case=False, na=False)
-#                 indices_superior = df_superior[mask_superior].index
-#                 if not indices_superior.empty:
-#                     idx_inicio_tabela = indices_superior[0]
-#                     break
-
-#         if idx_inicio_tabela is None:
-#             raise ValueError('Não conseguiu dividir a tabela em 3 partes. O que aconteceu?')
-        
-
-#     dic_frac_nf['primeiro_terco'] = df.loc[:idx_inicio_tabela].iloc[:-1].copy()
-
-
-#     if idx_inicio_adicionais is None:
-#         # Sem adicionais: assume tabela ate o fim
-#         dic_frac_nf['tabela_produtos'] = df.loc[idx_inicio_tabela:].copy()
-
-#         return dic_frac_nf
-
-#     dic_frac_nf['tabela_produtos'] = df.loc[idx_inicio_tabela:idx_inicio_adicionais].iloc[:-1].copy()
-#     dic_frac_nf['ultimo_terco'] = df.loc[idx_inicio_adicionais:].copy()
-
-    
-#     return dic_frac_nf
-
 
 
 def fracionando_nf_produto(df):
@@ -1145,10 +769,6 @@ def find_invoice_value(df1, df2):
 
     Retorna o valor da nota com base na coluna string_class fazendo laço em mapping.
     """
-    if df1 is None or not isinstance(df1, pd.DataFrame):
-        raise ValueError("find_invoice_value não recebeu df1.")
-    if df2 is None or not isinstance(df2, pd.DataFrame):
-        raise ValueError("find_invoice_value não recebeu df2.")
 
     def _normalizar_texto(texto):
         texto = "" if pd.isna(texto) else str(texto)
@@ -1161,19 +781,28 @@ def find_invoice_value(df1, df2):
 
     # Lista de strings
     mapping = [
-        "valor liquido",
+        #"valor liquido", # Não pode capturar o valor líquido
         "valor total",        
         "preco dos servicos",
-        "vl. liquido",
-        "vl liquido da nota fiscal",
+        "Valor da Nota",
+        'Valor dos Serviços',
+        'valor dos servicos'
+        #"vl. liquido", # Não pode capturar o valor líquido
+        #"vl liquido da nota fiscal", # Não pode capturar o valor líquido
     ]
 
+    # 1 - Maioria dos casos
+    # Tentando capturar o valor da nota pelo rótulo correto em string_class na terceira parte da nota
+    
     for i in range(len(df1)):
         texto_atual_raw = str(df1.at[i, 'text']).strip()
         classe_atual = _normalizar_texto(df1.at[i, 'string_class'])
         if any(rotulo in classe_atual for rotulo in mapping):
             return texto_atual_raw
+        
 
+    # 2 - Primeiro recuo
+    # Tentando capturar o valor da nota pelo rótulo correto em string_class no miolo da nota
     for i in range(len(df1)):
         texto_atual_raw = str(df1.at[i, 'text']).strip()
         texto_atual = _normalizar_texto(texto_atual_raw)
@@ -1328,11 +957,50 @@ def consulta_nome_fornecedor(cnpj):
     :param cnpj: string com o cnpj
     return: string com nome do fornecedor
     """
-    # bloqueio
-    return {'fornecedor': 'NÃo estará disponível agora. bloqueado com return'}
+    # Procure o json na pasta
+    cache_path = Path(__file__).resolve().parent / "cnpj.json"
+
+
+    def _carregar_cache():
+        if not cache_path.exists():
+            raise ValueError('O json de cnpjs sumiu')
+
+        with open(cache_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if isinstance(data, dict) and all(isinstance(v, str) for v in data.values()):
+            return data
+
+        cache_normalizado = {}
+        if isinstance(data, dict):
+            for value in data.values():
+                if isinstance(value, dict):
+                    cnpj_item = "".join(filter(str.isdigit, str(value.get("cnpj", ""))))
+                    nome_item = str(value.get("nome", "")).strip()
+                    if cnpj_item and nome_item:
+                        cache_normalizado[cnpj_item] = nome_item
+        return cache_normalizado
+
+    def _salvar_cache(cache):
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
 
     # retira tudo do cnpj e deixa só o número. Ex -> 12.420.339/0003-98 - 12420339000398
     cnpj = "".join(filter(str.isdigit, cnpj))
+    cache_cnpj = _carregar_cache()
+
+    if cnpj in cache_cnpj:
+        return {'fornecedor': cache_cnpj[cnpj]}
+    
+     # LOG
+    log = {
+        'id': seq + 1,
+        'nome_arquivo': nome_saida,
+        'status': 'problema', #aberto - problema - rejeitado - processado
+        'erro': 'sem CNPJ na cache', #caracteres não alfanuméricos - formato imagem - não é nota fiscal
+        'next': 'Buscando na internet', 
+    }
+    with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")
 
     # URL da API aberta do CNPJá
     url = f"https://open.cnpja.com/office/{cnpj}" #CNPJjá
@@ -1346,8 +1014,10 @@ def consulta_nome_fornecedor(cnpj):
 
         if response.status_code == 200:
             dados = response.json()
-            # O campo 'company' contÃ©m o objeto com o nome da empresa
+            # O campo 'company' contém o objeto com o nome da empresa
             nome_empresa = dados.get('company', {}).get('name', 'Nome nÃ£o encontrado')
+            cache_cnpj[cnpj] = nome_empresa
+            _salvar_cache(cache_cnpj)
             return {'fornecedor': nome_empresa}
         elif response.status_code == 429:
             return "Erro: Limite de requisiÃ§Ãµes atingido (max 5 por minuto)."
@@ -1380,7 +1050,7 @@ def num_nf(df):
 
     """
 
-    designacao_nf = ['NF-e', 'NF', 'NÚMERO', 'Nota Fiscal', "Nota", 'Número da Nota', 'Num. Nota:']
+    designacao_nf = ['NF-e', 'Nº','NF', 'NÚMERO', 'Nota Fiscal', "Nota", 'Número da Nota', 'Num. Nota:']
 
     def _normalizar_texto(texto):
         texto = "" if pd.isna(texto) else str(texto)
@@ -1393,32 +1063,59 @@ def num_nf(df):
     '''
 
     df = df.reset_index(drop=True).copy()
-    data_indices = df[df['string_class'] == 'data'].index.tolist()
-
-
+    data_indices = df[df['string_class'] == 'data'].index.tolist() # Primeiro corte, procurando todos os "datas" em "String_class"
     ponteiros = data_indices + [len(df)]
     inicio = 0
 
+    # Laço dos blocos antes de "data"
     for fim in ponteiros:
         df_filtrado = df.iloc[inicio:fim].copy()
         string_class_normalizada = df_filtrado['string_class'].apply(_normalizar_texto)
 
-        for nome in designacao_nf:
-            nome_normalizado = _normalizar_texto(nome)
-            mask_header = string_class_normalizada.str.contains(nome_normalizado, na=False)
+        mask_candidatos = pd.Series(False, index=df_filtrado.index)
+        # Próximo laço para encontrar os candidatos a Número de NF
+        for chave in designacao_nf:
+            chave_normalizada = _normalizar_texto(chave)
+            mask_candidatos = mask_candidatos | string_class_normalizada.str.contains(chave_normalizada, na=False)
 
-            all_num = ", ".join(
-                df_filtrado.loc[mask_header, 'text']
-                .dropna()
-                .astype(str)
-                .str.strip()
-                .tolist()
-            )
 
-            if all_num:
-                return {'numero_nf': all_num}
+        candidatos_idx = df_filtrado[mask_candidatos].index.tolist()
+        # Check ---------------------------
+        # print('candidatos_idx ', candidatos_idx)
+        
+        # Inicializa canditador
+        melhores_candidatos = []
+        
+        # Terceiro laço para confirmar na coluna "text" quantos qual número tem mais textos correpondentes a designacao_nf
+        for idx_candidato in candidatos_idx:
+            
+            # 1 - Encontra o número dentro de "text"
+            numero_candidato = str(df_filtrado.at[idx_candidato, 'text']).strip()
+            # 2 - Filtra as três linhas acima do texto numero_candidato         
+            idx_inicio_janela = max(df_filtrado.index.min(), idx_candidato - 3)
+            linhas_acima = df_filtrado.loc[idx_inicio_janela:idx_candidato - 1, 'text'].fillna("").astype(str).tolist()
+            # 3 - Normaliza os textos
+            texto_contexto = _normalizar_texto(" ".join(linhas_acima))
+            
+            # 4 - Qual número tem mais correpondências dentro de designcao_nf?
+            score = 0
+            for chave in designacao_nf:
+                if _normalizar_texto(chave) in texto_contexto:
+                    score += 1
+
+            melhores_candidatos.append((score, idx_candidato, numero_candidato))
 
         inicio = fim + 1
+
+        if melhores_candidatos:
+            melhores_candidatos.sort(key=lambda x: (-x[0], x[1])) # Ordena
+            lista_ordenada = [numero for _, _, numero in melhores_candidatos[:3]] # Melhores 3 com base em ordem dentro do df
+            # Números duplicados, remove os dois [1, 1, 478] => 478
+            numeros_unicos = [numero for numero in lista_ordenada if lista_ordenada.count(numero) == 1] 
+            if numeros_unicos:
+                if len(numeros_unicos) == 1:
+                    return {'numero_nf': numeros_unicos[0]}
+                return {'numero_nf': numeros_unicos}
 
        
     raise ValueError('Estou sem número de NF. Veja o que aconteceu')
@@ -1649,8 +1346,8 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
         # Então eu junto esse caractere com a linha acima.
         df_nota = join_lonely_character(df_nota)
         # Check---------------------
-        #if '72 - NFE-13230507589' in nome_saida:
-            #   df_nota.to_excel(f'{SAIDA_RAIZ}/df_join_lonely_character.xlsx', index=False)
+        #if arquivo_investigado in nome_saida:
+        #       df_nota.to_excel(f'{SAIDA_RAIZ}/df_join_lonely_character.xlsx', index=False)
 
         # 2.3 - juntando strings separadas
         df_classes_concatenadas = concatenate_string_class(df_nota)
@@ -1704,6 +1401,7 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
             list_product_service_transation = get_real_transations(df_product_dict)
 
         else:
+
             # 2.5.1 - Separando o df em duas partes chave (deales - descrição da nota)
             df_product_service_desciption = fracionando_nf_servico(df_refined_string_class)
             # CHECK -------------------------------
@@ -1714,7 +1412,7 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
 
             # 2.9 - Transformar todo o conteúdo dentro de 'discriminação dos serviços'
             df_service_description = concatenar_conteudo_service_table(df_product_service_desciption['tabela_produtos'])
-            # 2.10 - Retornando valor líquido da nota
+            # 2.10 - Retornando valor total da nota
             df_service_value = find_invoice_value(df_product_service_desciption['ultimo_terco'], df_product_service_desciption['tabela_produtos'])
             # 2.11 - Transformando em um dict com a transação
             list_product_service_transation = construct_transation(df_service_description, df_service_value)

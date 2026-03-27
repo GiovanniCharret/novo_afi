@@ -28,7 +28,10 @@ from .parser_adapter import LegacyParserAdapter
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 INDEX_FILE = STATIC_DIR / "index.html"
-SESSION_SECRET = os.getenv("SESSION_SECRET", "novo-afi-dev-secret")
+UPLOAD_STORAGE_DIR = Path(
+    os.getenv("UPLOAD_STORAGE_DIR", str(BASE_DIR.parent / "banco_de_nf"))
+).resolve()
+SESSION_SECRET = os.getenv("SESSION_SECRET", "recebedor-nfs-dev-secret")
 AUTH_USERNAME = "user"
 AUTH_PASSWORD = "password"
 DEFAULT_PASSWORD_HASH = "mvp-user-password-placeholder"
@@ -41,17 +44,17 @@ class LoginPayload(BaseModel):
 
 class NfEntryResponse(BaseModel):
     id: str
-    numero_nf: str
-    cnpj: str
-    data_emissao: str
-    tipo_nota: str
-    fornecedor: str | None
-    descricao: str
-    ncm: str | None
-    quantidade: float | None
-    preco_unitario: float | None
-    valor_total: float
-    contrato: str | None
+    numero_nf: str | int | float | None
+    cnpj: str | int | float | None
+    data_emissao: str | int | float | None
+    tipo_nota: str | int | float | None
+    fornecedor: str | int | float | None
+    descricao: str | int | float | None
+    ncm: str | int | float | None
+    quantidade: str | int | float | None
+    preco_unitario: str | int | float | None
+    valor_total: str | int | float | None
+    contrato: str | int | float | None
 
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -69,19 +72,27 @@ def get_authenticated_user(request: Request) -> dict[str, str]:
 
 
 def serialize_nf_entry(entry: NfEntry) -> dict[str, object]:
+    raw_payload = entry.raw_payload or {}
+
     return {
         "id": entry.id,
-        "numero_nf": entry.numero_nf,
-        "cnpj": entry.cnpj,
-        "data_emissao": entry.data_emissao.isoformat(),
-        "tipo_nota": entry.tipo_nota,
-        "fornecedor": entry.fornecedor,
-        "descricao": entry.descricao,
-        "ncm": entry.ncm,
-        "quantidade": float(entry.quantidade) if entry.quantidade is not None else None,
-        "preco_unitario": float(entry.preco_unitario) if entry.preco_unitario is not None else None,
-        "valor_total": float(entry.valor_total),
-        "contrato": entry.contrato,
+        "numero_nf": raw_payload.get("numero_nf", entry.numero_nf),
+        "cnpj": raw_payload.get("cnpj", entry.cnpj),
+        "data_emissao": raw_payload.get("data_emissao", entry.data_emissao.isoformat()),
+        "tipo_nota": raw_payload.get("tipo_nota", entry.tipo_nota),
+        "fornecedor": raw_payload.get("fornecedor", entry.fornecedor),
+        "descricao": raw_payload.get("descricao", entry.descricao),
+        "ncm": raw_payload.get("ncm", entry.ncm),
+        "quantidade": raw_payload.get(
+            "quant",
+            float(entry.quantidade) if entry.quantidade is not None else None,
+        ),
+        "preco_unitario": raw_payload.get(
+            "preco_unitario",
+            float(entry.preco_unitario) if entry.preco_unitario is not None else None,
+        ),
+        "valor_total": raw_payload.get("valor", float(entry.valor_total)),
+        "contrato": raw_payload.get("contrato", entry.contrato),
     }
 
 
@@ -119,6 +130,19 @@ def create_nf_entry(session: Session, row: dict) -> NfEntry:
     session.add(entry)
     session.flush()
     return entry
+
+
+def save_uploaded_pdf(batch_id: str, filename: str, file_bytes: bytes, sha256: str) -> Path:
+    batch_dir = UPLOAD_STORAGE_DIR / batch_id
+    batch_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(filename).name or "arquivo.pdf"
+    target_path = batch_dir / safe_name
+    if target_path.exists():
+        target_path = batch_dir / f"{sha256[:12]}_{safe_name}"
+
+    target_path.write_bytes(file_bytes)
+    return target_path
 
 
 @asynccontextmanager
@@ -261,6 +285,8 @@ def create_app() -> FastAPI:
                 )
                 continue
 
+            saved_path = save_uploaded_pdf(batch.id, filename, file_bytes, sha256)
+
             outcome = parser.parse_pdf_bytes(filename, file_bytes)
 
             if outcome.status != "processado":
@@ -283,6 +309,7 @@ def create_app() -> FastAPI:
                         "parser_error": record.parser_error,
                         "inserted_count": 0,
                         "duplicate_count": 0,
+                        "saved_path": str(saved_path),
                     }
                 )
                 continue
@@ -323,6 +350,7 @@ def create_app() -> FastAPI:
                     "parser_error": None,
                     "inserted_count": inserted_count,
                     "duplicate_count": duplicate_count,
+                    "saved_path": str(saved_path),
                 }
             )
 

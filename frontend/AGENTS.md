@@ -22,16 +22,15 @@ Nesta etapa, o frontend entrega:
 
 - uma tela de login para o MVP
 - uma area logada servida pelo backend em `/`
-- estrutura visual pronta para upload de PDFs
-- estrutura visual pronta para tabela persistida
-- estados basicos de carregamento e vazio
-- integracao simples com a API atual para confirmar comunicacao com o backend
+- upload em lote conectado ao backend real
+- exibicao de status por arquivo retornado pela API
+- tabela persistida carregada de `nf_entries`
+- atualizacao automatica da tabela apos upload bem-sucedido
+- estados basicos de carregamento, vazio e erro
 
 ## Limitacoes Atuais
 
-- Ainda nao ha upload real para o backend.
-- Ainda nao ha consulta persistida de notas fiscais.
-- O parser legado ainda nao esta integrado a interface.
+- O parser legado continua encapsulado no backend e ainda depende de validacao com PDFs reais do fluxo final.
 - A autenticacao atual usa credenciais ficticias fixas.
 
 ## Proximas Atualizacoes Esperadas
@@ -40,5 +39,5 @@ Este arquivo deve ser atualizado quando houver:
 
 - autenticacao
 - organizacao maior de componentes
-- integracao real com a API de notas
+- refinamento visual do fluxo de upload e tabela
 - testes de frontend
