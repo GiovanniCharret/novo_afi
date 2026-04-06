@@ -59,7 +59,6 @@ export default function App() {
   });
   const [uploadState, setUploadState] = useState({
     submitting: false,
-    error: "",
     results: [],
     batchId: null,
     progress: 0,
@@ -337,7 +336,7 @@ export default function App() {
     });
   }
 
-  function uploadFilesWithProgress(files, onProgress) {
+function uploadFilesWithProgress(files, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const formData = new FormData();
@@ -388,11 +387,37 @@ export default function App() {
     });
   }
 
+  function buildPendingResults(files) {
+    return files.map((file) => ({
+      filename: file.name,
+      status: "upload_em_andamento",
+      status_reason: null,
+      parser_error: null,
+      inserted_count: 0,
+      duplicate_count: 0,
+      timeline: ["Upload iniciado."],
+    }));
+  }
+
+  function buildUploadErrorResults(files, message) {
+    return files.map((file) => ({
+      filename: file.name,
+      status: "erro_upload",
+      status_reason: "Falha no envio do arquivo.",
+      parser_error: message,
+      inserted_count: 0,
+      duplicate_count: 0,
+      timeline: [
+        "Upload iniciado.",
+        "Falha antes de concluir o processamento no backend.",
+      ],
+    }));
+  }
+
   async function handleUploadSubmit() {
     if (selectedFiles.length === 0) {
       setUploadState({
         submitting: false,
-        error: "Selecione ao menos um PDF antes de enviar.",
         results: [],
         batchId: null,
         progress: 0,
@@ -406,8 +431,7 @@ export default function App() {
 
     setUploadState({
       submitting: true,
-      error: "",
-      results: [],
+      results: buildPendingResults(selectedFiles),
       batchId: null,
       progress: 2,
       phase: "uploading",
@@ -446,7 +470,6 @@ export default function App() {
 
       setUploadState({
         submitting: false,
-        error: "",
         results: payload.files ?? [],
         batchId: payload.batch_id ?? null,
         progress: 100,
@@ -458,8 +481,7 @@ export default function App() {
     } catch (error) {
       setUploadState({
         submitting: false,
-        error: `Falha no upload: ${error.message}.`,
-        results: [],
+        results: buildUploadErrorResults(selectedFiles, error.message),
         batchId: null,
         progress: 0,
         phase: "idle",
@@ -545,10 +567,6 @@ export default function App() {
         <div className="hero-copy">
           <p className="eyebrow">Ambiente de upload de NFs</p>
           <h1>Recolhimento de documentos</h1>
-          <p className="hero-text">
-            Interface pronta para upload em lote,
-            autenticacao e consulta persistida.
-          </p>
         </div>
 
         <aside className="hero-panel">
@@ -638,7 +656,6 @@ export default function App() {
             </p>
           </div>
 
-          {uploadState.error ? <p className="inline-error">{uploadState.error}</p> : null}
         </section>
 
         <section className="card processing-card">
@@ -662,8 +679,8 @@ export default function App() {
             </div>
           ) : (
             <div className="status-grid">
-              {uploadState.results.map((item) => (
-                <article key={`${item.filename}-${item.status}`}>
+              {uploadState.results.map((item, index) => (
+                <article key={`${item.filename}-${item.status}-${index}`}>
                   <strong>{item.filename}</strong>
                   <p>Status: {item.status}</p>
                   <p>
@@ -671,6 +688,14 @@ export default function App() {
                   </p>
                   {item.status_reason ? <p>Motivo: {item.status_reason}</p> : null}
                   {item.parser_error ? <p>Erro: {item.parser_error}</p> : null}
+                  {item.debug_dir ? <p>Debug: {item.debug_dir}</p> : null}
+                  {Array.isArray(item.timeline) && item.timeline.length > 0 ? (
+                    <div>
+                      {item.timeline.map((step, stepIndex) => (
+                        <p key={`${item.filename}-step-${stepIndex}`}>Fluxo: {step}</p>
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

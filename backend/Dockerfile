@@ -16,6 +16,8 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app/backend
 
+RUN apt-get update && apt-get install -y poppler-utils tesseract-ocr && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 

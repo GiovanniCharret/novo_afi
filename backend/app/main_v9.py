@@ -8,6 +8,7 @@ Separação do fracionando_nf em:
 2 - fracionando_nf_servico
 3 - Refatoração de num_nf para ficar mais robusta
 4 - regex excluir "0" como num_or_price
+4 - Deixa de existir o CNPJ do tomador e passa a existir uma lista de CNPJ bloqueados
 
 
 """
@@ -25,7 +26,7 @@ import json
 from ocr_reader import extrair_dados_nf_servico_do_pdf
 
 # DEPURADOR
-arquivo_investigado = 'MICROPOWER ENERGIA SA - NF 478.pdf'
+arquivo_investigado = '459_HEADS PROPAGAND'
 
 # DICIONÁRIO QUE RECEBERÁ OS DADOS DO PDF
 default_nf_template = {
@@ -68,7 +69,6 @@ RE_INVALID_CHAR = re.compile(
 
 # GLOBAIS --------------------------
 list_nf = []
-cnpj_tomador = '25.086.034/0001-71'
 CAMINHO_RAIZ = "./nfs_analise"
 SAIDA_RAIZ = './output_dfs'
 # Formato de dicionário por causa da função consolidate_data_to_dict que só recebe
@@ -525,6 +525,7 @@ def fracionando_nf_produto(df):
     return dic_frac_nf
 
 
+
 def fracionando_nf_servico(df):
     """
     Fraciona NFs de serviço em primeiro terço, tabela descritiva e último terço.
@@ -542,15 +543,25 @@ def fracionando_nf_servico(df):
         'Serviços',
         'Prestados'
     ]
+
+    # Essa chave estava dando erro para notas fiscais de serviço que colocam chave "valor total" antes da descrição
+    # o outro bloco de chaves parece mais razoável.
+    # chave_fallbak_parte_inferior = [
+    #     'VALOR TOTAL',
+    #     'VALOR LÍQUIDO',
+    #     'VALOR LIQUIDO',
+    #     'PREÇO DOS SERVIÇOS',
+    #     'PRECO DOS SERVICOS',
+    #     'VL. LÍQUIDO',
+    #     'VL. LIQUIDO',
+    # ]
+
     chave_fallbak_parte_inferior = [
-        'VALOR TOTAL',
-        'VALOR LÍQUIDO',
-        'VALOR LIQUIDO',
-        'PREÇO DOS SERVIÇOS',
-        'PRECO DOS SERVICOS',
-        'VL. LÍQUIDO',
-        'VL. LIQUIDO'
-    ]
+        'Deduções',
+        'Base Cálculo',
+        'Outras retenções'
+     ]
+
 
     idx_inicio_tabela = None
     idx_inicio_adicionais = None
@@ -575,26 +586,28 @@ def fracionando_nf_servico(df):
             break
 
     if idx_inicio_tabela is None:
-        raise ValueError('Não conseguiu dividir a tabela em 3 partes. O que aconteceu?')
+        raise ValueError('Não conseguiu dividir a tabela de serviço em 3 partes. O que aconteceu?')
 
     dic_frac_nf['primeiro_terco'] = df.loc[:idx_inicio_tabela].iloc[:-1].copy()
 
+    # Se não conseguiu dividir a segunda e terceira partes
     if idx_inicio_adicionais is None:
         dic_frac_nf['tabela_produtos'] = df.loc[idx_inicio_tabela:].copy()
         return dic_frac_nf
+    
+ 
+    """
+    Para evitar esse tipo de textão abaixo, um aparador que corta tudo que é imposto da string
+    Antes
+    SERVIÇO DE INSTALAÇÃO DE SISTEMA FOTOVOLTAICO INFORMAÇÕES ADICIONAIS REF. INSTALAÇÃO SIGFIS REALIZADO NO MUNICIPIO DE TOCANTINOPOLIS -TO CONTRATO: 2023.0156.01 LOTE DE CONSOLIDAÇÃO: 261992 COD. FATURAMENTO: 230156011907877490010000261992 Atividade: 4221902-Construção de estações e redes de distribuição de energia elétrica 7.02 Execução, por administração, empreitada ou subempreitada, de obras de construção civil, hidráulica ou elétrica e de outras obras semelhantes, inclusive sondagem, perfuração de poços, escavação, drenagem e irrigação, terraplanagem, pavimentação, concr Retenções PIS COFINS INSS IR CSLL FederaisR$ 2.594,21 R$ 11.973,25 R$ 13.968,80 R$ 5.986,63 R$ 3.991,08 Demonstrativo Cálculo do Imposto Valor dos ServiçosR$ 399.108,48 Valor dos ServiçosR$ 399.108,48 (-) Desconto IncondicionadoR$ 0,00 (-) Desconto IncondicionadoR$ 0,00 (-) Retenções FederaisR$ 38.513,97 (=) Valor da NotaR$ 399.108,48 (-) ISSQN Retido pelo TomadorR$ 19.955,42 (-) DeduçõesR$ 0,00
+    Depois
+    
+    """
 
     dic_frac_nf['tabela_produtos'] = df.loc[idx_inicio_tabela:idx_inicio_adicionais].iloc[:-1].copy()
     dic_frac_nf['ultimo_terco'] = df.loc[idx_inicio_adicionais:].copy()
+
     return dic_frac_nf
-
-
-def fracionando_nf(df):
-    """
-    Compatibilidade: mantém a assinatura antiga, usando a estratégia de produto.
-    """
-    return fracionando_nf_produto(df)
-
-
 
 
 def normatize_produt_classes(df):
@@ -915,6 +928,20 @@ def construct_transation(df_service_description, df_service_value):
     tem nf de produto com várias transações
     """
 
+    # Listas de palavras que cortam partes desnecessárias da string
+    descarte_descricao_servico = [
+        'Retenções',
+        'PIS',
+        'COFINS',
+        'INSS',
+        ]
+
+    # Percorre a lista de palavras de descarte e encontra a posição mais cedo na string
+    posicoes = [df_service_description.lower().find(chave.lower()) for chave in descarte_descricao_servico] # Posição de cada palavra (-1 se não encontrada)
+    posicoes_validas = [p for p in posicoes if p != -1] # Remove os -1 (palavras ausentes)
+    if posicoes_validas:
+        df_service_description = df_service_description[:min(posicoes_validas)].strip() # Fatia até a primeira ocorrência
+
     # Mapeamento de nomes para o dicionário final
     # Tem que ser igual ao global default_nf_template
     mapping = {
@@ -940,13 +967,18 @@ def cnpj_invoice(df):
         #Para o teste definitivo vou ter que quebrar essa função
         #return {'cnpj': '25.086.034/0001-71'}
 
-    # 1. Selecionamos os Ã­ndices que sÃ£o 'price'
+    # 1. Selecionamos os í­ndices que são 'price'
     CNPJ_list = df[(df['string_class'] == 'CNPJ')]
 
-    # 2. Rodamos um laÃ§o para separar o CNPJ nÃ£o do agente operacionalizador
+    # Carrega lista de CNPJs bloqueados (tomador, municípios, etc.)
+    block_path = Path(__file__).resolve().parent / "block_cnpj.json"
+    with open(block_path, "r", encoding="utf-8") as f:
+        block_cnpj = json.load(f)
+
+    # 2. Rodamos um laço para separar o CNPJ não do agente operacionalizador nem bloqueado
     for i in CNPJ_list['text']:
-        #sai da funÃ§Ã£o assim que achar o CNPJ do tomador
-        if i != cnpj_tomador:
+        i_digits = "".join(filter(str.isdigit, i)) # Normaliza para só dígitos (igual às chaves do JSON)
+        if i_digits not in block_cnpj: # CNPJ não está na lista de bloqueados (tomador, municípios, etc.)
             return {'cnpj': i}
 
 
@@ -957,7 +989,7 @@ def consulta_nome_fornecedor(cnpj):
     :param cnpj: string com o cnpj
     return: string com nome do fornecedor
     """
-    # Procure o json na pasta
+    # Procura o json na pasta
     cache_path = Path(__file__).resolve().parent / "cnpj.json"
 
 
@@ -1395,7 +1427,8 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
             # clses no campo string_class
             df_product_dict = concatenar_por_ponteiro_filtra_tabela_produtos(product_sheet_analysed)
             # Check -------------------------------------------------
-            #if arquivo_investigado in nome_saida:
+            #if arquivo_investiga
+            # do in nome_saida:
             #    df_product_dict.to_excel(f'{SAIDA_RAIZ}/tabela_arrumadinha.xlsx')
             # 2.8 - Converte em dicionário cada lançamento
             list_product_service_transation = get_real_transations(df_product_dict)

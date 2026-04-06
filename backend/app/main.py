@@ -28,6 +28,7 @@ from .parser_adapter import LegacyParserAdapter
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 INDEX_FILE = STATIC_DIR / "index.html"
+PARSER_DEBUG_DIR = BASE_DIR / "parser_debug"
 UPLOAD_STORAGE_DIR = Path(
     os.getenv("UPLOAD_STORAGE_DIR", str(BASE_DIR.parent / "banco_de_nf"))
 ).resolve()
@@ -143,6 +144,10 @@ def save_uploaded_pdf(batch_id: str, filename: str, file_bytes: bytes, sha256: s
 
     target_path.write_bytes(file_bytes)
     return target_path
+
+
+def build_parser_debug_dir(saved_path: Path) -> Path:
+    return PARSER_DEBUG_DIR / saved_path.parent.name / saved_path.stem
 
 
 @asynccontextmanager
@@ -281,22 +286,96 @@ def create_app() -> FastAPI:
                         "parser_error": None,
                         "inserted_count": 0,
                         "duplicate_count": 0,
+                        "timeline": ["Arquivo rejeitado antes do parser."],
                     }
                 )
                 continue
 
             saved_path = save_uploaded_pdf(batch.id, filename, file_bytes, sha256)
+            debug_dir = build_parser_debug_dir(saved_path)
 
-            outcome = parser.parse_pdf_bytes(filename, file_bytes)
+            try:
+                outcome = parser.parse_pdf_bytes(filename, file_bytes, debug_dir=debug_dir)
 
-            if outcome.status != "processado":
+                if outcome.status != "processado":
+                    record = UploadFileRecord(
+                        upload_batch_id=batch.id,
+                        original_filename=filename,
+                        file_sha256=sha256,
+                        status=outcome.status,
+                        status_reason=outcome.reason,
+                        parser_error=outcome.error,
+                        inserted_count=0,
+                        duplicate_count=0,
+                    )
+                    db.add(record)
+                    results.append(
+                        {
+                            "filename": filename,
+                            "status": record.status,
+                            "status_reason": record.status_reason,
+                            "parser_error": record.parser_error,
+                            "inserted_count": 0,
+                            "duplicate_count": 0,
+                            "saved_path": str(saved_path),
+                            "debug_dir": outcome.debug_dir,
+                            "timeline": outcome.timeline or [],
+                        }
+                    )
+                    continue
+
+                inserted_count = 0
+                duplicate_count = 0
+                timeline = list(outcome.timeline or [])
+
+                for row in outcome.rows:
+                    business_key = build_business_key(row)
+                    existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
+                    if existing is not None:
+                        duplicate_count += 1
+                        continue
+
+                    create_nf_entry(db, row)
+                    inserted_count += 1
+
+                file_status = "processado" if inserted_count > 0 else "duplicado"
+                status_reason = None
+                if file_status == "duplicado":
+                    status_reason = "Todas as linhas extraidas deste arquivo ja existiam na base."
+                timeline.append("Parser concluído e linhas consolidadas no backend.")
+
                 record = UploadFileRecord(
                     upload_batch_id=batch.id,
                     original_filename=filename,
                     file_sha256=sha256,
-                    status=outcome.status,
-                    status_reason=outcome.reason,
-                    parser_error=outcome.error,
+                    status=file_status,
+                    status_reason=status_reason,
+                    inserted_count=inserted_count,
+                    duplicate_count=duplicate_count,
+                )
+                db.add(record)
+                results.append(
+                    {
+                        "filename": filename,
+                        "status": file_status,
+                        "status_reason": status_reason,
+                        "parser_error": None,
+                        "inserted_count": inserted_count,
+                        "duplicate_count": duplicate_count,
+                        "saved_path": str(saved_path),
+                        "debug_dir": outcome.debug_dir,
+                        "timeline": timeline,
+                    }
+                )
+            except Exception as error:
+                parser_error = str(error)
+                record = UploadFileRecord(
+                    upload_batch_id=batch.id,
+                    original_filename=filename,
+                    file_sha256=sha256,
+                    status="erro_parsing",
+                    status_reason="Erro ao consolidar o retorno do parser.",
+                    parser_error=parser_error,
                     inserted_count=0,
                     duplicate_count=0,
                 )
@@ -304,55 +383,20 @@ def create_app() -> FastAPI:
                 results.append(
                     {
                         "filename": filename,
-                        "status": record.status,
-                        "status_reason": record.status_reason,
-                        "parser_error": record.parser_error,
+                        "status": "erro_parsing",
+                        "status_reason": "Erro ao consolidar o retorno do parser.",
+                        "parser_error": parser_error,
                         "inserted_count": 0,
                         "duplicate_count": 0,
                         "saved_path": str(saved_path),
+                        "debug_dir": str(debug_dir),
+                        "timeline": [
+                            "Upload salvo no backend.",
+                            "main_v9.py retornou.",
+                            "Falha ao consolidar o retorno do parser no backend.",
+                        ],
                     }
                 )
-                continue
-
-            inserted_count = 0
-            duplicate_count = 0
-
-            for row in outcome.rows:
-                business_key = build_business_key(row)
-                existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
-                if existing is not None:
-                    duplicate_count += 1
-                    continue
-
-                create_nf_entry(db, row)
-                inserted_count += 1
-
-            file_status = "processado" if inserted_count > 0 else "duplicado"
-            status_reason = None
-            if file_status == "duplicado":
-                status_reason = "Todas as linhas extraidas deste arquivo ja existiam na base."
-
-            record = UploadFileRecord(
-                upload_batch_id=batch.id,
-                original_filename=filename,
-                file_sha256=sha256,
-                status=file_status,
-                status_reason=status_reason,
-                inserted_count=inserted_count,
-                duplicate_count=duplicate_count,
-            )
-            db.add(record)
-            results.append(
-                {
-                    "filename": filename,
-                    "status": file_status,
-                    "status_reason": status_reason,
-                    "parser_error": None,
-                    "inserted_count": inserted_count,
-                    "duplicate_count": duplicate_count,
-                    "saved_path": str(saved_path),
-                }
-            )
 
         db.commit()
 

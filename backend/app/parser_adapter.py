@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -16,10 +17,12 @@ class ParserOutcome:
     rows: list[dict]
     reason: str | None = None
     error: str | None = None
+    timeline: list[str] | None = None
+    debug_dir: str | None = None
 
 
 class LegacyParserAdapter:
-    def parse_pdf_bytes(self, filename: str, content: bytes) -> ParserOutcome:
+    def parse_pdf_bytes(self, filename: str, content: bytes, debug_dir: Path | None = None) -> ParserOutcome:
         with tempfile.TemporaryDirectory(prefix="novo_afi_parser_") as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             input_dir = temp_dir / "nfs_analise"
@@ -28,6 +31,10 @@ class LegacyParserAdapter:
             output_dir.mkdir(parents=True, exist_ok=True)
 
             (input_dir / filename).write_bytes(content)
+            timeline = [
+                "Upload salvo no backend.",
+                "main_v9.py iniciado.",
+            ]
 
             process = subprocess.run(
                 ["python", str(SCRIPT_PATH)],
@@ -39,25 +46,50 @@ class LegacyParserAdapter:
 
             logs = self._read_log_entries(temp_dir / "log.json")
             spreadsheet = self._find_output_spreadsheet(output_dir)
+            persisted_debug_dir = self._persist_debug_artifacts(
+                temp_dir=temp_dir,
+                debug_dir=debug_dir,
+                stdout_text=process.stdout,
+                stderr_text=process.stderr,
+            )
+            timeline.append(f"main_v9.py retornou com código {process.returncode}.")
 
             if spreadsheet is not None:
                 dataframe = pd.read_excel(spreadsheet)
                 rows = dataframe.where(pd.notna(dataframe), None).to_dict(orient="records")
                 if rows:
-                    return ParserOutcome(status="processado", rows=rows)
+                    timeline.append(f"Parser encontrou {len(rows)} linha(s) na planilha.")
+                    if persisted_debug_dir:
+                        timeline.append(f"Saída temporária salva em {persisted_debug_dir}.")
+                    return ParserOutcome(
+                        status="processado",
+                        rows=rows,
+                        timeline=timeline,
+                        debug_dir=persisted_debug_dir,
+                    )
 
             if process.returncode != 0:
+                timeline.append("Parser encerrou com erro.")
+                if persisted_debug_dir:
+                    timeline.append(f"Saída temporária salva em {persisted_debug_dir}.")
                 return ParserOutcome(
                     status="erro_parsing",
                     rows=[],
                     error=(process.stderr or process.stdout or "Falha ao executar o parser legado.").strip(),
+                    timeline=timeline,
+                    debug_dir=persisted_debug_dir,
                 )
 
+            timeline.append("Parser não retornou planilha com linhas.")
+            if persisted_debug_dir:
+                timeline.append(f"Saída temporária salva em {persisted_debug_dir}.")
             return ParserOutcome(
                 status=self._map_status(logs),
                 rows=[],
                 reason=self._extract_reason(logs),
                 error=self._extract_error(logs),
+                timeline=timeline,
+                debug_dir=persisted_debug_dir,
             )
 
     def _read_log_entries(self, log_path: Path) -> list[dict]:
@@ -102,3 +134,35 @@ class LegacyParserAdapter:
             if error:
                 return str(error)
         return None
+
+    def _persist_debug_artifacts(
+        self,
+        temp_dir: Path,
+        debug_dir: Path | None,
+        stdout_text: str,
+        stderr_text: str,
+    ) -> str | None:
+        if debug_dir is None:
+            return None
+
+        debug_dir.mkdir(parents=True, exist_ok=True)
+
+        files_to_copy = [
+            temp_dir / "log.json",
+            temp_dir / "output_dfs",
+        ]
+
+        for source in files_to_copy:
+            if not source.exists():
+                continue
+            target = debug_dir / source.name
+            if source.is_dir():
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.copytree(source, target)
+            else:
+                shutil.copy2(source, target)
+
+        (debug_dir / "stdout.txt").write_text(stdout_text or "", encoding="utf-8")
+        (debug_dir / "stderr.txt").write_text(stderr_text or "", encoding="utf-8")
+        return str(debug_dir)

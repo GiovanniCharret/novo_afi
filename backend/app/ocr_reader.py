@@ -4,6 +4,7 @@ Solução da IA usando pytesseract
 
 #C:\Users\GiovanniAzevedoCharr\AppData\Local\Programs\Tesseract-OCR
 import re
+import os
 import unicodedata
 import pandas as pd
 import pytesseract
@@ -36,8 +37,12 @@ RE_DATE = re.compile(r'\d{2}/\d{2}/\d{4}')
 RE_CNPJ = re.compile(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}')
 
 # GLOBAIS --------------------------
-pytesseract.pytesseract.tesseract_cmd = r"C:\Users\GiovanniAzevedoCharr\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-POPLLER_PATH = "poppler-25.12.0/Library/bin"
+TESSERACT_CMD = os.getenv("TESSERACT_CMD", r"C:\Users\GiovanniAzevedoCharr\AppData\Local\Programs\Tesseract-OCR\tesseract.exe").strip()
+POPLLER_PATH = os.getenv("POPLLER_PATH", "poppler-25.12.0/Library/bin").strip() or None
+
+if TESSERACT_CMD:
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+
 list_nf = []
 cnpj_tomador = '03.467.321/0001-99'
 CAMINHO_RAIZ = "./nfs_analise"
