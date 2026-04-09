@@ -1,5 +1,6 @@
 import os
 from collections.abc import Generator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -45,6 +46,16 @@ def get_sessionmaker():
 
 
 def get_db() -> Generator[Session, None, None]:
+    session = get_sessionmaker()()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@contextmanager
+def get_session() -> Generator[Session, None, None]:
+    """Context manager direto para uso fora de Depends (ex: StreamingResponse)."""
     session = get_sessionmaker()()
     try:
         yield session

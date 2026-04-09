@@ -1,17 +1,19 @@
+import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from .db import get_db, init_db
+from .db import get_db, get_session, init_db
 from .models import NfEntry, UploadBatch, UploadFile as UploadFileRecord, User
 from .normalization import (
     build_business_key,
@@ -150,6 +152,10 @@ def build_parser_debug_dir(saved_path: Path) -> Path:
     return PARSER_DEBUG_DIR / saved_path.parent.name / saved_path.stem
 
 
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
@@ -249,158 +255,161 @@ def create_app() -> FastAPI:
     @app.post("/api/uploads")
     async def upload_pdfs(
         request: Request,
-        db: DbSession,
         files: list[UploadFile] = File(...),
-    ) -> dict[str, object]:
+    ) -> StreamingResponse:
         user_data = get_authenticated_user(request)
-        user = get_or_create_user(db, user_data["username"])
 
-        batch = UploadBatch(user_id=user.id)
-        db.add(batch)
-        db.flush()
-
-        parser = LegacyParserAdapter()
-        results = []
-
+        # Ler todos os bytes antes de iniciar o stream (await nao funciona dentro do generator)
+        file_payloads: list[tuple[str, bytes]] = []
         for upload in files:
             filename = upload.filename or "arquivo.pdf"
             file_bytes = await upload.read()
-            sha256 = compute_sha256(file_bytes)
+            file_payloads.append((filename, file_bytes))
 
-            if not filename.lower().endswith(".pdf"):
-                record = UploadFileRecord(
-                    upload_batch_id=batch.id,
-                    original_filename=filename,
-                    file_sha256=sha256,
-                    status="rejeitado",
-                    status_reason="Apenas arquivos PDF sao aceitos.",
-                    inserted_count=0,
-                    duplicate_count=0,
-                )
-                db.add(record)
-                results.append(
-                    {
-                        "filename": filename,
-                        "status": record.status,
-                        "status_reason": record.status_reason,
-                        "parser_error": None,
-                        "inserted_count": 0,
-                        "duplicate_count": 0,
-                        "timeline": ["Arquivo rejeitado antes do parser."],
-                    }
-                )
-                continue
+        async def generate():
+            with get_session() as db:
+                try:
+                    user = get_or_create_user(db, user_data["username"])
+                    batch = UploadBatch(user_id=user.id)
+                    db.add(batch)
+                    db.flush()
 
-            saved_path = save_uploaded_pdf(batch.id, filename, file_bytes, sha256)
-            debug_dir = build_parser_debug_dir(saved_path)
+                    parser = LegacyParserAdapter()
 
-            try:
-                outcome = parser.parse_pdf_bytes(filename, file_bytes, debug_dir=debug_dir)
+                    for filename, file_bytes in file_payloads:
+                        sha256 = compute_sha256(file_bytes)
 
-                if outcome.status != "processado":
-                    record = UploadFileRecord(
-                        upload_batch_id=batch.id,
-                        original_filename=filename,
-                        file_sha256=sha256,
-                        status=outcome.status,
-                        status_reason=outcome.reason,
-                        parser_error=outcome.error,
-                        inserted_count=0,
-                        duplicate_count=0,
-                    )
-                    db.add(record)
-                    results.append(
-                        {
-                            "filename": filename,
-                            "status": record.status,
-                            "status_reason": record.status_reason,
-                            "parser_error": record.parser_error,
-                            "inserted_count": 0,
-                            "duplicate_count": 0,
-                            "saved_path": str(saved_path),
-                            "debug_dir": outcome.debug_dir,
-                            "timeline": outcome.timeline or [],
-                        }
-                    )
-                    continue
+                        yield _sse({"event": "file_queued", "filename": filename})
 
-                inserted_count = 0
-                duplicate_count = 0
-                timeline = list(outcome.timeline or [])
+                        if not filename.lower().endswith(".pdf"):
+                            record = UploadFileRecord(
+                                upload_batch_id=batch.id,
+                                original_filename=filename,
+                                file_sha256=sha256,
+                                status="rejeitado",
+                                status_reason="Apenas arquivos PDF sao aceitos.",
+                                inserted_count=0,
+                                duplicate_count=0,
+                            )
+                            db.add(record)
+                            yield _sse({
+                                "event": "file_done",
+                                "filename": filename,
+                                "status": "rejeitado",
+                                "status_reason": "Apenas arquivos PDF sao aceitos.",
+                                "parser_error": None,
+                                "inserted_count": 0,
+                                "duplicate_count": 0,
+                            })
+                            continue
 
-                for row in outcome.rows:
-                    business_key = build_business_key(row)
-                    existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
-                    if existing is not None:
-                        duplicate_count += 1
-                        continue
+                        saved_path = save_uploaded_pdf(batch.id, filename, file_bytes, sha256)
+                        debug_dir = build_parser_debug_dir(saved_path)
 
-                    create_nf_entry(db, row)
-                    inserted_count += 1
+                        yield _sse({"event": "file_saved", "filename": filename})
+                        yield _sse({"event": "file_parsing", "filename": filename})
 
-                file_status = "processado" if inserted_count > 0 else "duplicado"
-                status_reason = None
-                if file_status == "duplicado":
-                    status_reason = "Todas as linhas extraidas deste arquivo ja existiam na base."
-                timeline.append("Parser concluído e linhas consolidadas no backend.")
+                        try:
+                            # Parser roda em thread para nao bloquear o event loop
+                            outcome = await asyncio.to_thread(
+                                parser.parse_pdf_bytes, filename, file_bytes, debug_dir
+                            )
 
-                record = UploadFileRecord(
-                    upload_batch_id=batch.id,
-                    original_filename=filename,
-                    file_sha256=sha256,
-                    status=file_status,
-                    status_reason=status_reason,
-                    inserted_count=inserted_count,
-                    duplicate_count=duplicate_count,
-                )
-                db.add(record)
-                results.append(
-                    {
-                        "filename": filename,
-                        "status": file_status,
-                        "status_reason": status_reason,
-                        "parser_error": None,
-                        "inserted_count": inserted_count,
-                        "duplicate_count": duplicate_count,
-                        "saved_path": str(saved_path),
-                        "debug_dir": outcome.debug_dir,
-                        "timeline": timeline,
-                    }
-                )
-            except Exception as error:
-                parser_error = str(error)
-                record = UploadFileRecord(
-                    upload_batch_id=batch.id,
-                    original_filename=filename,
-                    file_sha256=sha256,
-                    status="erro_parsing",
-                    status_reason="Erro ao consolidar o retorno do parser.",
-                    parser_error=parser_error,
-                    inserted_count=0,
-                    duplicate_count=0,
-                )
-                db.add(record)
-                results.append(
-                    {
-                        "filename": filename,
-                        "status": "erro_parsing",
-                        "status_reason": "Erro ao consolidar o retorno do parser.",
-                        "parser_error": parser_error,
-                        "inserted_count": 0,
-                        "duplicate_count": 0,
-                        "saved_path": str(saved_path),
-                        "debug_dir": str(debug_dir),
-                        "timeline": [
-                            "Upload salvo no backend.",
-                            "main_v9.py retornou.",
-                            "Falha ao consolidar o retorno do parser no backend.",
-                        ],
-                    }
-                )
+                            if outcome.status != "processado":
+                                record = UploadFileRecord(
+                                    upload_batch_id=batch.id,
+                                    original_filename=filename,
+                                    file_sha256=sha256,
+                                    status=outcome.status,
+                                    status_reason=outcome.reason,
+                                    parser_error=outcome.error,
+                                    inserted_count=0,
+                                    duplicate_count=0,
+                                )
+                                db.add(record)
+                                yield _sse({
+                                    "event": "file_done",
+                                    "filename": filename,
+                                    "status": outcome.status,
+                                    "status_reason": outcome.reason,
+                                    "parser_error": outcome.error,
+                                    "inserted_count": 0,
+                                    "duplicate_count": 0,
+                                })
+                                continue
 
-        db.commit()
+                            inserted_count = 0
+                            duplicate_count = 0
 
-        return {"batch_id": batch.id, "files": results}
+                            for row in outcome.rows:
+                                business_key = build_business_key(row)
+                                existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
+                                if existing is not None:
+                                    duplicate_count += 1
+                                    continue
+                                create_nf_entry(db, row)
+                                inserted_count += 1
+
+                            file_status = "processado" if inserted_count > 0 else "duplicado"
+                            status_reason = None
+                            if file_status == "duplicado":
+                                status_reason = "Todas as linhas extraidas deste arquivo ja existiam na base."
+
+                            record = UploadFileRecord(
+                                upload_batch_id=batch.id,
+                                original_filename=filename,
+                                file_sha256=sha256,
+                                status=file_status,
+                                status_reason=status_reason,
+                                inserted_count=inserted_count,
+                                duplicate_count=duplicate_count,
+                            )
+                            db.add(record)
+                            yield _sse({
+                                "event": "file_done",
+                                "filename": filename,
+                                "status": file_status,
+                                "status_reason": status_reason,
+                                "parser_error": None,
+                                "inserted_count": inserted_count,
+                                "duplicate_count": duplicate_count,
+                            })
+
+                        except Exception as error:
+                            parser_error = str(error)
+                            record = UploadFileRecord(
+                                upload_batch_id=batch.id,
+                                original_filename=filename,
+                                file_sha256=sha256,
+                                status="erro_parsing",
+                                status_reason="Erro ao consolidar o retorno do parser.",
+                                parser_error=parser_error,
+                                inserted_count=0,
+                                duplicate_count=0,
+                            )
+                            db.add(record)
+                            yield _sse({
+                                "event": "file_done",
+                                "filename": filename,
+                                "status": "erro_parsing",
+                                "status_reason": "Erro ao consolidar o retorno do parser.",
+                                "parser_error": parser_error,
+                                "inserted_count": 0,
+                                "duplicate_count": 0,
+                            })
+
+                    db.commit()
+                    yield _sse({"event": "batch_done", "batch_id": batch.id})
+
+                except Exception as error:
+                    db.rollback()
+                    yield _sse({"event": "error", "message": str(error)})
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/")
     def root() -> FileResponse:

@@ -1,4 +1,0 @@
-Adicionar outros usuários e testar o banco de dados
-Fazer um designer lindo do projeto
-Subir o site para o hostinger
-
