@@ -1,0 +1,79 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Pytest / coverage / mypy
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+coverage.xml
+*.cover
+
+# --- Node / Frontend ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vite / build output do frontend (gerado por `npm run build`)
+frontend/dist/
+backend/app/static/
+
+# --- Banco e artefatos do parser ---
+# PDFs originais salvos por upload — recriados a cada execução
+backend/banco_de_nf/
+# Artefatos de debug do parser legado (log.json, stdout/stderr, planilhas)
+backend/app/parser_debug/
+# Saídas locais do main_v9.py quando rodado fora do subprocess
+output_dfs/
+nfs_analise/
+log.json
+
+# SQLite usado em testes
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Docker / volumes locais ---
+postgres_data/
+
+# --- Editores e SO ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Segredos e configuração local ---
+.env
+.env.*
+!.env.example
+
+# --- Logs ---
+*.log
+logs/
