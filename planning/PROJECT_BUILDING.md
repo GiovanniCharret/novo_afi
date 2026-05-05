@@ -29,9 +29,9 @@ r - Rollback - falhou
 [a] - Usar Skill SDD para planejas as fases e subfases. GSD, feature-dev e superpowers são bons exemplos
 [n] - Definir se o projeto usará single ou mult agents
 [x] - Adicionar BEHVIORAL_GUIDELINES à pasta do projeto e no claude.
-[r] - Escreva o planning/ADVERSARIAL_REVIEW.md, que testa as falhas e ambiguidades do script: "Aja como um adversário maximamente competente. Sua tarefa é encontrar todas as ambiguidades, lacunas semânticas e formulações suaves neste documento que permiritiram a você seguir tecnicamente a refra enquanto viala seu espírito. Liste cada brecha com o caminho de exploração específico".
+[r] - Após o /init - Leia todo o conteúdo de planning/. Depois, escreva o planning/ADVERSARIAL_REVIEW.md, que testa as falhas e ambiguidades do script: "Aja como um adversário maximamente competente. Sua tarefa é encontrar todas as ambiguidades, lacunas semânticas e formulações suaves neste documento que permiritiram a você seguir tecnicamente a refra enquanto viala seu espírito. Liste cada brecha com o caminho de exploração específico".
 [a] - Avaliar o plugin caveman no projeto
-[x] - Explicar: `PLAN.md` governa escopo; `CLAUDE.md` governa estilo; `BEHAVIORAL_GUIDELINES.md` governa processo; `outros.md` ; para evitar conflitos que falham alto. — ver "Hierarquia de documentos" abaixo.
+[x] - Explicar: `PLAN.md` governa escopo; `CLAUDE.md` governa estilo; `BEHAVIORAL_GUIDELINES.md` governa processo; `outros.md` ; para evitar aconflitos que falham alto. — ver "Hierarquia de documentos" abaixo.
 [ ] - Comparar arquitetura atual e clean Architecture
 [x] - Criar a seção `estado atual do respositório` com `Estado atual do repositório` e `Próxima tarefa concreta proposta pelo Claude` — ver "Estado atual do repositório" abaixo.
 [ ] - sinalizar arquivos da raiz que NÃO SÃO entradas
