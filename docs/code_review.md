@@ -1,4 +1,11 @@
-# Code Review — `recebimento_notas`
+# Code Review — `recebimento_notas` (HISTÓRICO — abril 2026)
+
+> **Status: HISTÓRICO.** Esta revisão foi feita sobre uma versão anterior do repositório (parser legado `main_v9.py` ativo, FastAPI app em `backend/app/main.py`). Várias observações citam arquivos que mudaram de nome ou foram substituídos:
+> - `backend/app/main.py` (FastAPI app) → hoje em `backend/app/server.py`.
+> - `backend/app/main_v9.py` (parser legado) → hoje em `backend/app/main_v9.deprecated.py` (não importável de propósito).
+> - O parser ativo hoje é o v10 em `backend/app/main.py`.
+>
+> Issues que ainda fazem sentido (ex.: política de hash de senha, NULLs em `nf_entries`, encoding) foram tratadas em decisões formais em `planning/PLAN.md` (Decisões #2, #8, etc.). Documento mantido aqui apenas como referência da época.
 
 > Revisão realizada em: 2026-04-01  
 > Modelo: Claude Sonnet 4.6

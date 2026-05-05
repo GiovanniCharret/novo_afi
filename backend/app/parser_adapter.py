@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 
-SCRIPT_PATH = Path(__file__).resolve().parent / "main_v9.py"
+SCRIPT_PATH = Path(__file__).resolve().parent / "main.py"
 
 
 @dataclass
@@ -33,7 +33,7 @@ class LegacyParserAdapter:
             (input_dir / filename).write_bytes(content)
             timeline = [
                 "Upload salvo no backend.",
-                "main_v9.py iniciado.",
+                "main.py iniciado.",
             ]
 
             process = subprocess.run(
@@ -52,7 +52,7 @@ class LegacyParserAdapter:
                 stdout_text=process.stdout,
                 stderr_text=process.stderr,
             )
-            timeline.append(f"main_v9.py retornou com código {process.returncode}.")
+            timeline.append(f"main.py retornou com código {process.returncode}.")
 
             if spreadsheet is not None:
                 dataframe = pd.read_excel(spreadsheet)

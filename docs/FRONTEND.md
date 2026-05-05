@@ -314,3 +314,74 @@ O `filename` é a chave de identificação — garante que apenas o arquivo corr
 | Google Fonts (CDN) | Open Sans |
 
 O build emite os assets em `backend/app/static/`, servidos estaticamente pelo FastAPI.
+
+---
+
+## Telas e fluxos planejados (próximo ciclo — F1 a F8)
+
+Esta seção descreve as telas que serão adicionadas. Os critérios de sucesso por feature vivem em `planning/PLAN.md`; aqui só o esqueleto de UX.
+
+### F1 — Auth real (substitui credenciais fixas)
+
+- Tela de **registro** (`/register`): campos `email` + `password`. Política mínima: senha ≥10 caracteres, sem regras de complexidade obrigatórias. Submissão chama `POST /api/auth/register`; após sucesso, mensagem "Verifique seu e-mail para confirmar".
+- Tela de **confirmação** (`/auth/confirm?token=...`): consome `GET /api/auth/confirm?token=...`. Sucesso → redireciona para login. Token expirado → mensagem orientando re-registro.
+- Tela de **login**: ajustar para usar `email` (não `username`). Mensagem específica para `email_confirmed=False` (403).
+- Tela de **esqueci minha senha** (`/forgot-password`): campo `email`. Submissão chama `POST /api/auth/forgot-password`; sempre exibe "Se o e-mail existir, enviamos um link" (sem revelar se existe).
+- Tela de **redefinir senha** (`/reset-password?token=...`): inputs `password` + `confirm_password`. `POST /api/auth/reset-password`.
+
+### F2 — Seleção de contrato (entre login e upload)
+
+- Após login bem-sucedido, frontend chama `GET /api/session/contrato`. Se 404, redireciona para `/contratos` (Decisão #9).
+- Tela `/contratos` (seleção): lista filtravel de contratos (~140), busca por `numero` + `sigla`, filtros `uf`, `tipo_contrato` (LPT/MLA), `tranche`. Toggle "apenas com valor definido". Click em um contrato → `POST /api/session/contrato` → redireciona para upload.
+- **Topbar passa a exibir o contrato ativo** (número + sigla) ao lado do nome do usuário. Click no contrato no topbar → volta à tela de seleção.
+
+### F3 — Página de consulta de contratos
+
+- Tela acessível via menu do topbar. Mesma fonte de dados do F2 (`GET /api/contratos?...`), mas **sem efeito de seleção** — só consulta.
+- Tabela com colunas: Número, Fornecedor (sigla), UF, Tranche, Tipo, Valor Contrato, Valor CDE, % CDE.
+- Tabela usa `table-layout: fixed` e ellipsis (mesmas regras da tabela de NFs).
+
+### F4 — Visualizar/baixar PDF
+
+- Coluna nova de **ação** na tabela de NFs: ícone "olho" (abre PDF inline em nova aba via `GET /api/uploads/files/{upload_file_id}/pdf`) e ícone "download" (`?download=true` força attachment com `original_filename`).
+- Sem tela nova — só aumento da tabela existente.
+
+### F5 — Limite de 550 PDFs/batch
+
+- Ao selecionar arquivos, se `files.length > 550` → exibir alerta inline e desabilitar botão de envio.
+- A validação canônica é do backend (`HTTP 422`). Frontend é só UX preventiva.
+
+### F6 — Card de totalizadores no painel de upload
+
+- Card no topo do painel de upload (antes da seleção de arquivos), exibindo para o contrato ativo:
+  - Duas barras horizontais: "Enviado vs. Valor Contrato" e "Enviado vs. Valor CDE", em BRL e %.
+  - Contagem de NFs distintas no banco para o contrato.
+- Recarrega ao montar e após cada `batch_done` no SSE.
+- Quando `valor_contrato = 0`: exibir "Valor contratual não definido" e ocultar a barra correspondente.
+
+### F8 — Modal de preenchimento manual de campos faltando (Decisão #8 Tipo 1)
+
+- Trigger: SSE event `file_pending_input` com `{nf_pending_id, prefilled_fields, missing_fields, original_filename}`.
+- Modal abre **bloqueando o batch** — outros arquivos não começam a processar até resolver.
+- Layout: título "Preencher campos faltando — `<filename>`"; lista de campos pré-preenchidos visíveis (read-only ou disabled, com indicação de origem); inputs obrigatórios para cada `missing_field` (cnpj, fornecedor, data_emissao, numero_nf, etc. — ver `planning/PLAN.md` Decisão #8 para a lista completa).
+- **Validação no client**: nenhum campo pode ser submetido vazio. Botão "Salvar" disabled enquanto houver campo vazio.
+- Submissão: `POST /api/uploads/pending/{nf_pending_id}/resolve` com `{cnpj: "...", ...}`. Sucesso → modal fecha, batch retoma.
+- **Abandono**: usuário pode fechar modal/browser. Backend marca pendência como `abandonado` após timeout (definido em F8). NF não entra em `nf_entries`. Re-submissão dos PDFs deduplica via `business_key` automaticamente (sem rollback de linhas já inseridas).
+- Link "Ver PDF original" no modal abre `GET /api/uploads/files/{upload_file_id}/pdf` em nova aba (depende de F4 estar ativo).
+
+### Status badge novo (F8)
+
+| Classe | Background | Texto | Borda | Uso |
+|---|---|---|---|---|
+| `.status-aguardando-preenchimento` | `#fef3c7` | `#92400e` | `#fcd34d` | Arquivo com 1+ NF em `nf_pending` |
+
+Mantém o padrão de cores existente.
+
+---
+
+## Comportamento de redirect quando falta contrato (Decisão #9)
+
+- Frontend **não confia em payload de redirect do backend**. Rotas são responsabilidade do frontend.
+- Convenção: backend retorna `HTTP 400 {"detail": "Nenhum contrato selecionado."}` quando endpoint que exige contrato é chamado sem `contrato_id` na sessão.
+- Frontend, no boot pós-login, chama `GET /api/session/contrato`. Se 404, renderiza `/contratos` (rota interna).
+- O 400 do upload serve só como rede de segurança para bug/estado inconsistente.

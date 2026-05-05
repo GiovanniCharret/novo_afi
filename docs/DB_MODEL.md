@@ -1,7 +1,8 @@
 # Modelagem do Banco
 
-Este documento propõe a modelagem inicial do PostgreSQL para o MVP.
-O foco desta fase e alinhar persistencia, deduplicacao global de notas e historico por usuario antes da implementacao da Parte 6.
+Este documento descreve a modelagem do PostgreSQL.
+
+**Status**: o schema do MVP (Partes 1–7 de `docs/PLAN.md`) está em produção. As mudanças planejadas para o próximo ciclo (F1–F8 de `planning/PLAN.md`) estão listadas em "Mudanças planejadas" abaixo. Ver `planning/PLAN.md` → "Mudanças Transversais de Schema" para os DDLs canônicos das próximas migrations.
 
 ## Direcao Adotada
 
@@ -329,3 +330,80 @@ A recomendacao e aprovar esta modelagem simplificada como base da Parte 6, com t
 - encapsular a normalizacao de `business_key` no backend antes do insert
 - converter os campos numericos e de data do parser para tipos canonicos antes de persistir
 - manter a tabela principal o mais parecida possivel com a planilha consolidada usada no fluxo atual
+
+---
+
+## Mudancas planejadas (proximo ciclo — F1 a F8)
+
+Esta secao resume as mudancas de schema do roadmap em `planning/PLAN.md`. Os DDLs canonicos vivem la; aqui apenas o overview para nao duplicar fonte de verdade.
+
+### Tabela `users` — F1 + Decisao #5
+
+Colunas novas (todas necessarias para auth real):
+
+- `email VARCHAR(255) UNIQUE NOT NULL` — identificador unico de login (substitui `username` no fluxo novo)
+- `email_confirmed BOOLEAN NOT NULL DEFAULT FALSE`
+- `confirmation_token VARCHAR(128)` + `token_expires_at TIMESTAMPTZ`
+- `reset_token VARCHAR(128)` + `reset_expires_at TIMESTAMPTZ`
+
+Coluna existente alterada:
+
+- `username` passa a `nullable=True`. Mantida apenas por compat com seed legado (`DEBUG=true`); ninguem novo cadastra com username.
+
+Hash de senha (Decisao #2): `passlib[bcrypt]` cost 10. `CryptContext` configurado com `schemes=["argon2", "bcrypt"]` para permitir migracao automatica para argon2id quando a instituicao definir o algoritmo institucional. Esqueleto em `backend/app/security.py`.
+
+### Tabela `contratos` (nova) — F2
+
+Seed a partir de `base_contratos.json` (~140 entradas). DDL completo em `planning/PLAN.md`.
+
+Campos: `id, numero (UNIQUE), sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato (LPT|MLA), ativo, created_at`.
+
+### Tabela `upload_batches` — F2 + F8
+
+- `contrato_id VARCHAR(36) NOT NULL REFERENCES contratos(id)` (nullable em batches antigos via migration; obrigatorio em novos).
+- `status VARCHAR(16)` — `processando` | `concluido` | `abandonado` (introduzido em F8 para suportar bloqueio/abandono de pendencias — Decisao #8).
+
+### Tabela `nf_entries` — F2 + F4 + F8
+
+Colunas novas:
+
+- `contrato_id VARCHAR(36) REFERENCES contratos(id)` — complementa o `contrato` texto livre atual (este permanece como legado).
+- `upload_file_id VARCHAR(36) REFERENCES upload_files(id)` — necessario para F4 (visualizar/baixar PDF a partir da linha).
+
+**Mudanca critica em F8 (Decisao #8)**: as **11 colunas** que vem de `default_nf_template` (`descricao, ncm, quant, preco_unitario, numero_nf, tipo_nota, data_emissao, cnpj, fornecedor, valor, contrato`) viram `NOT NULL`. Linha com qualquer campo `""` ou `None` e considerada falha grave do parser e nao pode entrar no banco. Eventual backfill de linhas historicas com NULL pode ser necessario antes do `ALTER COLUMN ... SET NOT NULL`.
+
+A `business_key` **nao muda** — uma mesma NF nao pode existir duas vezes mesmo em contratos diferentes.
+
+### Tabela `nf_pending` (nova) — F8
+
+NFs que o parser identificou mas nao conseguiu preencher 100% dos campos obrigatorios. Aguardam preenchimento manual via modal no frontend.
+
+```sql
+CREATE TABLE nf_pending (
+    id                  VARCHAR(36) PRIMARY KEY,
+    upload_file_id      VARCHAR(36) NOT NULL REFERENCES upload_files(id) ON DELETE CASCADE,
+    upload_batch_id     VARCHAR(36) NOT NULL REFERENCES upload_batches(id) ON DELETE CASCADE,
+    contrato_id         VARCHAR(36) NOT NULL REFERENCES contratos(id),
+    prefilled_json      TEXT NOT NULL,
+    missing_fields_json TEXT NOT NULL,
+    status              VARCHAR(16) NOT NULL DEFAULT 'aguardando',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at         TIMESTAMPTZ
+);
+```
+
+Status: `aguardando` | `resolvido` | `abandonado`. Indices em `status` e `upload_batch_id`.
+
+### Tabela `upload_files` — F8
+
+Status `aguardando_preenchimento` adicionado ao enum logico (linha tem 1+ NF em `nf_pending`). Sem schema change na coluna em si — o enum hoje e `VARCHAR`.
+
+Coluna nova:
+
+- `stored_filename VARCHAR(255)` — UUID ou nome real no disco. Permite migracao futura para object storage sem mudar a logica de identificar o arquivo (Decisao #4 de storage).
+
+### Schema management — Decisao #3
+
+Hoje: `init_db()` (`SQLAlchemy create_all`) no `lifespan`. Adicionar coluna em tabela existente nao funciona com `create_all`.
+
+A partir de F1: **Alembic**, executado via `alembic upgrade head` no `start.ps1` antes de `docker compose up`. Primeira migration = baseline gerada via autogenerate contra schema atual. Migrations subsequentes uma por feature. Testes (`conftest.py`) continuam usando `init_db()` direto sobre os models — testes nao rodam migrations.

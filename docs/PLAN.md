@@ -1,4 +1,6 @@
-# Plano de Execucao
+# Plano de Execucao (HISTORICO — MVP entregue, Partes 1-7)
+
+> **Status: HISTORICO.** Este documento descreve o plano original do MVP, ja entregue (Partes 1-7). **Nao e roadmap.** O roadmap atual das proximas 7 features esta em `planning/PLAN.md`. Referencias a arquivos antigos (`backend/app/main_v9.py`, frontend vazio, etc.) refletem o estado da epoca em que este plano foi escrito; o estado atual do repositorio esta em `planning/PROJECT_BUILDING.md` -> "Estado atual do repositorio".
 
 Este documento detalha a execucao do MVP descrito em `AGENTS.md`.
 O objetivo e transformar o parser Python existente em uma aplicacao web com autenticacao simples, persistencia em PostgreSQL, upload em lote de PDFs e consulta persistida de notas fiscais processadas.

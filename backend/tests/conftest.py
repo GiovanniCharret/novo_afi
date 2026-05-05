@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db import init_db, reset_db_state
-from app.main import app
+from app.server import app
 
 
 @pytest.fixture()

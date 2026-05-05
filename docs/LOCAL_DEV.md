@@ -44,7 +44,7 @@ Esse script derruba a stack, remove os volumes do PostgreSQL e apaga a pasta loc
 
 ## O que esta pronto nesta fase
 
-- Backend FastAPI com ponto de entrada em `backend/app/main.py`
+- Backend FastAPI com ponto de entrada em `backend/app/server.py` (carregado por `uvicorn app.server:app`)
 - Frontend React + Vite em `frontend/`
 - Build estatico do frontend servido pelo backend em `/`
 - Login simples por sessao com credenciais ficticias
@@ -56,13 +56,16 @@ Esse script derruba a stack, remove os volumes do PostgreSQL e apaga a pasta loc
 
 ## Observacao
 
-O parser legado em `backend/app/main_v9.py` ja esta integrado ao backend web por meio de um adaptador interno.
+O parser ativo (v10) em `backend/app/main.py` esta integrado ao backend web pelo `LegacyParserAdapter` em `backend/app/parser_adapter.py`.
+A versao anterior (v9) foi marcada como `main_v9.deprecated.py` e nao e mais invocada.
 O fluxo atual processa o PDF, persiste as linhas novas no banco e tambem guarda o arquivo original em disco.
 
-## Credenciais do MVP
+## Credenciais do MVP (legado, sera removido em F1)
 
 - Usuario: `user`
 - Senha: `password`
+
+Validas apenas em ambiente com `DEBUG=true`. Em F1, serao substituidas por cadastro real com e-mail + bcrypt + confirmacao por e-mail (Decisoes #1, #2, #5 em `planning/PLAN.md`).
 
 ## Build local do frontend
 

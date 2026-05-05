@@ -57,7 +57,7 @@ def test_upload_persists_new_rows_and_lists_entries(client, monkeypatch) -> None
                 ],
             )
 
-    monkeypatch.setattr("app.main.LegacyParserAdapter", FakeAdapter)
+    monkeypatch.setattr("app.server.LegacyParserAdapter", FakeAdapter)
 
     response = client.post(
         "/api/uploads",
@@ -104,7 +104,7 @@ def test_upload_list_preserves_raw_parser_fields(client, monkeypatch) -> None:
                 ],
             )
 
-    monkeypatch.setattr("app.main.LegacyParserAdapter", FakeAdapter)
+    monkeypatch.setattr("app.server.LegacyParserAdapter", FakeAdapter)
 
     response = client.post(
         "/api/uploads",
@@ -145,7 +145,7 @@ def test_upload_marks_duplicate_when_rows_already_exist(client, monkeypatch) -> 
                 ],
             )
 
-    monkeypatch.setattr("app.main.LegacyParserAdapter", FakeAdapter)
+    monkeypatch.setattr("app.server.LegacyParserAdapter", FakeAdapter)
 
     first = client.post(
         "/api/uploads",
@@ -171,7 +171,7 @@ def test_upload_batch_details_endpoint_returns_file_statuses(client, monkeypatch
         def parse_pdf_bytes(self, filename: str, content: bytes):
             return ParserOutcome(status="rejeitado", rows=[], reason="Arquivo incompatível.")
 
-    monkeypatch.setattr("app.main.LegacyParserAdapter", FakeAdapter)
+    monkeypatch.setattr("app.server.LegacyParserAdapter", FakeAdapter)
 
     response = client.post(
         "/api/uploads",

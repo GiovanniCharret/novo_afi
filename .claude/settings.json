@@ -1,0 +1,21 @@
+{
+  "permissions": {
+  "allow": ["Bash(codex:*)"]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/code-reviewer.sh",
+            "timeout": 600,
+            "async": false,
+            "statusMessage": "code-reviewer: revisando aderência ao PLAN.md..."
+          }
+        ]
+      }
+    
+    ]
+  }
+}
