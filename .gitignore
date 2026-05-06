@@ -51,6 +51,10 @@ output_dfs/
 nfs_analise/
 log.json
 
+# F8a B5 — bind mount de base_contratos.json no docker-compose pode criar
+# um arquivo vazio no host se o destino não existir. Fonte de verdade é a raiz.
+backend/app/base_contratos.json
+
 # SQLite usado em testes
 *.db
 *.sqlite

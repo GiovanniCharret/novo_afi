@@ -60,6 +60,39 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Guidelines governam processo, não reduzem critérios aprovados
+
+**Estas guidelines descrevem como trabalhar, não definem o que conta como pronto.**
+
+Em caso de tensão entre uma guideline aqui e um critério explícito de `planning/PLAN.md` ou `planning/DEFINITION_OF_DONE.md`, **o plano vence**. Especificamente:
+
+- "No features beyond what was asked" (seção 2) **não** autoriza pular critérios negativos do DoD (auth, contrato ausente, id inexistente, etc.) sob argumento de "não foi pedido explicitamente". Critérios transversais são parte implícita de toda feature.
+- "Surgical changes" (seção 3) **não** autoriza entregar feature em uma camada quando o critério da feature cruza camadas (ver DoD §3 — Unidade mínima cruzando camadas).
+- "If uncertain, ask" (seção 1) **não** autoriza interromper task clara do plano por dúvida sobre detalhe resolvível lendo o repositório.
+
+A hierarquia é: **`PLAN.md` (escopo e critérios) > `DEFINITION_OF_DONE.md` (limiar de pronto) > este documento (processo)**. Uma guideline nunca é justificativa para entregar abaixo do DoD.
+
+## 6. Forma de perguntar
+
+**Perguntar é caro para o dono. Pergunta sem contexto custa duas rodadas em vez de uma.**
+
+Antes de interromper o trabalho com uma pergunta, distinguir:
+
+- **Dúvida resolvível** — a resposta está no repositório (código, `CLAUDE.md`, `PLAN.md`, `docs/`, git log). **Resolver lendo, não perguntando.**
+- **Dúvida bloqueante** — decisão irreversível, ambiguidade de escopo do plano, ou trade-off institucional. **Perguntar.**
+
+Quando a dúvida é bloqueante, a pergunta deve trazer:
+
+1. **Contexto** — o que está sendo implementado e onde a dúvida apareceu (arquivo:linha quando aplicável).
+2. **Opções** — pelo menos duas alternativas concretas, com consequências de cada uma.
+3. **Recomendação** — qual opção parece melhor e por quê.
+
+Exemplo ruim: "Como devo tratar erros aqui?"
+
+Exemplo bom: "Em `parser_adapter.py:142`, quando o subprocess do parser estoura timeout (180s), tenho duas opções: (a) registrar o arquivo como `erro_parsing` e continuar o batch, ou (b) abortar o batch inteiro. Recomendo (a) porque o usuário já viu o evento `file_parsing` no SSE e cancelar o batch agora invalida arquivos já processados. Confirma?"
+
+Pergunta sem contexto + opções + recomendação volta como pedido de mais informação. Não economiza turno; gasta dois.
+
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes — but never block clear plan tasks under cover of caution.

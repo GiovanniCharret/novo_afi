@@ -8,37 +8,89 @@ Este documento descreve as 7 features do próximo ciclo de desenvolvimento, suas
 
 ## Visão Geral e Ordem de Implementação
 
-Dependências entre features:
+### Dependências obrigatórias (bloqueiam — não podem ser violadas)
 
 ```
-F1 (Auth real)
-  └── F7 (E-mails transacionais)   — reutiliza infra SMTP da F1
+F8 ──► F2     parser non-interactive precisa receber contrato da sessão;
+              sem F8, F2 entrega seleção no frontend mas o parser continua
+              inferindo `contrato` por menu, violando a associação real.
 
-F2 (Seleção de contrato)
-  └── F6 (Totalizadores)           — totalizadores consomem contrato_id da sessão
+F2 ──► F6     totalizadores leem `nf_entries.contrato_id`; sem F2,
+              só existe `contrato` texto livre legado.
 
-F3 (Consulta de contratos)         — lê da tabela `contratos`, independente de upload
-
-F4 (Visualizar/baixar PDF)         — depende do armazenamento estável já existente em banco_de_nf/
-
-F5 (Limite 550 notas/batch)        — sem dependências, implementável a qualquer momento
-
-F8 (Migração para parser v10)      — pré-requisito lógico para F2: o campo `contrato`
-                                     precisa ser vinculado ao contrato selecionado pelo usuário,
-                                     não inferido pelo parser interativo
+F1 ──► F7     F7 reutiliza a infra SMTP introduzida em F1.
 ```
 
-**Ordem recomendada de implementação:**
+Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem F8 concluída, F6 sem F2 concluída ou F7 sem F1 concluída é considerada incompleta independentemente de critérios funcionais.
 
-1. F5 — Limite de batch (cirúrgico, sem dependências, devolve segurança imediata)
-2. F2 — Seleção de contrato + tabela `contratos` (seed de `base_contratos.json`)
-3. F3 — Consulta de contratos (lê o que F2 criou)
-4. F4 — Visualizar/baixar PDF (utiliza storage existente)
-5. F6 — Totalizadores (consome `contrato_id` que F2 introduz)
-6. F1 — Auth real com e-mail (substitui credencial fixa)
-7. F7 — E-mails transacionais (reutiliza SMTP da F1)
+### Independências (qualquer momento, contanto que respeitem o DoD)
 
-A migração do parser (`main_v9.py` → parser v10 em `backend/app/main.py`, copiado de `leitor_de_pdf/main.py`) é uma feature transversal documentada em seção própria ao final, pois afeta o parsing sem ser uma das 7 features de produto. A cópia dos arquivos já foi feita; o que falta é a **adaptação non-interactive** (F8).
+- **F3** — lê `contratos`; só precisa que F2 tenha rodado o seed (não a UI completa de seleção).
+- **F4** — usa `banco_de_nf/` já existente; independente das demais.
+- **F5** — limite hard de 550, sem dependências.
+
+### Checkpoints de conclusão (definem "feature pronta", endurecem as arestas)
+
+- **F8a ✅ concluída em 2026-05-06**: `python main.py --contrato N --input-dir X --output-dir Y --non-interactive` roda sem `input()`, código de topo executável movido para `if __name__ == "__main__":`, `_solicitar_campo_humano` levanta `ParserCampoFaltante` em modo non-interactive, 17 raises estruturais convertidos para `ParserEstruturaQuebrada(ValueError)`. Adapter classifica via `isinstance` (preservada por exit codes 2/3 sincronizados entre `main.py` e `parser_adapter.py`). Detalhes em `docs/MAIN_PROD_CHANGES.md`.
+- **F8b concluída** quando: `ParserCampoFaltante` vira registro em `nf_pending` com modal de preenchimento manual; endpoint `POST /api/uploads/pending/{id}/resolve` insere em `nf_entries` e retoma o batch; 11 colunas de `default_nf_template` em `nf_entries` viram NOT NULL (com migration de backfill).
+- **F2 concluída** quando: uploads novos gravam `upload_batches.contrato_id` **e** linhas em `nf_entries` recebem `contrato_id` da sessão, sem fallback ao menu interativo do parser. Endpoint `POST /api/uploads` retorna 400 sem contrato na sessão.
+- **F6 concluída** quando: totalizador consulta apenas `nf_entries` com `contrato_id IS NOT NULL` e status que conta como persistido (filtro exato definido na própria F6). Não soma linhas legadas com `contrato` texto livre.
+- **F1 concluída** quando: usuário legado `user/password` é rejeitado em qualquer ambiente com `APP_ENV != development`; tokens de confirmação/reset são hash em banco, uso único, e SMTP ausente em produção falha startup.
+
+### Ordem de execução
+
+```
+1. F8a ✅ parser non-interactive + exceções tipadas      (concluída 2026-05-06)
+2. F5  — limite 550                                      (cirúrgico, win rápido)
+3. F2  — seleção de contrato + seed validado             (desbloqueia F6)
+4. F3  — consulta de contratos                           (depende só do seed)
+5. F4  — visualizar/baixar PDF                           (independente)
+6. F6  — totalizadores                                   (consome F2)
+7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
+8. F1  — auth real                                       (desbloqueia F7)
+9. F7  — e-mails transacionais                           (consome F1)
+```
+
+A ordem acima é a do ciclo. Trocar dentro de blocos independentes (ex.: F4 antes de F3) é permitido; **violar uma aresta da seção "Dependências obrigatórias" exige justificativa documentada e nova decisão registrada em `PENDING_DECISIONS.md`**.
+
+A migração do parser (`main_v9.py` → parser v10 em `backend/app/main.py`) é uma feature transversal documentada em seção própria ao final. A cópia dos arquivos já foi feita; o que falta é a adaptação non-interactive — formalizada como F8.
+
+### Modelo de execução por fases (humano-acompanhável)
+
+O ciclo é **estritamente sequencial por feature**. Cada feature roda em 4 fases com **checkpoint humano obrigatório** entre elas. Não se inicia a fase seguinte sem aprovação explícita do dono na fase corrente.
+
+```
+[Fase A] Spec curta (1 página em planning/PROJECT_BUILDING.md)
+         ├─ escopo, arestas duras, critérios negativos, ambiente-alvo
+         └─ ⏸ CHECKPOINT: dono lê e aprova ("ok, segue") OU pede ajuste
+
+[Fase B] Backend
+         ├─ models/migration + endpoints + tests
+         ├─ pytest passa
+         └─ ⏸ CHECKPOINT: dono roda testes localmente, aprova OU pede ajuste
+
+[Fase C] Frontend (se aplicável)
+         ├─ componentes + integração com endpoints da Fase B
+         ├─ npm run build sem erro
+         └─ ⏸ CHECKPOINT: dono usa a feature no browser, aprova OU pede ajuste
+
+[Fase D] Definition of Done + commit
+         ├─ checklist de planning/DEFINITION_OF_DONE.md preenchida
+         ├─ docs atualizados (CLAUDE.md, MAIN_PROD_CHANGES.md se main.py mudou)
+         └─ ⏸ CHECKPOINT FINAL: dono revisa diff completo, aprova merge
+                                ou pede revisão antes de iniciar próxima feature
+```
+
+**Regras do modelo de fases:**
+
+1. **Uma feature por vez.** Não iniciar F5 enquanto F8 não passou pela Fase D. Não iniciar F2 enquanto F5 não passou pela Fase D.
+2. **Diff máximo por fase: ~400 linhas.** Se uma fase passar disso, parar e dividir em sub-fases (B1/B2) com checkpoint entre elas.
+3. **Pausa entre features.** Após o checkpoint final de uma feature, dono confirma explicitamente o início da próxima — não emendar automaticamente.
+4. **Checkpoint não é formalidade.** Se o dono testa e algo não bate com a spec da Fase A, retorna-se à Fase B (ou A se a spec estava errada). Não se avança "consertando depois".
+5. **Bug encontrado em fase anterior congela a atual.** Se na Fase C aparece bug na Fase B, volta-se para B antes de seguir.
+6. **Spec da Fase A é vinculante.** Mudança de escopo durante B/C exige nova rodada de A com aprovação registrada.
+
+A Definition of Done canônica vive em `planning/DEFINITION_OF_DONE.md` (a criar antes de iniciar F8).
 
 ---
 

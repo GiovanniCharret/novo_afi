@@ -310,9 +310,11 @@ def create_app() -> FastAPI:
                         yield _sse({"event": "file_parsing", "filename": filename})
 
                         try:
-                            # Parser roda em thread para nao bloquear o event loop
+                            # Parser roda em thread para nao bloquear o event loop.
+                            # F8a: contrato_numero=None usa o placeholder do adapter.
+                            # F2 substituira por request.session["contrato_id"] -> numero do contrato.
                             outcome = await asyncio.to_thread(
-                                parser.parse_pdf_bytes, filename, file_bytes, debug_dir
+                                parser.parse_pdf_bytes, filename, file_bytes, debug_dir, None
                             )
 
                             if outcome.status != "processado":

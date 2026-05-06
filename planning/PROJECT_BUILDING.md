@@ -37,6 +37,9 @@ r - Rollback - falhou
 [ ] - sinalizar arquivos da raiz que NÃO SÃO entradas
 [a] - Avaliar usar sandbox e WSL2/VSCODE Ubuntu para execução
 [a] - Criar e instalar dependências
+[x] - Governança de desenvolvimento - Explica critérios de sucesso de cada fase em `definition of done.md` para humanos poderem acompanhar.
+
+
 
 ---
 
@@ -79,7 +82,21 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 - **F5** (limite 550 PDFs/batch): cirúrgico, sem dependências. Boa primeira entrega.
 - **F2** (seleção de contrato + tabela `contratos` + seed): segundo passo natural.
 - **F1** (auth real + Alembic setup): exige migration do schema, gateway para tudo que depende de auth séria.
-- **F8** (refactor non-interactive de `main.py` + `nf_pending`): pré-requisito lógico para F2 enviar contrato ao parser.
+- ~~**F8** (refactor non-interactive de `main.py`): desbloqueado em F8a (2026-05-06).~~
+- **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): refina UX de NFs com campo faltante. Hoje cai em `erro_parsing`.
+
+### F8a — concluída em 2026-05-06
+
+Parser non-interactive entregue. Itens que cobriam:
+- `main.py` aceita `--contrato/--input-dir/--output-dir/--non-interactive` (bloco `if __name__ == "__main__":`)
+- Exceções tipadas `ParserCampoFaltante` e `ParserEstruturaQuebrada(ValueError)`
+- 14 chamadas de `_solicitar_campo_humano` cobertas por modificação na função (checa flag)
+- 17 `raise ValueError` estruturais convertidos para `ParserEstruturaQuebrada`
+- Adapter classifica via exit codes 2/3, aceita `contrato_numero` como 4º arg
+- Bind mount de `base_contratos.json` no compose; `opencv-python-headless` em `requirements.txt`
+- 6 testes novos em `tests/test_parser_non_interactive.py` passando
+- Smoke visual no Docker validado: NFs limpas → `processado`, NFs com campo faltante → `erro_parsing` com mensagem `ParserCampoFaltante: campo='...' contexto='...'`
+- Detalhes em `docs/MAIN_PROD_CHANGES.md` (entrada 2026-05-06)
 
 ### Arquivos da raiz que **não são** entrypoints
 
@@ -90,8 +107,124 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 
 ### Próxima tarefa concreta proposta
 
-Ainda não decidida pelo dono. Candidatos em ordem recomendada (de `planning/PLAN.md`): F5 → F2 → F3 → F4 → F6 → F1 → F7. F8 pode entrar antes de F2 (necessário para o subprocess do parser não travar em `input()`).
+Após F8a entregue, a ordem do `planning/PLAN.md` aponta para **F5** (limite 550 PDFs/batch). F8b (modal + `nf_pending`) está reordenada para entrar entre F6 e F1.
 
 
 
 
+git push --set-upstream origin "banco_nf_com_contratos_filtro"
+
+---
+
+## F8a — Spec da Fase A — Parser non-interactive + exceções tipadas
+
+> **Status**: ✅ concluída em 2026-05-06. Spec ficou vinculante durante B1/B2/B3/B4/B5/D conforme regra 6 do "Modelo de execução por fases" em `PLAN.md`. Sub-fases B4 e B5 foram fixes de infra detectados durante o smoke (Fase C) — `opencv-python-headless` em `requirements.txt` e bind mount de `base_contratos.json` no compose. Detalhes do diff em `docs/MAIN_PROD_CHANGES.md` (entrada 2026-05-06).
+
+### Proposta de corte: F8a + F8b
+
+F8 inteiro (Decisão #8) é grande demais para uma única feature dentro do limite de ~400 linhas por fase do DoD. Proposta:
+
+- **F8a** (esta feature) — **mínimo para desbloquear F2**: parser roda non-interactive com `--contrato`, exceções tipadas (`ParserCampoFaltante`, `ParserEstruturaQuebrada`), adapter classifica por `isinstance`, ambos os tipos caem em `erro_parsing` por enquanto. Sem modal, sem `nf_pending`, sem schema NOT NULL.
+- **F8b** (feature seguinte na ordem, antes de F1) — **fluxo completo de pendência**: tabela `nf_pending`, endpoint `/resolve`, SSE event `file_pending_input`, modal no frontend, schema NOT NULL nas 11 colunas de `nf_entries` com migration de backfill.
+
+Justificativa: F8a é suficiente para a aresta dura `F8 → F2`. Sem `nf_pending`, NF com campo faltando vira `erro_parsing` — usuário reenvia depois de corrigir manualmente. F8b refina UX mas não bloqueia nada do roadmap até F1. Reordenando: F8a → F5 → F2 → F3 → F4 → F6 → **F8b** → F1 → F7.
+
+### Escopo de F8a
+
+**Backend — refactor de `backend/app/main.py`** (sub-fase B1):
+
+1. Definir duas exceções no topo do arquivo (após imports, antes de `arquivo_investigado`):
+   ```python
+   # FASE PROD — exceções tipadas para classificação de erro pelo adapter
+   class ParserCampoFaltante(Exception):
+       def __init__(self, campo, contexto, prefilled=None):
+           self.campo = campo
+           self.contexto = contexto
+           self.prefilled = prefilled or {}
+           super().__init__(f"Campo '{campo}' não extraído em {contexto}")
+
+   class ParserEstruturaQuebrada(Exception):
+       pass
+   ```
+2. Envolver **todo** o código de topo executável (`main.py:78-92` em diante) em `if __name__ == "__main__":` para que o módulo possa ser importado sem efeitos colaterais. **Sem apagar nada** — apenas indentar dentro do bloco guarda. (Atende item #16 do adversarial review.)
+3. Adicionar parsing de argumentos no novo bloco `if __name__ == "__main__":`:
+   ```python
+   # FASE PROD — flags non-interactive
+   import argparse
+   parser_args = argparse.ArgumentParser()
+   parser_args.add_argument("--contrato", type=str)
+   parser_args.add_argument("--input-dir", type=str)
+   parser_args.add_argument("--output-dir", type=str)
+   parser_args.add_argument("--non-interactive", action="store_true")
+   args = parser_args.parse_args()
+   ```
+4. Para cada uma das **14 chamadas** de `_solicitar_campo_humano` (linhas 1024, 1030, 1191, 1206-1210, 1923, 1928, 1945, 1951, 1957, 1963, 1988):
+   - Manter chamada original como `# FASE DEV (terminal):` comentada acima
+   - Substituir por `raise ParserCampoFaltante(campo=..., contexto=...)` quando `args.non_interactive`
+5. Para cada um dos **17 `raise ValueError`** estruturais (linhas 687, 761, 903, 1008, 1046, 1164, 1168, 1235, 1309, 1317, 1319, 1343, 1369, 1381, 1558, 1599, 1901):
+   - Trocar `ValueError` por `ParserEstruturaQuebrada`. **Linha 1599 é exceção semântica** mas estruturalmente é Tipo 2 (já documentado em `PLAN.md`).
+6. Registrar **cada mudança** em `docs/MAIN_PROD_CHANGES.md` com motivo + before/after, conforme regra 4 da seção "Regras gerais de refactor".
+
+**Backend — atualizar `parser_adapter.py`** (sub-fase B2):
+
+1. Aceitar `contrato_numero` como argumento de `parse_pdf_bytes`.
+2. Invocar subprocess com `--contrato N --input-dir X --output-dir Y --non-interactive`.
+3. Classificar `process.returncode` por exit code definido no `main.py` (a definir: ex. `2` = `ParserCampoFaltante`, `3` = `ParserEstruturaQuebrada`, qualquer outro != 0 = `erro_parsing` genérico).
+4. Por enquanto, ambos os exit codes 2 e 3 viram `ParserOutcome(status="erro_parsing", error=...)`. F8b refina o caso 2 para `nf_pending`.
+
+**Backend — atualizar chamadas de `LegacyParserAdapter`** (sub-fase B2):
+- `server.py` precisa passar `contrato_numero` ao adapter. **Como F2 ainda não rodou**, F8a aceita `contrato_numero=None` e nesse caso passa um número fixo placeholder (ex.: primeiro contrato do `base_contratos.json`) **apenas para o subprocess não falhar em validação**. Esse placeholder vira código morto após F2.
+
+### Critérios de sucesso de F8a (verificáveis)
+
+- [ ] `python backend/app/main.py --contrato "ECFS 101/2005" --input-dir /tmp/in --output-dir /tmp/out --non-interactive` roda sem `input()` em PDF que precisaria de campo (encerra com exit code 2).
+- [ ] `python -c "import backend.app.main"` não dispara o menu interativo.
+- [ ] `parser_adapter.parse_pdf_bytes()` em PDF "limpo" retorna `processado` como antes.
+- [ ] PDF com campo faltando retorna `erro_parsing` com mensagem identificando o campo.
+- [ ] PDF com erro estrutural retorna `erro_parsing` com mensagem do `ParserEstruturaQuebrada`.
+- [ ] Teste backend novo em `tests/test_parser_non_interactive.py` cobre os 3 caminhos.
+- [ ] `docs/MAIN_PROD_CHANGES.md` tem entrada por mudança aplicada.
+
+### Fora de escopo (vai para F8b)
+
+- Tabela `nf_pending` e migration
+- Endpoint `POST /api/uploads/pending/{id}/resolve`
+- Evento SSE `file_pending_input`
+- Modal no frontend
+- `nf_entries` colunas NOT NULL + backfill
+
+### Ambiente-alvo
+
+**Local/dev** para esta feature. Hostinger semi-prod só roda parser em produção a partir de F2.
+
+### Critérios negativos transversais
+
+- [ ] Subprocess sem `--non-interactive` mantém comportamento legado (não regrede dev).
+- [ ] Subprocess com flag mas sem `--contrato` falha rápido com mensagem clara, não trava.
+- [ ] Importar `backend.app.main` em teste não tem efeito colateral.
+- [ ] Testes existentes em `backend/tests/` continuam passando sem alteração.
+
+### Sub-fases de execução (após aprovação desta spec)
+
+| Sub-fase | Conteúdo | Diff estimado |
+|---|---|---|
+| **B1** | Refactor `main.py` — exceções, `if __name__ == "__main__":`, argparse, substituição das 14 chamadas e 17 raises | ~250 linhas (com pares FASE DEV/PROD) |
+| **B2** | `parser_adapter.py` + chamada em `server.py` + placeholder de contrato | ~80 linhas |
+| **B3** | Testes em `tests/test_parser_non_interactive.py` + entradas em `MAIN_PROD_CHANGES.md` | ~100 linhas |
+| **D**  | DoD checklist + commit | — |
+
+C (frontend) **não se aplica** em F8a — sem mudança visível na UI.
+
+### Pontos que precisam de decisão antes de B1
+
+1. **Exit codes**: 2 = `ParserCampoFaltante`, 3 = `ParserEstruturaQuebrada`? Ou usar `sys.exit(json.dumps({...}))` em stdout? Recomendo exit codes — mais simples e o adapter já lê `process.returncode`.
+2. **Placeholder de contrato pré-F2**: aceitar `--contrato` opcional e cair no menu interativo se ausente (preserva DEV) **OU** exigir sempre e usar primeiro contrato do JSON como default em F8a? Recomendo exigir sempre — força disciplina; o "default" vai ser removido em F2 mesmo.
+3. **Linha 1599 (raise ValueError fallback)**: vira `ParserEstruturaQuebrada` (mantém PLAN.md) ou `ParserCampoFaltante` (mais coerente com a mensagem "campos não preenchidos")? Recomendo `ParserEstruturaQuebrada` — está no design como Tipo 2.
+
+### ⏸ CHECKPOINT FASE A
+
+Aguardo do dono uma das três respostas:
+
+1. **"ok, segue para B1"** — aprovado integralmente, escolhas recomendadas nas decisões 1-3 aceitas.
+2. **"ajuste X, Y"** — aprovado com ressalvas; aplico ajustes na spec antes de iniciar B1.
+3. **"refazer"** — spec não bate com o que você quer; volto a estudar o problema.

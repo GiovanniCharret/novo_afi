@@ -15,6 +15,11 @@ services:
       TESSERACT_CMD: ""
     volumes:
       - ./backend:/app/backend
+      # F8a B5: contrato_config.py espera base_contratos.json ao lado dele;
+      # arquivo real fica na raiz do projeto. Mount read-only resolve sem
+      # alterar contrato_config.py (regra de preservação do parser DEV).
+      # F2 vai ler da raiz também — fonte de verdade única.
+      - ./base_contratos.json:/app/backend/app/base_contratos.json:ro
     depends_on:
       db:
         condition: service_healthy

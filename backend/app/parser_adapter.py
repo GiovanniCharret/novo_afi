@@ -1,6 +1,7 @@
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,18 @@ import pandas as pd
 
 
 SCRIPT_PATH = Path(__file__).resolve().parent / "main.py"
+
+# F8a — exit codes definidos no bloco `if __name__ == "__main__":` de main.py.
+# Mantidos em sincronia: linha do main.py com `sys.exit(2)` é Tipo 1 (campo faltante),
+# `sys.exit(3)` é Tipo 2 (estrutura quebrada). Qualquer outro != 0 é falha genérica.
+EXIT_CODE_CAMPO_FALTANTE = 2
+EXIT_CODE_ESTRUTURA_QUEBRADA = 3
+
+# F8a placeholder pré-F2: enquanto F2 não wireou o `contrato_id` da sessão,
+# o adapter passa o primeiro contrato do JSON apenas para que o subprocess não
+# falhe na validação `--contrato é obrigatório quando --non-interactive`.
+# Esse default vira código morto após F2.
+DEFAULT_CONTRATO_PRE_F2 = "ECFS 101/2005"
 
 
 @dataclass
@@ -22,7 +35,13 @@ class ParserOutcome:
 
 
 class LegacyParserAdapter:
-    def parse_pdf_bytes(self, filename: str, content: bytes, debug_dir: Path | None = None) -> ParserOutcome:
+    def parse_pdf_bytes(
+        self,
+        filename: str,
+        content: bytes,
+        debug_dir: Path | None = None,
+        contrato_numero: str | None = None,
+    ) -> ParserOutcome:
         with tempfile.TemporaryDirectory(prefix="novo_afi_parser_") as temp_dir_str:
             temp_dir = Path(temp_dir_str)
             input_dir = temp_dir / "nfs_analise"
@@ -36,8 +55,17 @@ class LegacyParserAdapter:
                 "main.py iniciado.",
             ]
 
+            contrato_efetivo = contrato_numero or DEFAULT_CONTRATO_PRE_F2
+
             process = subprocess.run(
-                ["python", str(SCRIPT_PATH)],
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--non-interactive",
+                    "--contrato", contrato_efetivo,
+                    "--input-dir", str(input_dir),
+                    "--output-dir", str(output_dir),
+                ],
                 cwd=temp_dir,
                 capture_output=True,
                 text=True,
@@ -67,6 +95,34 @@ class LegacyParserAdapter:
                         timeline=timeline,
                         debug_dir=persisted_debug_dir,
                     )
+
+            if process.returncode == EXIT_CODE_CAMPO_FALTANTE:
+                # Tipo 1 (F8a): em F8b vira nf_pending + modal. Por enquanto, erro_parsing.
+                timeline.append("Parser encerrou com campo faltante (Tipo 1).")
+                if persisted_debug_dir:
+                    timeline.append(f"Saída temporária salva em {persisted_debug_dir}.")
+                return ParserOutcome(
+                    status="erro_parsing",
+                    rows=[],
+                    reason="campo_faltante",
+                    error=(process.stderr or "ParserCampoFaltante (sem detalhe).").strip(),
+                    timeline=timeline,
+                    debug_dir=persisted_debug_dir,
+                )
+
+            if process.returncode == EXIT_CODE_ESTRUTURA_QUEBRADA:
+                # Tipo 2: bug do parser para essa estrutura específica de NF.
+                timeline.append("Parser encerrou com erro estrutural (Tipo 2).")
+                if persisted_debug_dir:
+                    timeline.append(f"Saída temporária salva em {persisted_debug_dir}.")
+                return ParserOutcome(
+                    status="erro_parsing",
+                    rows=[],
+                    reason="estrutura_quebrada",
+                    error=(process.stderr or "ParserEstruturaQuebrada (sem detalhe).").strip(),
+                    timeline=timeline,
+                    debug_dir=persisted_debug_dir,
+                )
 
             if process.returncode != 0:
                 timeline.append("Parser encerrou com erro.")

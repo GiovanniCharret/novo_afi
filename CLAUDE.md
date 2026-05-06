@@ -5,11 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Documentation lives in `planning/` and `docs/`:
 
 - `planning/PROJECT_BUILDING.md` — active scope e meta-plan (TODOs, what's next).
-- `planning/PLAN.md` — **roadmap das próximas 7 features** (F1 auth real, F2 seleção de contratos, F3 consulta de contratos, F4 visualizar/baixar PDF, F5 limite 550 notas, F6 totalizadores, F7 e-mails) + seção transversal "Migração do Parser" (F8) + 10 Decisões Pendentes (9 resolvidas, 1 deferida em 2026-05-05). Ler antes de iniciar qualquer feature nova.
+- `planning/PLAN.md` — **roadmap das próximas 7 features** (F1 auth real, F2 seleção de contratos, F3 consulta de contratos, F4 visualizar/baixar PDF, F5 limite 550 notas, F6 totalizadores, F7 e-mails) + seção transversal "Migração do Parser" (F8) + 10 Decisões Pendentes (9 resolvidas, 1 deferida em 2026-05-05). Ler antes de iniciar qualquer feature nova. Inclui modelo de execução por fases (Spec → Backend → Frontend → DoD) com checkpoint humano obrigatório entre cada fase.
+- `planning/DEFINITION_OF_DONE.md` — checklist transversal de conclusão (testes, schema, build, docs, critérios negativos, aprovação humana). Aplicada na Fase D de toda feature.
+- `planning/ADVERSARIAL_REVIEW.md` — revisão adversarial de `planning/` (ambiguidades, lacunas, brechas que permitem violar o espírito das regras). Consultar ao redigir/alterar regras de processo.
 - `planning/PENDING_DECISIONS.md` — itens **explicitamente deferidos** para decisão institucional futura (não decisões em aberto neste ciclo).
 - `docs/PLAN.md` — phase-by-phase plan do MVP já entregue (Partes 1–7). Histórico, não roadmap.
 - `docs/MAIN_PROD_CHANGES.md` — changelog canônico das adaptações de produção sobre `backend/app/main.py` (parser). **Toda mudança em `main.py` é registrada aqui** — ver "Regras específicas de desenvolvimento".
 - `planning/BEHAVIORAL_GUIDELINES.md` — process/behavior rules; **always apply**.
+- `AGENTS.md` (raiz) e `frontend/AGENTS.md` — guidelines gerais e específicas do frontend (estrutura, estilo, commits). Tem sobreposição com este arquivo; em caso de conflito, este `CLAUDE.md` é canônico.
 
 Toda documentação está organizada em `planning/` e `docs/`. Sempre seguir `planning/BEHAVIORAL_GUIDELINES.md`.
 
@@ -22,7 +25,7 @@ A nova versão precisa de uma área para seleção de contratos, uma área de co
 
 - **Backend**: FastAPI + SQLAlchemy + PostgreSQL (psycopg3) — servido em `http://localhost:8000`
 - **Frontend**: React 19 + Vite 7 (build estatico servido pelo FastAPI)
-- **Parser ativo (v10)**: `backend/app/main.py` — invocado como subprocess pelo `LegacyParserAdapter` (`backend/app/parser_adapter.py`). Importa módulos irmãos `ocr_reader.py`, `cnpj_lookup.py`, `description_cleaner.py`, `contrato_config.py`. Hoje o script tem código de topo interativo (`selecionar_contrato(...)` em `main.py:85`, variável de debug `arquivo_investigado` em `main.py:28`) e **não roda non-interactive sem refatoração** — F8 do roadmap adiciona flags `--contrato NUMERO --input-dir PATH --output-dir PATH --non-interactive` e converte `_solicitar_campo_humano` (`main.py:97`) em registro de pendência via `pending_rows.json` (Decisão #8 em `planning/PLAN.md`). **Refactor segue regras de preservação** — não apaga funções, mantém versão DEV comentada acima da PROD; toda mudança registrada em `docs/MAIN_PROD_CHANGES.md`.
+- **Parser ativo (v10)**: `backend/app/main.py` — invocado como subprocess pelo `LegacyParserAdapter` (`backend/app/parser_adapter.py`). Importa módulos irmãos `ocr_reader.py`, `cnpj_lookup.py`, `description_cleaner.py`, `contrato_config.py`. **Após F8a (2026-05-06)** o parser roda non-interactive: bloco `if __name__ == "__main__":` aceita `--contrato NUMERO --input-dir PATH --output-dir PATH --non-interactive`; `_solicitar_campo_humano` levanta `ParserCampoFaltante` em modo non-interactive em vez de `input()`; 17 `raise ValueError` estruturais convertidos para `ParserEstruturaQuebrada(ValueError)`; classificação no adapter via `isinstance` + exit codes (2 = campo faltante, 3 = estrutural). **Pendente em F8b**: tabela `nf_pending` + endpoint `/resolve` + modal — hoje `ParserCampoFaltante` cai em `erro_parsing` em vez de pendência interativa. **Refactor segue regras de preservação** — não apaga funções, mantém versão DEV comentada acima da PROD; toda mudança registrada em `docs/MAIN_PROD_CHANGES.md`.
 - **Parser legado (deprecated)**: `backend/app/main_v9.deprecated.py` — versão anterior, mantida só como referência histórica. O sufixo `.deprecated.` torna o módulo não-importável de propósito.
 - **Infra local**: Docker Compose
 
@@ -92,7 +95,7 @@ browser
 0. (Após F5/F2) `POST /api/uploads` valida que `len(files) <= 550` (caso contrário 422) e que há `contrato_id` na sessão (caso contrário 400).
 1. Frontend envia `POST /api/uploads` com lista de arquivos PDF.
 2. O backend salva cada PDF em `backend/banco_de_nf/<batch_id>/`.
-3. `LegacyParserAdapter.parse_pdf_bytes` invoca `backend/app/main.py` via subprocess em diretório temporário (timeout 180s). **Pendente F8**: o `main.py` ainda tem código de topo interativo (`selecionar_contrato(None)`) — sem o wrapper non-interactive, qualquer subprocess trava em `input()` até o timeout de 180s e cai em `erro_parsing`. F8 adiciona flags `--contrato NUMERO --input-dir PATH --output-dir PATH --non-interactive` e ajusta `cwd`/`PYTHONPATH` para que `from ocr_reader import ...` resolva.
+3. `LegacyParserAdapter.parse_pdf_bytes(filename, content, debug_dir, contrato_numero)` invoca `backend/app/main.py` via subprocess (timeout 180s) com flags `--non-interactive --contrato N --input-dir X --output-dir Y`. **Após F8a**: `contrato_numero=None` cai no placeholder `DEFAULT_CONTRATO_PRE_F2 = "ECFS 101/2005"` (vira código morto após F2 wirear `request.session["contrato_id"]`). Adapter classifica `process.returncode`: 2 = `ParserCampoFaltante` (Tipo 1), 3 = `ParserEstruturaQuebrada` (Tipo 2), outros != 0 = falha genérica. Em F8b, exit 2 vai virar `nf_pending` + modal em vez de `erro_parsing`.
 4. O parser gera um `.xlsx` em `output_dfs/` que é lido como DataFrame. Os artefatos (`log.json`, `output_dfs/`, `stdout.txt`, `stderr.txt`) são copiados para `backend/app/parser_debug/<batch_id>/<arquivo>/` para diagnóstico.
 5. Cada linha do DataFrame é inserida em `nf_entries` se a `business_key` for inédita; caso contrário, conta como `duplicado`.
 6. O resultado por arquivo (`processado`, `duplicado`, `rejeitado`, `erro_parsing`) é persistido em `upload_files`.
