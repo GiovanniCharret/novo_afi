@@ -41,7 +41,7 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 
 ```
 1. F8a ✅ parser non-interactive + exceções tipadas      (concluída 2026-05-06)
-2. F5  — limite 550                                      (cirúrgico, win rápido)
+2. F5  ✅ limite 550                                     (concluída 2026-05-07)
 3. F2  — seleção de contrato + seed validado             (desbloqueia F6)
 4. F3  — consulta de contratos                           (depende só do seed)
 5. F4  — visualizar/baixar PDF                           (independente)
@@ -173,19 +173,23 @@ Hoje o projeto usa `create_all` no `lifespan` sem sistema de migrations. Para co
 
 ---
 
-## F5 — Limite máximo de 550 notas por batch
+## F5 — Limite máximo de 550 notas por batch ✅ concluída em 2026-05-07
 
 **Objetivo**: impedir que um único envio submeta mais de 550 PDFs, protegendo o sistema de timeouts e uso excessivo de recursos.
 
 ### Subetapas
-- [ ] Em `POST /api/uploads`, antes de qualquer IO, contar `len(files)`. Se `> 550`, retornar `HTTP 422` com `{"detail": "Limite de 550 arquivos por lote excedido. Recebido: N"}`.
-- [ ] No frontend (`App.jsx`), ao selecionar arquivos, verificar `files.length > 550` e exibir alerta inline antes de habilitar o botão de envio.
-- [ ] Teste: `POST /api/uploads` com 551 arquivos-stub retorna 422.
+- [x] Em `POST /api/uploads`, antes de qualquer IO, contar `len(files)`. Se `> 550`, retornar `HTTP 422` com `{"detail": "Limite de 550 arquivos por lote excedido. Recebido: N"}`.
+- [x] No frontend (`App.jsx`), ao selecionar arquivos, verificar `files.length > 550` e exibir alerta inline antes de habilitar o botão de envio.
+- [x] Teste: `POST /api/uploads` com 551 arquivos-stub retorna 422.
 
 ### Critérios de Sucesso
-- 551 arquivos → 422 com a contagem na mensagem.
-- 550 arquivos → aceito normalmente (não rejeita no limite).
-- Frontend desabilita o botão ao selecionar > 550, sem submeter.
+- [x] 551 arquivos → 422 com a contagem na mensagem.
+- [x] 550 arquivos → aceito normalmente (não rejeita no limite).
+- [x] Frontend desabilita o botão ao selecionar > 550, sem submeter.
+
+Smoke visual no Docker validado pelo dono. Detalhes do diff em `planning/PROJECT_BUILDING.md` (seção "F5 — Spec da Fase A").
+
+**Histórico**: primeira tentativa em 2026-05-06 foi descartada por incidente de arquivos do parser sumirem do disco (rollback `git reset --hard 88fb0b0`). Re-aplicação em 2026-05-07 com mesma spec, mesmo código.
 
 ---
 

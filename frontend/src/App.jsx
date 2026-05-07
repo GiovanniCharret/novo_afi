@@ -3,6 +3,11 @@ import * as XLSX from "xlsx";
 
 const defaultLoginForm = { username: "user", password: "password" };
 
+// F5 — limite hard de PDFs por batch. Mantém em sincronia com backend
+// (server.py: `if len(files) > 550: raise HTTPException(422, ...)`).
+// Frontend é rede de segurança duplicada; backend é canônico.
+const MAX_FILES_PER_BATCH = 550;
+
 function formatSelectedFiles(files) {
   if (files.length === 0) return "Nenhum PDF selecionado.";
   if (files.length === 1) return files[0].name;
@@ -467,6 +472,12 @@ export default function App() {
               <span>{formatSelectedFiles(selectedFiles)}</span>
             </div>
 
+            {selectedFiles.length > MAX_FILES_PER_BATCH && (
+              <div className="inline-error" role="alert">
+                Excedeu o limite de {MAX_FILES_PER_BATCH} arquivos por lote. Reduza a seleção para enviar.
+              </div>
+            )}
+
             {(uploadState.submitting || uploadState.phase === "done") && (
               <div className="progress-block">
                 <div className="progress-phases">
@@ -493,7 +504,7 @@ export default function App() {
             <button
               className="btn-primary upload-btn"
               type="button"
-              disabled={uploadState.submitting}
+              disabled={uploadState.submitting || selectedFiles.length > MAX_FILES_PER_BATCH}
               onClick={handleUploadSubmit}
             >
               {uploadState.submitting ? "Enviando…" : "Enviar PDFs"}

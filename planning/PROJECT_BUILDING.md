@@ -79,8 +79,8 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 
 ### O que está pendente para começar
 
-- **F5** (limite 550 PDFs/batch): cirúrgico, sem dependências. Boa primeira entrega.
-- **F2** (seleção de contrato + tabela `contratos` + seed): segundo passo natural.
+- ~~**F5** (limite 550 PDFs/batch): concluída em 2026-05-07.~~
+- **F2** (seleção de contrato + tabela `contratos` + seed): próxima na ordem.
 - **F1** (auth real + Alembic setup): exige migration do schema, gateway para tudo que depende de auth séria.
 - ~~**F8** (refactor non-interactive de `main.py`): desbloqueado em F8a (2026-05-06).~~
 - **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): refina UX de NFs com campo faltante. Hoje cai em `erro_parsing`.
@@ -107,12 +107,83 @@ Parser non-interactive entregue. Itens que cobriam:
 
 ### Próxima tarefa concreta proposta
 
-Após F8a entregue, a ordem do `planning/PLAN.md` aponta para **F5** (limite 550 PDFs/batch). F8b (modal + `nf_pending`) está reordenada para entrar entre F6 e F1.
+Após F8a e F5 entregues, a ordem do `planning/PLAN.md` aponta para **F2** (seleção de contrato + tabela `contratos` + seed). F8b (modal + `nf_pending`) está reordenada para entrar entre F6 e F1.
 
 
 
 
 git push --set-upstream origin "banco_nf_com_contratos_filtro"
+
+---
+
+## F5 — Spec da Fase A — Limite de 550 PDFs por batch
+
+> **Status**: ✅ concluída em 2026-05-07. 2ª passada — primeira tentativa em 2026-05-06 foi descartada no rollback após incidente com arquivos do parser sumirem do disco. Spec idêntica à aprovada na primeira tentativa. Smoke visual aprovado pelo dono.
+>
+> **Resumo do diff**:
+> - Backend: `if len(files) > 550 → HTTPException(422)` em `server.py:262-269`, após auth e antes de IO
+> - Frontend: constante `MAX_FILES_PER_BATCH = 550` + alerta inline (texto enxuto, sem repetir count) + `disabled` no botão de envio quando excedido
+> - CSS: `margin-top: 12px` em `.inline-error` (corrige UX detectada na 1ª tentativa, beneficia também o uso na tabela de entries)
+> - Tests: 3 novos em `tests/test_upload_limit.py` (551 → 422 com contagem, 550 → não rejeita, 0 → preserva)
+> - Build: `npm run build` regenerou `backend/app/static/`
+
+### Escopo
+
+Cirúrgico. Adiciona uma única validação de quantidade de arquivos no endpoint `POST /api/uploads` (canônico) e um aviso de UX no `App.jsx` (rede de segurança).
+
+### Backend (sub-fase B)
+
+1. Em `backend/app/server.py`, dentro de `upload_pdfs`, **antes** de `await upload.read()`:
+   ```python
+   if len(files) > 550:
+       raise HTTPException(
+           status_code=422,
+           detail=f"Limite de 550 arquivos por lote excedido. Recebido: {len(files)}",
+       )
+   ```
+2. Posição: depois de `get_authenticated_user(request)`, antes do loop que lê os bytes. Roda só após auth (critério negativo "sem auth retorna 401" preservado).
+3. Teste em `backend/tests/test_upload_limit.py`:
+   - `test_upload_with_551_files_returns_422_with_count`
+   - `test_upload_with_550_files_does_not_reject_at_limit`
+   - `test_upload_with_zero_files_preserves_existing_behavior`
+
+### Frontend (sub-fase C)
+
+Em `frontend/src/App.jsx`:
+1. Constante `MAX_FILES_PER_BATCH = 550` no topo do módulo.
+2. Alerta inline (classe `inline-error` com `margin-top: 12px` adicionado em `styles.css`) quando `selectedFiles.length > MAX_FILES_PER_BATCH`. Texto: `"Excedeu o limite de {MAX_FILES_PER_BATCH} arquivos por lote. Reduza a seleção para enviar."` (sem repetir a contagem que já aparece em `file-status`).
+3. Botão "Enviar PDFs" `disabled` quando excedido.
+4. `npm run build` ao final.
+
+### Critérios de sucesso (verificáveis)
+
+- [ ] 551 arquivos → 422 com contagem na mensagem
+- [ ] 550 arquivos → não rejeita no limite
+- [ ] Frontend desabilita o botão e exibe alerta quando excedido
+- [ ] 3 testes em `test_upload_limit.py` passam
+- [ ] Smoke visual com >550 arquivos: alerta aparece, botão desabilitado
+
+### Fora de escopo
+
+- Limite de tamanho/content-type por arquivo (Decisão #10, deferida)
+- Limite de payload no proxy/nginx (responsabilidade ops)
+- Validação no contrato selecionado (não interage com `request.session["contrato_id"]` — F2)
+
+### Ambiente-alvo
+
+Local/dev. Limite canônico no backend é independente de ambiente; Hostinger semi-prod ganha a proteção quando o branch for promovido.
+
+### Sub-fases de execução
+
+| Sub-fase | Conteúdo | Diff estimado |
+|---|---|---|
+| **B** | `server.py` validação + `test_upload_limit.py` | ~30 linhas |
+| **C** | `App.jsx` alerta + `disabled` + `styles.css` margin + `npm run build` | ~30 linhas |
+| **D** | DoD checklist + commit (vai junto com a deleção pendente de `bug_fix/main.py`) | — |
+
+### ⏸ Status
+
+Spec re-registrada. Iniciando **B** imediatamente (autorização do dono já concedida via "Pode seguir para a F5").
 
 ---
 

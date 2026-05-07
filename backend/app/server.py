@@ -259,6 +259,15 @@ def create_app() -> FastAPI:
     ) -> StreamingResponse:
         user_data = get_authenticated_user(request)
 
+        # F5 — limite hard de 550 PDFs por batch. Validação canônica no backend
+        # (frontend tem rede de segurança duplicada). Roda APÓS auth e ANTES de
+        # qualquer IO/leitura de bytes para não consumir memória com lotes inválidos.
+        if len(files) > 550:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Limite de 550 arquivos por lote excedido. Recebido: {len(files)}",
+            )
+
         # Ler todos os bytes antes de iniciar o stream (await nao funciona dentro do generator)
         file_payloads: list[tuple[str, bytes]] = []
         for upload in files:

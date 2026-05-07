@@ -645,6 +645,7 @@ button, input, select, textarea { font: inherit; }
   border-radius: var(--radius-sm);
   color: #b91c1c;
   font-size: 0.85rem;
+  margin-top: 12px;
   margin-bottom: 12px;
 }
 
