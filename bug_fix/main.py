@@ -24,29 +24,8 @@ from ocr_reader import extrair_dados_nf_servico_do_pdf, product_or_service
 from cnpj_lookup import consulta_nome_fornecedor
 from description_cleaner import cleaner
 
-# FASE PROD — exceções tipadas para classificação de erro pelo backend (F8a)
-# ParserEstruturaQuebrada herda de ValueError para preservar os 5 blocos
-# `except ValueError` que já existem neste arquivo (linhas 1194, 1242, 1887,
-# 1922, 1927). O backend classifica via isinstance, não por número de linha.
-class ParserCampoFaltante(Exception):
-    def __init__(self, campo, contexto, prefilled=None):
-        self.campo = campo
-        self.contexto = contexto
-        self.prefilled = prefilled or {}
-        super().__init__(f"Campo '{campo}' não extraído em {contexto}")
-
-
-class ParserEstruturaQuebrada(ValueError):
-    pass
-
-
-# FASE PROD — flag controlada pelo bloco `if __name__ == "__main__":` ao final.
-# Em modo non-interactive, `_solicitar_campo_humano` levanta `ParserCampoFaltante`
-# em vez de chamar input(). Default False preserva comportamento DEV.
-NON_INTERACTIVE_MODE = False
-
 # DEPURADOR
-arquivo_investigado = '29105'
+arquivo_investigado = '1592'
 
 # LLM — modo de limpeza da coluna descricao: "precisao" | "recall"
 MODO_LLM = "precisao"
@@ -85,8 +64,7 @@ log_model = {
 }
 
 # Zerando o log
-# FASE DEV (terminal) — chamada movida para if __name__ == "__main__": ao final
-# Path("log.json").write_text("", encoding="utf-8")
+Path("log.json").write_text("", encoding="utf-8")
 
 
 # --- REGEX PARA CARACTERES INVALIDOS
@@ -104,15 +82,11 @@ SAIDA_RAIZ = './output_dfs'
 # Use None para escolher interativamente.
 from contrato_config import selecionar_contrato
 CONTRATO_NUMERO = None
-# FASE DEV (terminal) — chamadas movidas para if __name__ == "__main__": ao final
-# CONTRATO = selecionar_contrato(CONTRATO_NUMERO)
-# _ocr_mod.CONTRATO = CONTRATO
-# caminho_entrada = Path(CAMINHO_RAIZ)
-# arquivos_pdf = list(caminho_entrada.rglob("*.pdf"))
-
-
-
-
+CONTRATO = selecionar_contrato(CONTRATO_NUMERO)
+_ocr_mod.CONTRATO = CONTRATO
+caminho_entrada = Path(CAMINHO_RAIZ)
+#rglob("*.pdf") busca recursivamente em todas as subpastas
+arquivos_pdf = list(caminho_entrada.rglob("*.pdf"))
 
 # DataFrame acumulador das linhas de todas as NFs processadas
 tabela_anexo1_modelo = pd.DataFrame(columns=default_nf_template.keys())
@@ -121,10 +95,6 @@ df_anexo1_consolidado = tabela_anexo1_modelo
 
 
 def _solicitar_campo_humano(campo, contexto):
-    # FASE PROD — em modo non-interactive levanta exceção tipada em vez de input()
-    if NON_INTERACTIVE_MODE:
-        raise ParserCampoFaltante(campo=campo, contexto=contexto)
-    # FASE DEV (terminal) — comportamento original preservado:
     print(f"\n[REVISÃO HUMANA] Arquivo: {contexto}")
     print(f"  Campo '{campo}' não pôde ser extraído automaticamente.")
     valor = input(f"  Digite o valor para '{campo}' (ou Enter para deixar em branco): ").strip()
@@ -714,7 +684,7 @@ def fracionando_nf_produto(df):
         return dic_frac_nf
 
     if idx_inicio_tabela is None:
-        raise ParserEstruturaQuebrada('Não conseguiu dividir a tabela em 3 partes. O que aconteceu?')
+        raise ValueError('Não conseguiu dividir a tabela em 3 partes. O que aconteceu?')
 
     dic_frac_nf['primeiro_terco'] = df.loc[:idx_inicio_tabela].iloc[:-1].copy()
 
@@ -788,7 +758,7 @@ def fracionando_nf_servico(df):
             break
 
     if idx_inicio_tabela is None:
-        raise ParserEstruturaQuebrada('Não conseguiu dividir a tabela de serviço em 3 partes. O que aconteceu?')
+        raise ValueError('Não conseguiu dividir a tabela de serviço em 3 partes. O que aconteceu?')
 
     dic_frac_nf['primeiro_terco'] = df.loc[:idx_inicio_tabela].iloc[:-1].copy()
 
@@ -930,7 +900,7 @@ def concatenar_por_ponteiro_filtra_tabela_produtos(df, contexto):
             if mask_header.any():
                 return float(df.loc[mask_header, 'center_x'].iloc[0])
 
-        raise ParserEstruturaQuebrada('Fiquei sem Âncora horizontal de ponteiro. Atualize as chaves')
+        raise ValueError('Fiquei sem Âncora horizontal de ponteiro. Atualize as chaves')
 
     def encontrar_ponteiros_linha_ncm(df):
         # Caso normal: usa NCM/SH como âncora vertical de produto
@@ -1035,7 +1005,7 @@ def concatenar_por_ponteiro_filtra_tabela_produtos(df, contexto):
 
     for classe in classes_necessarias:
         if classe not in classes_existentes and classe != 'NCM/SH':
-            raise ParserEstruturaQuebrada(
+            raise ValueError(
                 f"concatenar_por_ponteiro: classe esperada não encontrada '{classe}'"
             )
 
@@ -1073,7 +1043,7 @@ def concatenar_por_ponteiro_filtra_tabela_produtos(df, contexto):
         n_desc_final = (df['string_class'] == 'Descrição do produto').sum()
         n_ncm_final = (df['string_class'] == 'NCM/SH').sum()
         if n_desc_final != n_ncm_final:
-            raise ParserEstruturaQuebrada(
+            raise ValueError(
                 f"concatenar_por_ponteiro: divergência entre nº de descrições ({n_desc_final}) "
                 f"e nº de NCM/SH ({n_ncm_final}) ao final do processamento. "
                 f"Contexto: {contexto}"
@@ -1289,7 +1259,7 @@ def extrair_produtos_pagina_alternativa(pdf_path, page_index, nome_saida):
         df_frac = fracionando_nf_produto(df_classes_pagina)
         tabela = df_frac['tabela_produtos']
         if tabela.empty:
-            raise ParserEstruturaQuebrada(f"tabela_produtos vazia em {nome_saida} pág. {page_index + 1}.")
+            raise ValueError(f"tabela_produtos vazia em {nome_saida} pág. {page_index + 1}.")
         tabela = refine_product_table_classification(tabela)
         tabela_norm = normatize_produt_classes(tabela)
         tabela_filtrada = semantic_filter(tabela_norm)
@@ -1363,7 +1333,7 @@ def find_invoice_value(df1, df2):
                 return str(df2.at[i + 1, 'text']).strip()
             return texto_atual_raw
 
-    raise ParserEstruturaQuebrada("Não foi encontrado o valor da Nota de Serviço em 'string_class ou text' (ex.: valor liquido/valor total).")
+    raise ValueError("Não foi encontrado o valor da Nota de Serviço em 'string_class ou text' (ex.: valor liquido/valor total).")
 
 
 def concatenar_conteudo_service_table(df):
@@ -1371,9 +1341,9 @@ def concatenar_conteudo_service_table(df):
     Concatena toda a coluna 'text' abaixo da "discriminação dos serviços" em uma única string.
     """
     if df is None or not isinstance(df, pd.DataFrame):
-        raise ParserEstruturaQuebrada("concatenar_conteudo recebeu df inválido.")
+        raise ValueError("concatenar_conteudo recebeu df inválido.")
     if 'text' not in df.columns:
-        raise ParserEstruturaQuebrada("A coluna 'text' não existe em concatenar_conteudo.")
+        raise ValueError("A coluna 'text' não existe em concatenar_conteudo.")
 
     
     # Palavras que podem aparecer nesse bloco de descrição e que não pertencem à df
@@ -1397,7 +1367,7 @@ def concatenar_conteudo_service_table(df):
             break
 
     if indice_inicio is None:
-        raise ParserEstruturaQuebrada("Tabela de serviços com problema. Não foi encontrado descrição em 'text'.")
+        raise ValueError("Tabela de serviços com problema. Não foi encontrado descrição em 'text'.")
 
     conteudo = " ".join(
         [texto for texto in serie_texto.iloc[indice_inicio:].tolist() if texto]
@@ -1423,7 +1393,7 @@ def get_real_transations(df):
     df = df.reset_index(drop=True)
     pos_descricao = df.index[df['string_class'] == 'Descrição do produto'].tolist()
     if not pos_descricao:
-        raise ParserEstruturaQuebrada("get_real_transations: 'Descrição do produto' não encontrada.")
+        raise ValueError("get_real_transations: 'Descrição do produto' não encontrada.")
 
     lista_dicts_produtos = []
 
@@ -1435,7 +1405,7 @@ def get_real_transations(df):
         for string_class, key_dict in mapping.items():
             match = bloco[bloco['string_class'] == string_class]
             if match.empty:
-                raise ParserEstruturaQuebrada(
+                raise ValueError(
                     f"get_real_transations: classe '{string_class}' não encontrada no produto {i + 1}."
                 )
             item_dict[key_dict] = match.iloc[0]['text']
@@ -1610,7 +1580,7 @@ def num_nf(df):
                 return {'numero_nf': " - ".join(numeros_unicos)}
 
        
-    raise ParserEstruturaQuebrada('Estou sem número de NF. Veja o que aconteceu')
+    raise ValueError('Estou sem número de NF. Veja o que aconteceu')
 
 
 
@@ -1649,11 +1619,9 @@ def consolidate_data_to_dict(list_product_transation, *args):
         # 3a. Campos None — fluxo legítimo de revisão humana via main loop.
         # Os args (metadados) podem não trazer todos os campos do template, e o
         # except ValueError em main.py:1981 captura este erro pra pedir ao operador.
-        # ParserEstruturaQuebrada herda de ValueError (F8a), então o except ainda pega.
         campos_vazios = [k for k, v in transacao.items() if v is None]
-
         if campos_vazios:
-            raise ParserEstruturaQuebrada(f"Erro: Não foi possível preencher os campos {campos_vazios} "
+            raise ValueError(f"Erro: Não foi possível preencher os campos {campos_vazios} "
                              "Valide os padrões de entrada.")
 
         # 3b. Strings vazias — invariante quebrado upstream.
@@ -1800,333 +1768,293 @@ USAR_NOVO_CONCATENAR = True
 
 #__MAIN__
 
-# FASE PROD — bloco de execução movido para if __name__ == "__main__": (F8a)
-# Sem este wrapper, o for loop e as chamadas finais rodariam em import, travando
-# em selecionar_contrato() e travando o subprocess do parser_adapter.
-if __name__ == "__main__":
-    import argparse
-    import sys
+for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
 
-    _parser_args = argparse.ArgumentParser(description="Parser de NF-e (FASE PROD F8a).")
-    _parser_args.add_argument("--contrato", type=str, default=None,
-                              help="Numero do contrato. Obrigatorio quando --non-interactive.")
-    _parser_args.add_argument("--input-dir", type=str, default=None,
-                              help=f"Diretorio de PDFs de entrada (default: {CAMINHO_RAIZ}).")
-    _parser_args.add_argument("--output-dir", type=str, default=None,
-                              help=f"Diretorio de saida do .xlsx (default: {SAIDA_RAIZ}).")
-    _parser_args.add_argument("--non-interactive", action="store_true",
-                              help="Suprime input(); _solicitar_campo_humano levanta ParserCampoFaltante.")
-    _args = _parser_args.parse_args()
+    # 1 - Extração, classificação e tratamento de dados
 
-    if _args.non_interactive and not _args.contrato:
-        print("[FASE PROD] --contrato e obrigatorio quando --non-interactive", file=sys.stderr)
-        sys.exit(1)
-
-    NON_INTERACTIVE_MODE = _args.non_interactive
-
-    # Setup originalmente em linhas top-level (88, 106-110), movido para ca:
-    Path("log.json").write_text("", encoding="utf-8")
-    CONTRATO_NUMERO = _args.contrato
-    CONTRATO = selecionar_contrato(CONTRATO_NUMERO)
-    _ocr_mod.CONTRATO = CONTRATO
-    caminho_entrada = Path(_args.input_dir or CAMINHO_RAIZ)
-    arquivos_pdf = list(caminho_entrada.rglob("*.pdf"))
-    SAIDA_RAIZ_LOCAL = _args.output_dir or SAIDA_RAIZ
-
-    try:
-        for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
-
-            # 1 - Extração, classificação e tratamento de dados
-
-            # arquivo.stem pega apenas o nome "NF - 4999" sem o ".pdf"
-            nome_saida = f'{arquivo.stem}.pdf'
+    # arquivo.stem pega apenas o nome "NF - 4999" sem o ".pdf"
+    nome_saida = f'{arquivo.stem}.pdf'
     
-            df_nota = extract_pdf_words(arquivo)
-            # CHECK-----------------------------------------------
-            #if arquivo_investigado in nome_saida:
-            #    df_nota.to_excel(f'{SAIDA_RAIZ}/nota_extraidas_{nome_saida}.xlsx', index=False)
+    df_nota = extract_pdf_words(arquivo)
+    # CHECK-----------------------------------------------
+    #if arquivo_investigado in nome_saida:
+    #    df_nota.to_excel(f'{SAIDA_RAIZ}/nota_extraidas_{nome_saida}.xlsx', index=False)
 
+    # LOG
+    log = {
+        'id': seq +1,
+        'nome_arquivo': nome_saida,
+        'status': 'aberto', #aberto - rejeitado - processado - problema
+        'erro': None, #caracteres não alfanuméricos - formato imagem - não é nota fiscal
+        'next': 'confirma_tipo_documento', # confirma_tipo_documento - chamando OCR - Assegurando dados padrões de NF
+    }
+    with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")
+    
+    
+    # 1.1 - Testa condições básicas de uma extração de NF via plumber
+    # A df deve ter em "text" textos tipo NFS-E, tomador, produtos, serviços, outras
+    if not confirma_tipo_documento(df_nota):
+         
+        # LOG
+        log = {
+            'id': seq + 1,
+            'nome_arquivo': nome_saida,
+            'status': 'problema', #aberto - problema - rejeitado - processado
+            'erro': 'poucos dados', #caracteres não alfanuméricos - formato imagem - não é nota fiscal
+            'next': 'Chamando OCR', #chamando OCR
+        }
+        with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")
+
+        
+        # 1.1.1.1 Converter PDF em imagem
+        dados_nf = extrair_dados_nf_servico_do_pdf(
+            arquivo,
+            #salvar_texto_em=f"{SAIDA_RAIZ}/exemplo.txt", # Caso precise olhar um arquivo T
+        )
+        
+        # 1.1.1.2 Confirma se não é NF usando OCR
+        if dados_nf['is_nf'] == False:
+            
             # LOG
             log = {
-                'id': seq +1,
+                'id': seq + 1,
                 'nome_arquivo': nome_saida,
-                'status': 'aberto', #aberto - rejeitado - processado - problema
-                'erro': None, #caracteres não alfanuméricos - formato imagem - não é nota fiscal
-                'next': 'confirma_tipo_documento', # confirma_tipo_documento - chamando OCR - Assegurando dados padrões de NF
+                'status': 'rejeitado', #aberto - problema - rejeitado - processado
+                'erro': 'não é nota fiscal', #caracteres não alfanuméricos - formato imagem - não é nota fiscal
+                'next': 'NA', #NA - chamando OCR
             }
             with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")
+            continue
+
+        else:
+            '''
+            1.1.1.4 - Como o ocr_reader já fez uma extração exportando
+            o dicionário no formato para ser concatenado, vou adiantar e chamar aqui
+            e encerrar o laço já subindo os dados
+            '''
+
+            nf_data_tabulated = export_to_consolidate_table(dados_nf['nf_extraida'])
     
-    
-            # 1.1 - Testa condições básicas de uma extração de NF via plumber
-            # A df deve ter em "text" textos tipo NFS-E, tomador, produtos, serviços, outras
-            if not confirma_tipo_documento(df_nota):
-         
-                # LOG
-                log = {
-                    'id': seq + 1,
-                    'nome_arquivo': nome_saida,
-                    'status': 'problema', #aberto - problema - rejeitado - processado
-                    'erro': 'poucos dados', #caracteres não alfanuméricos - formato imagem - não é nota fiscal
-                    'next': 'Chamando OCR', #chamando OCR
-                }
-                with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")
+            continue # Próximo laço
 
-        
-                # 1.1.1.1 Converter PDF em imagem
-                dados_nf = extrair_dados_nf_servico_do_pdf(
-                    arquivo,
-                    #salvar_texto_em=f"{SAIDA_RAIZ}/exemplo.txt", # Caso precise olhar um arquivo T
-                )
-        
-                # 1.1.1.2 Confirma se não é NF usando OCR
-                if dados_nf['is_nf'] == False:
+    else:
+
+        # VIA PRINCIPAL - A nota fiscal tem os textos esperados para uma extração.
+        log = {
+        'id': seq +1,
+        'nome_arquivo': nome_saida,
+        'status': 'processando', #aberto - rejeitado - processado - processando
+        'erro': None, #caracteres não alfanuméricos - formato imagem - não é nota fiscal
+        'next': 'convertento em xlsx', #chamando OCR - Assegurando dados de NF - convertento em xlsx
+        }
+        with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")        
+
+
+        # 1.3 - Usando regex, classifico cada string de acordo com a natureza 
+        df_nota['string_class'] = df_nota['text'].apply(list_regex_filter)
+        # Check ---------------------------------------------
+        #if arquivo_investigado in nome_saida:
+        #    df_nota.to_excel(f'{SAIDA_RAIZ}/df_core_com_string_class.xlsx', index=False)
+
+        """
+        2 - Tratar lista de dados que vem muito quebrada do plumber
+        """
+
+        # 2.1 - Separar preços que vieram colados no plumber
+        # Não há necessidade de chamar a função se não há nenhuma linha com dois preços juntos
+        if 'two_merged_price' in df_nota['string_class'].values:
             
-                    # LOG
-                    log = {
-                        'id': seq + 1,
-                        'nome_arquivo': nome_saida,
-                        'status': 'rejeitado', #aberto - problema - rejeitado - processado
-                        'erro': 'não é nota fiscal', #caracteres não alfanuméricos - formato imagem - não é nota fiscal
-                        'next': 'NA', #NA - chamando OCR
-                    }
-                    with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")
-                    continue
+            df_nota = fix_merged_prices(df_nota)
 
-                else:
-                    '''
-                    1.1.1.4 - Como o ocr_reader já fez uma extração exportando
-                    o dicionário no formato para ser concatenado, vou adiantar e chamar aqui
-                    e encerrar o laço já subindo os dados
-                    '''
+        # 2.2 - Tratamento dos dados - Caracteres como "-", "/", "A", "e" apareceram em linhas separadas
+        # atrapalhando o script da função concatenate_string_class.
+        # Então eu junto esse caractere com a linha acima.
+        df_nota = join_lonely_character(df_nota)
+        # Check---------------------
+        #if arquivo_investigado in nome_saida:
+        #       df_nota.to_excel(f'{SAIDA_RAIZ}/df_join_lonely_character.xlsx', index=False)
 
-                    nf_data_tabulated = export_to_consolidate_table(dados_nf['nf_extraida'])
-    
-                    continue # Próximo laço
+        # 2.3 - juntando strings separadas
+        df_classes_concatenadas = concatenate_string_class(df_nota)
+        # Check---------------------
+        #if arquivo_investigado in nome_saida:
+        #    df_classes_concatenadas.to_excel(f'{SAIDA_RAIZ}/df_classes_concatenadas.xlsx', index=False)
 
-            else:
+        '''
+        2.5 Aqui há mudança de rota. Pois notas de serviços exigem algoritmo diferente
+        de notas de materiais. Isso porque o price da nota de serviço aparece depois da
+        tabela descritiva. Já a de materia aparece na tabela de descrição dos produtos
+        Como não gosto de funções grandes, vou dividir em duas baseação na condição se é
+        nota de material ou serviço
+        '''
 
-                # VIA PRINCIPAL - A nota fiscal tem os textos esperados para uma extração.
-                log = {
-                'id': seq +1,
-                'nome_arquivo': nome_saida,
-                'status': 'processando', #aberto - rejeitado - processado - processando
-                'erro': None, #caracteres não alfanuméricos - formato imagem - não é nota fiscal
-                'next': 'convertento em xlsx', #chamando OCR - Assegurando dados de NF - convertento em xlsx
-                }
-                with open("log.json", "a", encoding="utf-8") as f: f.write(json.dumps(log, ensure_ascii=False) + "\n")        
+        # 2.4 - Descobrindo se a nota é de serviço ou produto.
+        # product_or_service() só lê df['text'] — não depende de string_class refinada,
+        # portanto pode rodar antes de qualquer refine_*_classification.
+        invoice_type = product_or_service(df_classes_concatenadas)
 
-
-                # 1.3 - Usando regex, classifico cada string de acordo com a natureza 
-                df_nota['string_class'] = df_nota['text'].apply(list_regex_filter)
-                # Check ---------------------------------------------
-                #if arquivo_investigado in nome_saida:
-                #    df_nota.to_excel(f'{SAIDA_RAIZ}/df_core_com_string_class.xlsx', index=False)
-
-                """
-                2 - Tratar lista de dados que vem muito quebrada do plumber
-                """
-
-                # 2.1 - Separar preços que vieram colados no plumber
-                # Não há necessidade de chamar a função se não há nenhuma linha com dois preços juntos
-                if 'two_merged_price' in df_nota['string_class'].values:
+        # 2.5 - Listando todos os preços
+        if invoice_type == 'product':
+            # 2.5.1 - Fraciona o df ANTES de refinar a classificação.
+            # fracionando_nf_produto() localiza os cortes por palavras-chave em 'text',
+            # sem depender de string_class refinada — pode rodar sobre df_classes_concatenadas.
+            df_product_service_desciption = fracionando_nf_produto(df_classes_concatenadas)
+            #if arquivo_investigado in nome_saida:
+            #    df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
+            #    df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
+            #    df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
             
-                    df_nota = fix_merged_prices(df_nota)
+            # 2.5.2 - Refina APENAS o primeiro terço (metadados: data, CNPJ, total da nota).
+            # refine_table_classification usa todos os descpt como âncoras — adequado aqui
+            # porque no primeiro terço não há colunas de tabela gerando falsos positivos.
+            df_product_service_desciption['primeiro_terco'] = refine_table_classification(
+                df_product_service_desciption['primeiro_terco']
+            )
 
-                # 2.2 - Tratamento dos dados - Caracteres como "-", "/", "A", "e" apareceram em linhas separadas
-                # atrapalhando o script da função concatenate_string_class.
-                # Então eu junto esse caractere com a linha acima.
-                df_nota = join_lonely_character(df_nota)
-                # Check---------------------
-                #if arquivo_investigado in nome_saida:
-                #       df_nota.to_excel(f'{SAIDA_RAIZ}/df_join_lonely_character.xlsx', index=False)
+            list_product_service_transation = None
+            erro_pipeline = None
 
-                # 2.3 - juntando strings separadas
-                df_classes_concatenadas = concatenate_string_class(df_nota)
-                # Check---------------------
-                #if arquivo_investigado in nome_saida:
-                #    df_classes_concatenadas.to_excel(f'{SAIDA_RAIZ}/df_classes_concatenadas.xlsx', index=False)
-
-                '''
-                2.5 Aqui há mudança de rota. Pois notas de serviços exigem algoritmo diferente
-                de notas de materiais. Isso porque o price da nota de serviço aparece depois da
-                tabela descritiva. Já a de materia aparece na tabela de descrição dos produtos
-                Como não gosto de funções grandes, vou dividir em duas baseação na condição se é
-                nota de material ou serviço
-                '''
-
-                # 2.4 - Descobrindo se a nota é de serviço ou produto.
-                # product_or_service() só lê df['text'] — não depende de string_class refinada,
-                # portanto pode rodar antes de qualquer refine_*_classification.
-                invoice_type = product_or_service(df_classes_concatenadas)
-
-                # 2.5 - Listando todos os preços
-                if invoice_type == 'product':
-                    # 2.5.1 - Fraciona o df ANTES de refinar a classificação.
-                    # fracionando_nf_produto() localiza os cortes por palavras-chave em 'text',
-                    # sem depender de string_class refinada — pode rodar sobre df_classes_concatenadas.
-                    df_product_service_desciption = fracionando_nf_produto(df_classes_concatenadas)
-                    #if arquivo_investigado in nome_saida:
-                    #    df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
-                    #    df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
-                    #    df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
-            
-                    # 2.5.2 - Refina APENAS o primeiro terço (metadados: data, CNPJ, total da nota).
-                    # refine_table_classification usa todos os descpt como âncoras — adequado aqui
-                    # porque no primeiro terço não há colunas de tabela gerando falsos positivos.
-                    df_product_service_desciption['primeiro_terco'] = refine_table_classification(
-                        df_product_service_desciption['primeiro_terco']
+            # 2.5.3 - Pipeline normal só roda se a tabela tem dados.
+            # Tabela vazia = DANFE multi-folha pág. 1 (produtos em pág. 2+).
+            if not df_product_service_desciption['tabela_produtos'].empty:
+                try:
+                    df_product_service_desciption['tabela_produtos'] = refine_product_table_classification(
+                        df_product_service_desciption['tabela_produtos']
                     )
 
-                    list_product_service_transation = None
-                    erro_pipeline = None
+                    # 2.6 - Normatizar o texto em df['text']
+                    product_sheet_normatized = normatize_produt_classes(df_product_service_desciption['tabela_produtos'])
+                    product_sheet_analysed = semantic_filter(product_sheet_normatized)
 
-                    # 2.5.3 - Pipeline normal só roda se a tabela tem dados.
-                    # Tabela vazia = DANFE multi-folha pág. 1 (produtos em pág. 2+).
-                    if not df_product_service_desciption['tabela_produtos'].empty:
-                        try:
-                            df_product_service_desciption['tabela_produtos'] = refine_product_table_classification(
-                                df_product_service_desciption['tabela_produtos']
-                            )
-
-                            # 2.6 - Normatizar o texto em df['text']
-                            product_sheet_normatized = normatize_produt_classes(df_product_service_desciption['tabela_produtos'])
-                            product_sheet_analysed = semantic_filter(product_sheet_normatized)
-
-                            # 2.7 - Concatenando espacialmente a tabela da nf e obtendo descrições
-                            if USAR_NOVO_CONCATENAR:
-                                df_product_dict = new_concatenar_por_ponteiro_filtra_tabela_produtos(product_sheet_analysed, nome_saida)
-                            else:
-                                df_product_dict = concatenar_por_ponteiro_filtra_tabela_produtos(product_sheet_analysed, nome_saida)
-                            # 2.8 - Converte em dicionário cada lançamento
-                            list_product_service_transation = get_real_transations(df_product_dict)
-                        except ValueError as e:
-                            erro_pipeline = e
-
-                    # 2.9 - Retry em página alternativa quando o documento se declara
-                    # multi-folha (estrutural — `Folha N/M` impresso no DANFE).
-                    if list_product_service_transation is None:
-                        if eh_danfe_multifolha(arquivo):
-                            df_product_dict_pag2 = extrair_produtos_pagina_alternativa(
-                                pdf_path=arquivo, page_index=1, nome_saida=nome_saida
-                            )
-                            list_product_service_transation = get_real_transations(df_product_dict_pag2)
-                        elif erro_pipeline is not None:
-                            raise erro_pipeline
-                        else:
-                            raise ParserEstruturaQuebrada(
-                                f"Tabela de produtos vazia em {nome_saida} e DANFE não se declara multi-folha."
-                            )
-
-                else:
-                    # Para serviços: refine_table_classification roda no df completo — comportamento original.
-                    # No primeiro terço de serviços não há tabela de produtos, então todos os descpt
-                    # são âncoras legítimas e a função original não gera falsos positivos.
-                    df_refined_string_class = refine_table_classification(df_classes_concatenadas)
-
-                    # 2.5.1 - Separando o df em duas partes chave (deales - descrição da nota)
-                    df_product_service_desciption = fracionando_nf_servico(df_refined_string_class)
-                    # CHECK -------------------------------
-                    #if arquivo_investigado in nome_saida:
-                    #   df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
-                    #   df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
-                    #    df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
-
-                    # 2.9 - Transformar todo o conteúdo dentro de 'discriminação dos serviços'
-                    try:
-                        df_service_description = concatenar_conteudo_service_table(df_product_service_desciption['tabela_produtos'])
-                    except ValueError:
-                        df_service_description = _solicitar_campo_humano("descricao", contexto=nome_saida)
-                    # 2.10 - Retornando valor total da nota
-                    try:
-                        df_service_value = find_invoice_value(df_product_service_desciption['ultimo_terco'], df_product_service_desciption['tabela_produtos'])
-                    except ValueError:
-                        df_service_value = _solicitar_campo_humano("valor", contexto=nome_saida)
-                    # 2.11 - Transformando em um dict com a transação
-                    list_product_service_transation = construct_transation(df_service_description, df_service_value)
-        
-
-                '''export_to_consolidate_table
-                # 3 - Extraindo os elementos do anexo I de dentro da df em formato de dicionário
-
-                Esse bloco só retorna dicionários, pois metadados são menos verbosos
-                para manipular.
-
-                '''
-
-                # 3.2 - capturar strings obrigatórias (cnpj, nf e data)
-                # 3.2.1 - CNPJ do fornecedor
-                cnpj_fornecedor = cnpj_invoice(df_product_service_desciption['primeiro_terco'])
-                if cnpj_fornecedor is None:
-                    cnpj_digitado = _solicitar_campo_humano("cnpj", contexto=nome_saida)
-                    cnpj_fornecedor = {'cnpj': cnpj_digitado}
-                # 3.2.2 - nome do fornecedor
-                try:
-                    nome_fornecedor = consulta_nome_fornecedor(cnpj_fornecedor['cnpj'])
-                except Exception:
-                    fornecedor_digitado = _solicitar_campo_humano("fornecedor", contexto=nome_saida)
-                    nome_fornecedor = {'fornecedor': fornecedor_digitado}
-                # 3.2.3 - data da nf
-                try:
-                    data_nota_fiscal = date_invoice(df_product_service_desciption['primeiro_terco'])
-                except (ValueError, IndexError):
-                    data_digitada = _solicitar_campo_humano("data_emissao", contexto=nome_saida)
-                    data_nota_fiscal = {'data_emissao': data_digitada}
-                # 3.2.4 - número da nf
-                try:
-                    numero_nota_fiscal = num_nf(df_product_service_desciption['primeiro_terco'])
-                except ValueError:
-                    numero_digitado = _solicitar_campo_humano("numero_nf", contexto=nome_saida)
-                    numero_nota_fiscal = {'numero_nf': numero_digitado}
-                # 3.2.5 - produtos
-                tipo_nota_fical = {'tipo_nota': invoice_type}
-                # Check -------------------
-                #if arquivo_investigado in nome_saida:
-                #    print(type(cnpj_fornecedor),'\n', type(nome_fornecedor),'\n', type(numero_nota_fiscal),'\n', type(tipo_nota_fical))
-                #    print(cnpj_fornecedor,'\n', nome_fornecedor,'\n', numero_nota_fiscal,'\n', tipo_nota_fical)
-
-
-                """
-                4 - Juntando todos os dados extraídos numa tabela de excel. Para isso, vou juntar antes
-                em um dicionário, depois somar a uma lista de dicionários.
-                Por último, converto em uma tabela excel e exporto
-                """
-
-                # 4.1 - Consolidando todos os dicionários em um único
-
-                try:
-                    nf_data_tabulated = consolidate_data_to_dict(list_product_service_transation, tipo_nota_fical, numero_nota_fiscal, data_nota_fiscal, nome_fornecedor, cnpj_fornecedor, CONTRATO)
+                    # 2.7 - Concatenando espacialmente a tabela da nf e obtendo descrições
+                    if USAR_NOVO_CONCATENAR:
+                        df_product_dict = new_concatenar_por_ponteiro_filtra_tabela_produtos(product_sheet_analysed, nome_saida)
+                    else:
+                        df_product_dict = concatenar_por_ponteiro_filtra_tabela_produtos(product_sheet_analysed, nome_saida)
+                    # 2.8 - Converte em dicionário cada lançamento
+                    list_product_service_transation = get_real_transations(df_product_dict)
                 except ValueError as e:
-                    # Extrai a lista de campos vazios do texto da exceção e pede ao operador
-                    campos_faltantes = re.findall(r"'(\w+)'", str(e))
-                    preenchimentos_extras = {}
-                    for campo in campos_faltantes:
-                        preenchimentos_extras[campo] = _solicitar_campo_humano(campo, contexto=nome_saida)
-                    nf_data_tabulated = consolidate_data_to_dict(
-                        list_product_service_transation, tipo_nota_fical, numero_nota_fiscal,
-                        data_nota_fiscal, nome_fornecedor, cnpj_fornecedor, CONTRATO, preenchimentos_extras
+                    erro_pipeline = e
+
+            # 2.9 - Retry em página alternativa quando o documento se declara
+            # multi-folha (estrutural — `Folha N/M` impresso no DANFE).
+            if list_product_service_transation is None:
+                if eh_danfe_multifolha(arquivo):
+                    df_product_dict_pag2 = extrair_produtos_pagina_alternativa(
+                        pdf_path=arquivo, page_index=1, nome_saida=nome_saida
                     )
-                df_anexo1_consolidado = export_to_consolidate_table(nf_data_tabulated)
+                    list_product_service_transation = get_real_transations(df_product_dict_pag2)
+                elif erro_pipeline is not None:
+                    raise erro_pipeline
+                else:
+                    raise ValueError(
+                        f"Tabela de produtos vazia em {nome_saida} e DANFE não se declara multi-folha."
+                    )
+
+        else:
+            # Para serviços: refine_table_classification roda no df completo — comportamento original.
+            # No primeiro terço de serviços não há tabela de produtos, então todos os descpt
+            # são âncoras legítimas e a função original não gera falsos positivos.
+            df_refined_string_class = refine_table_classification(df_classes_concatenadas)
+
+            # 2.5.1 - Separando o df em duas partes chave (deales - descrição da nota)
+            df_product_service_desciption = fracionando_nf_servico(df_refined_string_class)
+            # CHECK -------------------------------
+            #if arquivo_investigado in nome_saida:
+            #   df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
+            #   df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
+            #    df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
+
+            # 2.9 - Transformar todo o conteúdo dentro de 'discriminação dos serviços'
+            try:
+                df_service_description = concatenar_conteudo_service_table(df_product_service_desciption['tabela_produtos'])
+            except ValueError:
+                df_service_description = _solicitar_campo_humano("descricao", contexto=nome_saida)
+            # 2.10 - Retornando valor total da nota
+            try:
+                df_service_value = find_invoice_value(df_product_service_desciption['ultimo_terco'], df_product_service_desciption['tabela_produtos'])
+            except ValueError:
+                df_service_value = _solicitar_campo_humano("valor", contexto=nome_saida)
+            # 2.11 - Transformando em um dict com a transação
+            list_product_service_transation = construct_transation(df_service_description, df_service_value)
+        
+
+        '''export_to_consolidate_table
+        # 3 - Extraindo os elementos do anexo I de dentro da df em formato de dicionário
+
+        Esse bloco só retorna dicionários, pois metadados são menos verbosos
+        para manipular.
+
+        '''
+
+        # 3.2 - capturar strings obrigatórias (cnpj, nf e data)
+        # 3.2.1 - CNPJ do fornecedor
+        cnpj_fornecedor = cnpj_invoice(df_product_service_desciption['primeiro_terco'])
+        if cnpj_fornecedor is None:
+            cnpj_digitado = _solicitar_campo_humano("cnpj", contexto=nome_saida)
+            cnpj_fornecedor = {'cnpj': cnpj_digitado}
+        # 3.2.2 - nome do fornecedor
+        try:
+            nome_fornecedor = consulta_nome_fornecedor(cnpj_fornecedor['cnpj'])
+        except Exception:
+            fornecedor_digitado = _solicitar_campo_humano("fornecedor", contexto=nome_saida)
+            nome_fornecedor = {'fornecedor': fornecedor_digitado}
+        # 3.2.3 - data da nf
+        try:
+            data_nota_fiscal = date_invoice(df_product_service_desciption['primeiro_terco'])
+        except (ValueError, IndexError):
+            data_digitada = _solicitar_campo_humano("data_emissao", contexto=nome_saida)
+            data_nota_fiscal = {'data_emissao': data_digitada}
+        # 3.2.4 - número da nf
+        try:
+            numero_nota_fiscal = num_nf(df_product_service_desciption['primeiro_terco'])
+        except ValueError:
+            numero_digitado = _solicitar_campo_humano("numero_nf", contexto=nome_saida)
+            numero_nota_fiscal = {'numero_nf': numero_digitado}
+        # 3.2.5 - produtos
+        tipo_nota_fical = {'tipo_nota': invoice_type}
+        # Check -------------------
+        #if arquivo_investigado in nome_saida:
+        #    print(type(cnpj_fornecedor),'\n', type(nome_fornecedor),'\n', type(numero_nota_fiscal),'\n', type(tipo_nota_fical))
+        #    print(cnpj_fornecedor,'\n', nome_fornecedor,'\n', numero_nota_fiscal,'\n', tipo_nota_fical)
 
 
         """
-        5 - Limpeza semântica da coluna descricao via LLM (batch único pós-laço)
+        4 - Juntando todos os dados extraídos numa tabela de excel. Para isso, vou juntar antes
+        em um dicionário, depois somar a uma lista de dicionários.
+        Por último, converto em uma tabela excel e exporto
         """
 
-        #df_anexo1_consolidado = cleaner.batch_clean(df_anexo1_consolidado, MODO_LLM)
+        # 4.1 - Consolidando todos os dicionários em um único
 
-        """
-        6 - Conversão dos lançamentos em tabela excel
+        try:
+            nf_data_tabulated = consolidate_data_to_dict(list_product_service_transation, tipo_nota_fical, numero_nota_fiscal, data_nota_fiscal, nome_fornecedor, cnpj_fornecedor, CONTRATO)
+        except ValueError as e:
+            # Extrai a lista de campos vazios do texto da exceção e pede ao operador
+            campos_faltantes = re.findall(r"'(\w+)'", str(e))
+            preenchimentos_extras = {}
+            for campo in campos_faltantes:
+                preenchimentos_extras[campo] = _solicitar_campo_humano(campo, contexto=nome_saida)
+            nf_data_tabulated = consolidate_data_to_dict(
+                list_product_service_transation, tipo_nota_fical, numero_nota_fiscal,
+                data_nota_fiscal, nome_fornecedor, cnpj_fornecedor, CONTRATO, preenchimentos_extras
+            )
+        df_anexo1_consolidado = export_to_consolidate_table(nf_data_tabulated)
 
-        """
 
-        validar_total_contra_contrato(df_anexo1_consolidado, CONTRATO)
+"""
+5 - Limpeza semântica da coluna descricao via LLM (batch único pós-laço)
+"""
 
-        _nome_safe_contrato = CONTRATO['numero_contrato'].replace('/', '-').replace(' ', '_')
-        df_anexo1_consolidado.to_excel(f'{SAIDA_RAIZ_LOCAL}/tabela_de_lancamentos_consolidado_{_nome_safe_contrato}.xlsx', index=False)
-    except ParserCampoFaltante as _exc_campo:
-        print(f"[FASE PROD] ParserCampoFaltante: campo='{_exc_campo.campo}' contexto='{_exc_campo.contexto}'", file=sys.stderr)
-        sys.exit(2)
-    except ParserEstruturaQuebrada as _exc_estrut:
-        print(f"[FASE PROD] ParserEstruturaQuebrada: {_exc_estrut}", file=sys.stderr)
-        sys.exit(3)
+#df_anexo1_consolidado = cleaner.batch_clean(df_anexo1_consolidado, MODO_LLM)
+
+"""
+6 - Conversão dos lançamentos em tabela excel
+
+"""
+
+validar_total_contra_contrato(df_anexo1_consolidado, CONTRATO)
+
+_nome_safe_contrato = CONTRATO['numero_contrato'].replace('/', '-').replace(' ', '_')
+df_anexo1_consolidado.to_excel(f'{SAIDA_RAIZ}/tabela_de_lancamentos_consolidado_{_nome_safe_contrato}.xlsx', index=False)
 

@@ -43,6 +43,71 @@ Formato sugerido por entrada:
 
 <!-- Adicionar entradas mais recentes no topo. -->
 
+### 2026-05-07 — F8a follow-up — Fix de NaN + fallback humano + trava de campos vazios
+
+DEV trouxe três melhorias na função `new_concatenar_por_ponteiro_filtra_tabela_produtos` e em `consolidate_data_to_dict` para resolver o erro de `Decimal('NaN')` chegando ao PostgreSQL JSONB e endurecer invariantes do parser.
+
+- **Versão de origem**: `leitor_de_pdf/main.py` v10+ (cópia em `bug_fix/main.py` em 2026-05-07).
+- **Tipo**: nova função local, novo bloco lógico, chamadas substituídas, alias adicionado, comentários reformulados.
+
+#### Mudanças aplicadas
+
+1. **Nova função local `_campo_ou_humano(valor, campo_legivel, contexto_produto)`** dentro de `new_concatenar_por_ponteiro_filtra_tabela_produtos` (após `_norm`). Garante que campo de transação volta string não-vazia: se valor vem ausente/vazio, chama `_solicitar_campo_humano` em loop até receber algo. Em modo PROD non-interactive, a primeira chamada já levanta `ParserCampoFaltante` (F8a) e a exceção sobe — o `while True` não trava. Linhas atuais ~1103-1113.
+
+2. **Heurística de corte da última janela de produtos** dentro do for loop de `new_concatenar`. Quando a última janela não tem teto natural (`fim = max_linha + 1`), pode absorver lixo pós-tabela (ex.: bloco ISSQN entre produtos e DADOS ADICIONAIS). Detecta gap vertical anormal (> 5× mediana dos gaps positivos da janela, piso de 25px) e corta. **Esta é a fix da causa raiz do `Decimal('NaN')` chegando ao DB**: o lixo absorvido gerava células de quantidade vazias/inválidas que viravam NaN. Linhas atuais ~1186-1202.
+
+3. **Substituição de `raise ParserEstruturaQuebrada` por `_campo_ou_humano` para os 5 campos** (`descricao`, `ncm`, `quant`, `unit`, `price`) na seção de extração por janela. **Reclassificação semântica importante**: campos faltantes em produto **deixam de ser Tipo 2 (estrutura quebrada → email admin)** e passam a ser **Tipo 1 (campo faltante → revisão humana, futuramente nf_pending modal em F8b)**. Em PROD non-interactive, `_campo_ou_humano → _solicitar_campo_humano → raise ParserCampoFaltante` (exit code 2 no adapter).
+
+4. **Alias `'qtd'` adicionado** em `aliases['quant']`. Linha atual ~1119.
+
+5. **Trava de campos string vazia em `consolidate_data_to_dict`** (3b). Bloco novo após o check de `campos_vazios` (3a). Detecta strings vazias remanescentes (que indicam defeito de código upstream, não input malformado) e levanta `RuntimeError` — **não ValueError, não ParserEstruturaQuebrada** — propositalmente fora do `except ValueError` do main loop. O batch para, forçando correção do código. Linhas atuais ~1664-1685.
+
+6. **Comentários reformulados** em `consolidate_data_to_dict`: separação clara entre 3a (campos None — revisão humana legítima) e 3b (strings vazias — bug code upstream).
+
+#### Impacto na classificação de erros (interação com F8a)
+
+Antes desta entrada:
+- `ncm` ou `descricao` faltante → `ParserEstruturaQuebrada` → exit 3 → adapter classifica como `reason="estrutura_quebrada"` → e-mail admin (em F7)
+
+Depois desta entrada:
+- `ncm`, `descricao`, `quant`, `unit`, `price` faltante → `ParserCampoFaltante` → exit 2 → adapter classifica como `reason="campo_faltante"` → revisão humana (em F8b vira `nf_pending` + modal)
+
+Reclassificação correta — campo faltante É Tipo 1 por design, F8a tinha colocado errado em Tipo 2 (a função `new_concatenar` é território de "campo do produto", não de "estrutura do PDF").
+
+#### Mudança não aplicada
+
+A variável de debug `arquivo_investigado` em DEV mudou de `'29105'` para `'1592'`. Não trouxe — é preferência de debug do usuário em DEV; em PROD não tem efeito (string nunca casa com nome de arquivo real).
+
+#### Validação
+
+- `python -m py_compile backend/app/main.py` → OK
+- `pytest backend/tests/test_parser_non_interactive.py` → 6/6 passam
+- Smoke visual no Docker pendente (a executar pelo dono após esta entrada)
+
+---
+
+### 2026-05-06 — F8a follow-up — Alinhamento `num_nf` com DEV + tesseract-ocr-por
+
+Detectado durante smoke pós-rollback: a função `num_nf` em `backend/app/main.py` tinha lógica diferente da versão DEV atual (`leitor_de_pdf/main.py`). A divergência veio de uma modificação anterior em backend/app/main.py que nunca foi registrada aqui — agora estamos alinhando com a DEV atual e documentando.
+
+- **Versão de origem**: `leitor_de_pdf/main.py` (cópia em `bug_fix/main.py` durante esta sessão de fix).
+- **Linha(s)**: `backend/app/main.py:1581-1583` (atual, pós-update).
+- **Tipo**: chamada substituída (alinhamento DEV).
+- **Descrição**: `num_nf` retorna `{'numero_nf': " - ".join(numeros_unicos)}` em todos os casos. Versão anterior (não-registrada) retornava string única quando `len == 1` e lista quando `> 1`, gerando heterogeneidade no tipo de retorno. DEV consolidou em string sempre.
+- **Razão**: heterogeneidade do tipo (string vs lista) causa erros downstream quando o consumidor espera string. DEV reverteu para string única; PROD precisa acompanhar.
+
+#### Fix de infraestrutura — `tesseract-ocr-por` no Dockerfile
+
+Smoke pós-rollback expôs erro de OCR: `TesseractError: Failed loading language 'por'`. `Dockerfile` instalava só `tesseract-ocr` (engine), não o pacote de idioma. PDFs imagem (que caem no caminho de fallback OCR de `extrair_dados_nf_servico_do_pdf`) falhavam no container, mas funcionavam no host Windows porque a instalação local de tesseract tinha o pacote `por` baixado em algum momento.
+
+Mesmo padrão das B4/B5 do F8a inicial (cv2, base_contratos.json): F8a destravou o pipeline e expôs deps de runtime que estavam latentes.
+
+**Aplicado**: adicionado `tesseract-ocr-por` ao `apt-get install` no `backend/Dockerfile`. Idiomas adicionais não são necessários — `ocr_reader.py` usa `lang="por"` em todos os call sites.
+
+**Quando uma nova versão do parser DEV chegar**: verificar se `ocr_reader.py` ainda usa só `por` ou adicionou outros idiomas (`eng`, `osd`). Se sim, adicionar os pacotes correspondentes (`tesseract-ocr-eng`, `tesseract-ocr-osd`). `osd` é frequentemente útil para detecção de orientação de página.
+
+---
+
 ### 2026-05-06 — F8a — Parser non-interactive + exceções tipadas
 
 - **Versão de origem**: `leitor_de_pdf/main.py` v10 (cópia atual de `backend/app/main.py` antes desta entrada).
