@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 
+import ContratoSelector from "./components/ContratoSelector";
+
 const defaultLoginForm = { username: "user", password: "password" };
 
 // F5 — limite hard de PDFs por batch. Mantém em sincronia com backend
@@ -89,6 +91,10 @@ export default function App() {
   });
   const [loginForm, setLoginForm] = useState(defaultLoginForm);
   const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+  // F2 — contrato selecionado na sessão. null = ainda não selecionou (boot ou pós-logout).
+  // Após login, fetch GET /api/session/contrato decide entre ContratoSelector e área de upload.
+  const [selectedContrato, setSelectedContrato] = useState(null);
+  const [contratoBootChecked, setContratoBootChecked] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -134,8 +140,38 @@ export default function App() {
     return () => { active = false; };
   }, [authState.isAuthenticated]);
 
+  // F2 — após autenticação, verificar se já há contrato selecionado na sessão.
+  // 200 → setSelectedContrato (vai direto para upload). 404 → null (mostra seletor).
+  useEffect(() => {
+    if (!authState.isAuthenticated) {
+      setSelectedContrato(null);
+      setContratoBootChecked(false);
+      return;
+    }
+    let active = true;
+    async function checkContrato() {
+      try {
+        const response = await fetch("/api/session/contrato", { credentials: "same-origin" });
+        if (!active) return;
+        if (response.status === 404) {
+          setSelectedContrato(null);
+        } else if (response.ok) {
+          setSelectedContrato(await response.json());
+        }
+      } catch {
+        // Falha de rede — assume sem contrato (seletor mostra erro de carga lá).
+        if (active) setSelectedContrato(null);
+      } finally {
+        if (active) setContratoBootChecked(true);
+      }
+    }
+    checkContrato();
+    return () => { active = false; };
+  }, [authState.isAuthenticated]);
+
   useEffect(() => {
     if (!authState.isAuthenticated) return;
+    if (!selectedContrato) return;  // F2 — só carrega entries quando há contrato
     let active = true;
     async function loadEntries() {
       setEntriesState((current) => ({ ...current, loading: true, error: "" }));
@@ -152,7 +188,7 @@ export default function App() {
     }
     loadEntries();
     return () => { active = false; };
-  }, [authState.isAuthenticated]);
+  }, [authState.isAuthenticated, selectedContrato]);
 
   function handleFileSelection(event) {
     const files = Array.from(event.target.files ?? []);
@@ -195,6 +231,9 @@ export default function App() {
     setEntriesState({ loading: false, rows: [], error: "" });
     setAuthState({ loading: false, isAuthenticated: false, user: null, error: "" });
     setApiStatus({ loading: false, message: "Aguardando autenticacao." });
+    // F2 — backend já limpa contrato_id da sessão no logout; refletir no estado local.
+    setSelectedContrato(null);
+    setContratoBootChecked(false);
   }
 
   async function refreshEntries() {
@@ -422,6 +461,29 @@ export default function App() {
     );
   }
 
+  // F2 — entre autenticação e seleção de contrato, mostra um spinner para
+  // evitar flash da tela de seleção quando o usuário já tinha contrato.
+  if (!contratoBootChecked) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card">
+          <h1 className="auth-title">Carregando…</h1>
+        </div>
+      </div>
+    );
+  }
+
+  // F2 — sem contrato selecionado, redireciona para a tela de seleção.
+  if (!selectedContrato) {
+    return (
+      <ContratoSelector
+        onSelect={(contrato) => setSelectedContrato(contrato)}
+        onLogout={handleLogout}
+        username={authState.user?.username}
+      />
+    );
+  }
+
   const hasResults = uploadState.results.length > 0;
 
   return (
@@ -429,6 +491,10 @@ export default function App() {
       <header className="topbar">
         <span className="topbar-brand">GFIP - Recebimento de Notas Fiscais</span>
         <div className="topbar-right">
+          {/* F2 — contrato ativo na topbar */}
+          <span className="topbar-contrato" title={`${selectedContrato.sigla} · ${selectedContrato.uf ?? ""}`.trim()}>
+            {selectedContrato.numero}
+          </span>
           <span
             className={`status-dot ${apiStatus.loading ? "is-loading" : "is-online"}`}
             title={apiStatus.message}
