@@ -1,9 +1,15 @@
 """F5 — testes do limite hard de 550 PDFs por batch.
 
 Cobre apenas a regra de quantidade. O teste de 551 confirma que o 422 dispara
-antes de qualquer leitura de bytes (F5 é a primeira validação após auth).
-O teste de 550 confirma que o limite é exato (não rejeita NO limite).
+antes de qualquer leitura de bytes (F5 é a primeira validação após auth e
+contrato). O teste de 550 confirma que o limite é exato (não rejeita NO limite).
+
+F2 introduziu `require_contrato`: testes que pré-F2 só faziam authenticate
+agora também precisam selecionar contrato (ou aceitar 400 do require_contrato
+antes de F5 disparar).
 """
+from app.db import get_session
+from app.models import Contrato
 
 
 def authenticate(client) -> None:
@@ -11,6 +17,26 @@ def authenticate(client) -> None:
         "/api/auth/login",
         json={"username": "user", "password": "password"},
     )
+    assert response.status_code == 200
+
+
+def _seed_and_select_contrato(client) -> None:
+    """F2 — popula contrato e seleciona para que require_contrato passe."""
+    contrato_id = "id-test-contrato"
+    with get_session() as db:
+        db.add(Contrato(
+            id=contrato_id,
+            numero="ECFS 100/2005",
+            sigla="CPFL",
+            cnpj="53859112000169",
+            tipo_contrato="LPT",
+            valor_contrato=1000,
+            valor_cde=800,
+            participacao_cde="0.8",
+            ativo=True,
+        ))
+        db.commit()
+    response = client.post("/api/session/contrato", json={"contrato_id": contrato_id})
     assert response.status_code == 200
 
 
@@ -25,8 +51,9 @@ def _make_files(count: int, extension: str = "txt"):
 
 
 def test_upload_with_551_files_returns_422_with_count(client) -> None:
-    """551 arquivos → 422 com a contagem exata na mensagem."""
+    """551 arquivos → 422 com a contagem exata na mensagem (F5 ativa após F2)."""
     authenticate(client)
+    _seed_and_select_contrato(client)
 
     response = client.post("/api/uploads", files=_make_files(551))
 

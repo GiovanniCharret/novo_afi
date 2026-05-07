@@ -17,12 +17,6 @@ SCRIPT_PATH = Path(__file__).resolve().parent / "main.py"
 EXIT_CODE_CAMPO_FALTANTE = 2
 EXIT_CODE_ESTRUTURA_QUEBRADA = 3
 
-# F8a placeholder pré-F2: enquanto F2 não wireou o `contrato_id` da sessão,
-# o adapter passa o primeiro contrato do JSON apenas para que o subprocess não
-# falhe na validação `--contrato é obrigatório quando --non-interactive`.
-# Esse default vira código morto após F2.
-DEFAULT_CONTRATO_PRE_F2 = "ECFS 101/2005"
-
 
 @dataclass
 class ParserOutcome:
@@ -55,14 +49,21 @@ class LegacyParserAdapter:
                 "main.py iniciado.",
             ]
 
-            contrato_efetivo = contrato_numero or DEFAULT_CONTRATO_PRE_F2
+            # F2 — contrato_numero é obrigatório (substitui o placeholder F8a).
+            # server.py valida contrato.ativo antes de chamar; aqui só falha
+            # rápido se algum caller esqueceu de passar.
+            if not contrato_numero:
+                raise ValueError(
+                    "contrato_numero é obrigatório a partir de F2. "
+                    "Pass o numero do Contrato selecionado pela sessão."
+                )
 
             process = subprocess.run(
                 [
                     sys.executable,
                     str(SCRIPT_PATH),
                     "--non-interactive",
-                    "--contrato", contrato_efetivo,
+                    "--contrato", contrato_numero,
                     "--input-dir", str(input_dir),
                     "--output-dir", str(output_dir),
                 ],

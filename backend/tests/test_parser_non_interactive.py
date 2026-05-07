@@ -81,13 +81,16 @@ def test_adapter_constants_match_main_exit_codes():
 
     Se main.py mudar `sys.exit(2)` para outro número, o adapter passa a
     classificar errado. Esta checagem trava o adapter contra esse drift.
+    F2 removeu `DEFAULT_CONTRATO_PRE_F2` (era placeholder F8a).
     """
     sys.path.insert(0, str(SCRIPT_PATH.parents[0]))
     from app import parser_adapter
 
     assert parser_adapter.EXIT_CODE_CAMPO_FALTANTE == 2
     assert parser_adapter.EXIT_CODE_ESTRUTURA_QUEBRADA == 3
-    assert parser_adapter.DEFAULT_CONTRATO_PRE_F2 == "ECFS 101/2005"
+    assert not hasattr(parser_adapter, "DEFAULT_CONTRATO_PRE_F2"), (
+        "DEFAULT_CONTRATO_PRE_F2 foi removido em F2 — não deve mais existir"
+    )
 
 
 def test_adapter_signature_accepts_contrato_numero():

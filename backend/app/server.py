@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .db import get_db, get_session, init_db
-from .models import NfEntry, UploadBatch, UploadFile as UploadFileRecord, User
+from .dependencies import require_contrato
+from .models import Contrato, NfEntry, UploadBatch, UploadFile as UploadFileRecord, User
 from .normalization import (
     build_business_key,
     compute_sha256,
@@ -43,6 +44,24 @@ DEFAULT_PASSWORD_HASH = "mvp-user-password-placeholder"
 class LoginPayload(BaseModel):
     username: str
     password: str
+
+
+class ContratoSelectPayload(BaseModel):
+    contrato_id: str
+
+
+def serialize_contrato(c: Contrato) -> dict[str, object]:
+    return {
+        "id": c.id,
+        "numero": c.numero,
+        "sigla": c.sigla,
+        "uf": c.uf,
+        "tranche": c.tranche,
+        "tipo_contrato": c.tipo_contrato,
+        "valor_contrato": str(c.valor_contrato),
+        "valor_cde": str(c.valor_cde),
+        "participacao_cde": str(c.participacao_cde),
+    }
 
 
 class NfEntryResponse(BaseModel):
@@ -159,6 +178,16 @@ def _sse(data: dict) -> str:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    # F2 — seed de contratos. Em Docker, base_contratos.json vem via bind mount.
+    # Em testes/local sem mount, FileNotFoundError é capturado e o seed é pulado
+    # (testes que precisam de contratos populam manualmente via fixture).
+    try:
+        from .seeds.seed_contratos import seed_contratos
+        with get_session() as db:
+            total = seed_contratos(db)
+            print(f"[seed] {total} contratos seedados")
+    except FileNotFoundError as exc:
+        print(f"[seed] base_contratos.json ausente, seed pulado: {exc}")
     yield
 
 
@@ -252,10 +281,67 @@ def create_app() -> FastAPI:
             ],
         }
 
+    @app.get("/api/contratos")
+    def list_contratos(request: Request, db: DbSession) -> list[dict[str, object]]:
+        """Lista contratos ativos ordenados por número. Autenticação obrigatória."""
+        get_authenticated_user(request)
+        rows = db.scalars(
+            select(Contrato)
+            .where(Contrato.ativo.is_(True))
+            .order_by(Contrato.numero.asc())
+        ).all()
+        return [serialize_contrato(c) for c in rows]
+
+    @app.get("/api/session/contrato")
+    def get_session_contrato(request: Request, db: DbSession) -> dict[str, object]:
+        """Retorna o contrato selecionado na sessão atual ou 404 se nenhum.
+        Frontend usa no boot pós-login para decidir entre `/contratos` e área logada.
+        """
+        get_authenticated_user(request)
+        contrato_id = request.session.get("contrato_id")
+        if not contrato_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nenhum contrato selecionado.",
+            )
+        c = db.get(Contrato, contrato_id)
+        # Contrato pode ter sido removido ou desativado entre seleção e consulta —
+        # 404 (não 400) preserva semântica "não há contrato válido na sessão" e
+        # frontend redireciona para `/contratos`. Limpa sessão como side effect.
+        if c is None or not c.ativo:
+            request.session.pop("contrato_id", None)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contrato não encontrado ou inativo.",
+            )
+        return serialize_contrato(c)
+
+    @app.post("/api/session/contrato")
+    def set_session_contrato(
+        payload: ContratoSelectPayload,
+        request: Request,
+        db: DbSession,
+    ) -> dict[str, object]:
+        """Persiste contrato selecionado em `request.session["contrato_id"]`.
+        Idempotente: chamar 2x com mesmo id é seguro (último ganha).
+        Inativo/inexistente → 404 (não 403, para não vazar existência —
+        adversarial #21).
+        """
+        get_authenticated_user(request)
+        c = db.get(Contrato, payload.contrato_id)
+        if c is None or not c.ativo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contrato não encontrado ou inativo.",
+            )
+        request.session["contrato_id"] = c.id
+        return serialize_contrato(c)
+
     @app.post("/api/uploads")
     async def upload_pdfs(
         request: Request,
         files: list[UploadFile] = File(...),
+        contrato_id: str = Depends(require_contrato),
     ) -> StreamingResponse:
         user_data = get_authenticated_user(request)
 
@@ -268,6 +354,19 @@ def create_app() -> FastAPI:
                 detail=f"Limite de 550 arquivos por lote excedido. Recebido: {len(files)}",
             )
 
+        # F2 — resolver contrato_id (da sessão, via require_contrato) para o numero
+        # que o parser_adapter passa via --contrato. Validar ativo aqui também
+        # protege contra estado stale (contrato desativado entre seleção e upload).
+        with get_session() as db:
+            contrato = db.get(Contrato, contrato_id)
+            if contrato is None or not contrato.ativo:
+                request.session.pop("contrato_id", None)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Contrato selecionado não está mais ativo.",
+                )
+            contrato_numero = contrato.numero
+
         # Ler todos os bytes antes de iniciar o stream (await nao funciona dentro do generator)
         file_payloads: list[tuple[str, bytes]] = []
         for upload in files:
@@ -279,7 +378,8 @@ def create_app() -> FastAPI:
             with get_session() as db:
                 try:
                     user = get_or_create_user(db, user_data["username"])
-                    batch = UploadBatch(user_id=user.id)
+                    # F2 — associa contrato_id ao batch (validado acima).
+                    batch = UploadBatch(user_id=user.id, contrato_id=contrato_id)
                     db.add(batch)
                     db.flush()
 
@@ -320,10 +420,9 @@ def create_app() -> FastAPI:
 
                         try:
                             # Parser roda em thread para nao bloquear o event loop.
-                            # F8a: contrato_numero=None usa o placeholder do adapter.
-                            # F2 substituira por request.session["contrato_id"] -> numero do contrato.
+                            # F2 — contrato_numero vem do contrato selecionado na sessão.
                             outcome = await asyncio.to_thread(
-                                parser.parse_pdf_bytes, filename, file_bytes, debug_dir, None
+                                parser.parse_pdf_bytes, filename, file_bytes, debug_dir, contrato_numero
                             )
 
                             if outcome.status != "processado":
