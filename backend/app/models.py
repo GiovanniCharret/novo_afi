@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -11,6 +11,30 @@ from .db import Base
 
 
 JsonType = JSON().with_variant(JSONB, "postgresql")
+
+
+class Contrato(Base):
+    """F2 — contratos seedados de `base_contratos.json` (~140 entradas).
+
+    `id` é UUID5 determinístico derivado de `numero` (ver
+    `backend/app/seeds/seed_contratos.py` em B2). Re-seed mantém IDs estáveis
+    entre ambientes/runs.
+    """
+
+    __tablename__ = "contratos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    numero: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    sigla: Mapped[str] = mapped_column(String(255), nullable=False)
+    cnpj: Mapped[str] = mapped_column(String(14), nullable=False)
+    tranche: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    uf: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    valor_contrato: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    valor_cde: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0"))
+    participacao_cde: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0"))
+    tipo_contrato: Mapped[str] = mapped_column(String(16), nullable=False)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class User(Base):
@@ -34,6 +58,8 @@ class UploadBatch(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    # F2 — NULLABLE para preservar batches pré-F2; novos exigem via require_contrato.
+    contrato_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("contratos.id"), nullable=True)
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -53,6 +79,8 @@ class NfEntry(Base):
     preco_unitario: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     valor_total: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     contrato: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # F2 — NULLABLE para preservar entries pré-F2; novos exigem via fluxo de upload.
+    contrato_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("contratos.id"), nullable=True)
     raw_payload: Mapped[dict] = mapped_column(JsonType, nullable=False)
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[str] = mapped_column(

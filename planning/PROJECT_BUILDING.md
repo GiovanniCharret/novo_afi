@@ -116,6 +116,105 @@ git push --set-upstream origin "banco_nf_com_contratos_filtro"
 
 ---
 
+## F2 — Fase A (Spec) — Tela de seleção de contrato
+
+> **Status**: aguardando aprovação do dono. Nenhum código será escrito até confirmação explícita.
+> Esta spec é vinculante durante B1/B2/B3/B4/C/D.
+
+### Escopo
+
+Passo obrigatório entre login e área de upload. Usuário escolhe contrato; contrato fica na sessão e é associado ao `UploadBatch`. Implica schema novo (`contratos` + colunas FK em `upload_batches` e `nf_entries`), seed do `base_contratos.json` (~140 entradas), 3 endpoints novos, integração com `/api/uploads`, e frontend novo (rota + redirect + tela + topbar).
+
+### Pré-requisito desta feature
+
+**Alembic precisa ser introduzido no projeto** (Decisão #3, já resolvida em 2026-05-05). F2 é a primeira migration "real" após o baseline. Hoje o projeto usa `init_db()` (`create_all`) no `lifespan` — vamos manter para testes, mas adicionar Alembic para produção.
+
+### Sub-fases de execução
+
+Estimativa total: ~600-800 linhas. Divisão em 4 sub-fases B + C + D para respeitar o limite de ~400 linhas/fase do DoD.
+
+| Sub-fase | Conteúdo | Diff estimado |
+|---|---|---|
+| **B1** — Alembic + schema | Setup Alembic em `backend/`, baseline migration capturando schema atual (`users`, `upload_batches`, `upload_files`, `nf_entries`), migration F2 (tabela `contratos` + colunas `contrato_id` NULLABLE em `upload_batches` e `nf_entries`). `models.py` ganha novo modelo `Contrato` e FKs. `start.ps1` ganha `alembic upgrade head` antes do `docker compose up`. Smoke test de migration contra banco vazio. | ~250 linhas |
+| **B2** — Seed | `backend/app/seeds/seed_contratos.py` lê `base_contratos.json`, valida shape básico (campos esperados, tipos), gera UUID5 estável a partir de `numero`, faz `INSERT ... ON CONFLICT (numero) DO UPDATE`. Integra ao `lifespan` após `init_db()`. Tests: seed idempotente (rodar 2x não duplica), JSON malformado falha cedo, ID estável entre runs. | ~150 linhas |
+| **B3** — Endpoints | `GET /api/contratos` (autenticado, lista ativos ordenados). `POST /api/session/contrato` (recebe id, valida, persiste). `GET /api/session/contrato` (retorna atual ou 404). Dependency `require_contrato` em `backend/app/dependencies.py` (a criar) que lê `request.session["contrato_id"]` e levanta `HTTPException(400)`. Tests: cada endpoint sem auth (401), com auth (200/404), id inválido (404). | ~200 linhas |
+| **B4** — Integração com upload | `POST /api/uploads` usa `Depends(require_contrato)`. Adapter passa contrato real (`request.session["contrato_id"]` → busca `numero` → subprocess). **Remove `DEFAULT_CONTRATO_PRE_F2`** do `parser_adapter.py`. Associa `contrato_id` ao `UploadBatch` criado. Tests: upload sem contrato → 400; upload com contrato → batch.contrato_id preenchido. | ~150 linhas |
+| **C** — Frontend | Nova rota React `/contratos` (manter SPA monolítica em `App.jsx` por ora; criar componente local em `frontend/src/components/` para a tela conforme adversarial #29). Após login, `GET /api/session/contrato` no boot; se 404 → redirect `/contratos`. Tela: lista + filtro por `numero`/`sigla`/`uf` + botão confirmar (chama `POST /api/session/contrato`). Topbar mostra contrato ativo. `npm run build`. | ~250 linhas |
+| **D** | DoD checklist + commit | — |
+
+### Decisões internas para confirmar antes de B1
+
+1. **ID do contrato**: schema diz `VARCHAR(36) PRIMARY KEY`. Recomendo **UUID5 determinístico** derivado de `numero` (`uuid.uuid5(NAMESPACE_DNS, numero)`). Justificativa: re-seeds não criam IDs novos (adversarial #31), e a relação `numero ↔ id` fica estável entre ambientes (dev/prod compartilham IDs). Aceito?
+
+2. **Validação do `base_contratos.json` no seed**: dois caminhos:
+   - **Pragmático** (recomendo): checagem manual dos campos esperados (`sigla`, `cnpj`, `tranche`, `uf`, `valor_contrato`, `valor_cde`, `participacao_cde`, `tipo_contrato`); falha cedo com erro claro. ~10 linhas.
+   - **Robusto**: pydantic schema. ~30 linhas + dependência implícita já presente via FastAPI.
+   
+   Recomendo pragmático — JSON é estático, ~140 entradas, validação manual é suficiente. Pydantic é overkill aqui.
+
+3. **`require_contrato` aplicado a quais endpoints na F2**:
+   - **Apenas `POST /api/uploads`** nesta feature.
+   - F3 (consulta de contratos) **não** exige contrato selecionado (lista geral).
+   - F4 (PDF download) e F6 (totalizadores) terão suas próprias decisões na hora.
+   
+   Adversarial #4 quer lista exaustiva. Aceitável manter só `/api/uploads` por enquanto e atualizar PROJECT_BUILDING.md quando outros entrarem?
+
+4. **Frontend — rotas**: SPA monolítica hoje. Adicionar React Router OU usar state interno (`page = 'login' | 'contratos' | 'upload'`)?
+   - **Recomendo state interno** — preserva monólito e evita dependência nova. Adversarial #29 permite componentes locais em `frontend/src/components/` sem reestruturação, o que é compatível com state interno.
+   - React Router seria certo se houvessem 5+ rotas; para 3, é overkill.
+   
+   Aceito state interno?
+
+5. **Persistência da seleção entre sessões**: Decisão #6 diz **somente sessão, sem persistência** — confirmação só.
+
+6. **Contrato inativo (`ativo = FALSE`)**: nesta fase não há UI para tornar inativo (não está no escopo). Mas seed pode marcar inativo via JSON manualmente. `GET /api/contratos` filtra `WHERE ativo`. `POST /api/session/contrato` com id de contrato inativo → 404 (não 403, não vazar existência — adversarial #21). Aceito?
+
+### Critérios de sucesso (verificáveis)
+
+- [ ] `alembic upgrade head` em banco vazio cria todas as tabelas sem erro.
+- [ ] Seed roda no `lifespan` e popula ~140 contratos. Re-rodar não duplica.
+- [ ] `GET /api/contratos` autenticado → 200 com lista ordenada por `numero`. Anônimo → 401.
+- [ ] `POST /api/session/contrato` com id válido → 200. Inativo/inexistente → 404.
+- [ ] `GET /api/session/contrato` sem seleção → 404. Com seleção → 200 + objeto.
+- [ ] `POST /api/uploads` sem contrato na sessão → 400 (`"Nenhum contrato selecionado."`).
+- [ ] `POST /api/uploads` com contrato → `upload_batches.contrato_id` preenchido + parser recebe `--contrato N`.
+- [ ] Frontend pós-login: sem contrato → tela `/contratos`. Com contrato → área de upload com topbar.
+- [ ] Filtro por `numero`/`sigla`/`uf` na tela funciona.
+- [ ] Tests cobrem: cada endpoint sem auth (401), id inválido (404), seed idempotente, upload sem contrato (400).
+
+### Critérios negativos transversais (DoD §5)
+
+- [ ] Sem auth → 401 antes de qualquer rota de contrato.
+- [ ] Contrato inativo selecionado → 404, não exposição.
+- [ ] Double-click no botão "selecionar contrato" → idempotente (`POST /api/session/contrato` pode ser chamado múltiplas vezes sem dano).
+- [ ] Refresh durante seleção → ou retoma `request.session["contrato_id"]` (se já selecionado), ou volta para `/contratos`.
+- [ ] Sessão expirada durante upload → 401, frontend redireciona para login (sem perda da seleção atual ainda na sessão expirada — preserva semântica).
+- [ ] Migration roda 2x → idempotente (Alembic gerencia).
+- [ ] Seed em DB com contratos preexistentes → `ON CONFLICT DO UPDATE` atualiza valores sem duplicar.
+
+### Fora de escopo
+
+- **Permissões por usuário/contrato** (adversarial #5): nesta fase, todos os autenticados veem todos os contratos. Risco aceito — registrado em `planning/PENDING_DECISIONS.md`.
+- **Pré-seleção do último contrato** (Decisão #6): parqueada para servidor institucional.
+- **CRUD de contratos**: contratos vêm do JSON. Edição/criação via UI fica para outra feature.
+- **Auditoria do seed `ON CONFLICT DO UPDATE`**: adversarial #32 quer log de diff. Por ora, log textual no console do `lifespan` (não estruturado). Defense-in-depth completo fica para futuro.
+- **Migração de batches antigos**: `upload_batches.contrato_id` é NULLABLE; batches pré-F2 ficam NULL. Sem backfill.
+- **Validação aplicacional "novos registros pós-F2 exigem FK"** (adversarial #7): será adicionada como check no `POST /api/uploads` (já vem via `require_contrato`), mas sem trigger DB ou enforcement no schema. Aceito.
+
+### Ambiente-alvo
+
+**Local/dev** para esta feature, com Hostinger semi-prod recebendo o mesmo código quando o branch for promovido. Schema e seed funcionam em SQLite (testes) e PostgreSQL (Docker/prod).
+
+### ⏸ CHECKPOINT FASE A
+
+Aguardo:
+
+1. **"ok, segue para B1"** — aprovado integralmente, escolhas recomendadas nas decisões 1-6 aceitas.
+2. **"ajuste X"** — aprovado com ressalvas; aplico ajustes na spec antes de iniciar B1.
+3. **"refazer"** — spec não bate com o escopo; volto a estudar.
+
+---
+
 ## F5 — Spec da Fase A — Limite de 550 PDFs por batch
 
 > **Status**: ✅ concluída em 2026-05-07. 2ª passada — primeira tentativa em 2026-05-06 foi descartada no rollback após incidente com arquivos do parser sumirem do disco. Spec idêntica à aprovada na primeira tentativa. Smoke visual aprovado pelo dono.
