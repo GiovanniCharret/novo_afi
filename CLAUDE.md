@@ -61,11 +61,27 @@ pytest tests/test_uploads.py
 
 # Rodar um teste específico
 pytest tests/test_uploads.py::test_upload_pdf_success
+
+# Iterar por padrão de nome / verbose
+pytest -k contrato
+pytest -v
 ```
 
 O pytest precisa ser executado a partir de `backend/` — `tests/conftest.py` faz `from app.db import ...` e `from app.server import app`, então `app/` precisa estar no path.
 
-Os testes usam SQLite em arquivo temporário (`tmp_path/test.db`) por teste, com `reset_db_state()` + `init_db()` na fixture `client`. A fixture também aponta `UPLOAD_STORAGE_DIR` para um diretório temporário, então testes de upload não poluem `backend/banco_de_nf/`. Não dependem de Docker.
+Suítes existentes:
+
+| Arquivo | Cobertura |
+|---|---|
+| `tests/test_app.py` | endpoints gerais (login, listagem) |
+| `tests/test_uploads.py` | `POST /api/uploads` (SSE, deduplicação, debug dir) |
+| `tests/test_upload_limit.py` | F5 — limite hard de 550 PDFs |
+| `tests/test_upload_with_contrato.py` | F2 — contrato obrigatório na sessão |
+| `tests/test_contratos_endpoints.py` | F2 — endpoints de contratos |
+| `tests/test_seed_contratos.py` | F2 — seed idempotente do `base_contratos.json` |
+| `tests/test_parser_non_interactive.py` | F8a — exit codes 2/3 do parser e exceções tipadas |
+
+Os testes usam SQLite em arquivo temporário (`tmp_path/test.db`) por teste, com `reset_db_state()` + `init_db()` na fixture `client`. A fixture também aponta `UPLOAD_STORAGE_DIR` para um diretório temporário, então testes de upload não poluem `backend/banco_de_nf/`. Não dependem de Docker e **não rodam migrations Alembic** — usam `create_all` direto.
 
 ### Backend sem Docker
 
@@ -111,13 +127,13 @@ Tabelas principais:
 | Tabela | Responsabilidade |
 |---|---|
 | `users` | Usuários autenticados. **Após F1**: ganha `email UNIQUE NOT NULL`, `email_confirmed`, `confirmation_token`, `token_expires_at`, `reset_token`, `reset_expires_at`. `username` vira `nullable=True` (mantido por compat com seed legado em `DEBUG=true`). |
-| `upload_batches` | Agrupamento de um envio em lote por usuário. **Após F2**: ganha `contrato_id FK → contratos.id`. **Após F8**: ganha `status` (`processando` \| `concluido` \| `abandonado`). |
+| `upload_batches` | Agrupamento de um envio em lote por usuário. **F2 ✅**: tem `contrato_id FK → contratos.id` (nullable — preserva batches pré-F2; novos exigem via `require_contrato`). **Após F8**: ganha `status` (`processando` \| `concluido` \| `abandonado`). |
 | `upload_files` | Resultado por arquivo dentro de um lote. Status: `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (novo, após F8). |
 | `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **Após F2/F4**: ganha `contrato_id` e `upload_file_id`. **Após F8**: as 11 colunas de `default_nf_template` viram `NOT NULL` (Decisão #8). |
-| `contratos` *(F2)* | Contratos da base, populados via seed do `base_contratos.json` no `lifespan`. ~140 entradas. Coluna `ativo BOOLEAN` permite filtrar sem deletar. |
+| `contratos` *(F2 ✅)* | Contratos da base, populados via seed do `base_contratos.json` no `lifespan`. ~140 entradas. PK é UUID5 determinístico derivado de `numero` (re-seed mantém IDs estáveis). Coluna `ativo BOOLEAN` permite filtrar sem deletar. |
 | `nf_pending` *(F8)* | NFs com campo obrigatório faltando aguardando preenchimento manual via modal. Schema completo em `planning/PLAN.md` → "Mudanças Transversais de Schema". |
 
-**Schema management**: hoje `init_db()` (SQLAlchemy `create_all`) no `lifespan`. **Após F1**: Alembic via `alembic upgrade head` no `start.ps1` antes de `docker compose up` (Decisão #3). Testes continuam usando `init_db()` (não rodam migrations).
+**Schema management**: Alembic ativo em produção/dev. `scripts/start.ps1` roda `alembic upgrade head` antes de subir o backend (`docker compose run --rm backend alembic upgrade head` — idempotente). Migrations em `backend/alembic/versions/` (`0001_baseline.py`, `0002_f2_contratos.py`). **Testes não rodam migrations** — `tests/conftest.py` chama `init_db()` (`create_all`) direto sobre SQLite temporário, então qualquer mudança de schema precisa coexistir nas duas trilhas (modelos + nova revision Alembic) ou o teste fica defasado em relação ao banco real.
 
 ### Credenciais do MVP (legado — será removido em F1)
 
@@ -128,9 +144,9 @@ Tabelas principais:
   - `POST /api/auth/forgot-password` + `POST /api/auth/reset-password` com tokens de 1h.
   - Política de senha: ≥10 caracteres, sem regras de complexidade obrigatórias (alinhado a OWASP 2024 / NIST SP 800-63B). Truncamento bcrypt em 72 bytes documentado no endpoint de registro.
 
-### Seed de dados (F2)
+### Seed de dados (F2 ✅)
 
-`base_contratos.json` na raiz é a fonte de verdade dos contratos (~140 entradas, campos `sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato` — valores `LPT` ou `MLA`). Seed roda automaticamente no `lifespan` via `backend/app/seeds/seed_contratos.py` (a criar em F2) com `INSERT ... ON CONFLICT (numero) DO UPDATE`. Contratos com `valor_contrato = 0` são inseridos normalmente e filtráveis na UI via `?com_valor=true`.
+`base_contratos.json` na raiz do projeto é a fonte de verdade dos contratos (~140 entradas, campos `sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato` — valores `LPT` ou `MLA`). O `docker-compose.yml:22` faz bind mount read-only de `./base_contratos.json` para `/app/backend/app/base_contratos.json` dentro do container — assim tanto o seed F2 (`seed_contratos.py:23`) quanto o `contrato_config.py:16` (parser DEV) leem do mesmo arquivo sem precisar duplicar conteúdo, e a regra de preservação do parser não é violada. **Truncar/apagar o arquivo da raiz quebra o startup do FastAPI** (JSONDecodeError no `lifespan`). Seed roda automaticamente no `lifespan` com `INSERT ... ON CONFLICT (numero) DO UPDATE`. Contratos com `valor_contrato = 0` são inseridos normalmente e filtráveis na UI via `?com_valor=true`.
 
 ### Storage de PDFs (Decisão #4)
 
@@ -153,8 +169,8 @@ Em F4, acesso a PDF via função abstrata `get_pdf_path(upload_file)` em `backen
 | `SMTP_PASSWORD` *(F1/F7)* | — | Senha da caixa SMTP. |
 | `SMTP_FROM` *(F1/F7)* | — | Endereço remetente. Hostinger pode exigir = `SMTP_USER`. |
 | `ADMIN_EMAIL` *(F7)* | — | Destinatário dos alertas de erro tipo 2 do parser (Decisão #8). |
-| `OPENROUTER_API_KEY` *(parser_IA, deferido)* | — | Chave OpenRouter para `description_cleaner`. Hoje desativado em produção (`backend/app/main.py:2000` comentado). |
-| `OPENROUTER_MODEL` *(parser_IA, deferido)* | `openai/gpt-oss-120b` | Modelo via OpenRouter. |
+| `OPENROUTER_API_KEY` *(parser_IA — DESATIVADO)* | — | Chave OpenRouter para `description_cleaner`. Chamada está comentada em `backend/app/main.py:2000` — variável não é lida hoje. |
+| `OPENROUTER_MODEL` *(parser_IA — DESATIVADO)* | `openai/gpt-oss-120b` | Modelo via OpenRouter. Idem acima. |
 | `DEBUG` | `false` | Se `true`, habilita seed do usuário legado `user`/`password` (proibido em produção). |
 
 **Pré-requisito de produção** (Decisão #1): SPF + DKIM + DMARC configurados no DNS Hostinger antes do primeiro envio. Sem isso, e-mails de confirmação caem em spam.
@@ -182,12 +198,12 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 ## Regras de validação de upload
 
 - **Limite hard de 550 PDFs por batch** (F5): validado no backend no início do endpoint, antes de qualquer IO. Retorna `HTTP 422` se excedido. O frontend também avisa ao selecionar mais de 550 arquivos, mas a validação canônica é a do backend.
-- **Contrato obrigatório** (F2, Decisão #9): `POST /api/uploads` exige `contrato_id` na sessão. Sem contrato → `HTTP 400 {"detail": "Nenhum contrato selecionado."}`. Implementado via dependency centralizada `require_contrato(request)` em `backend/app/dependencies.py` (a criar em F2). Frontend chama `GET /api/session/contrato` no boot pós-login; se 404, redireciona para `/contratos`. O 400 do upload é rede de segurança, não fluxo principal.
+- **Contrato obrigatório** (F2 ✅, Decisão #9): `POST /api/uploads` exige `contrato_id` na sessão. Sem contrato → `HTTP 400 {"detail": "Nenhum contrato selecionado."}`. Implementado via dependency centralizada `require_contrato(request)` em `backend/app/dependencies.py`. Frontend chama `GET /api/session/contrato` no boot pós-login; se 404, redireciona para `/contratos`. O 400 do upload é rede de segurança, não fluxo principal.
 - **Validação de magic bytes (`%PDF-`)**: deferida (Decisão #10). Virá com a próxima versão do `main.py` (refactor do `description_cleaner`). Hoje, arquivo com extensão `.pdf` mas conteúdo inválido cai em `erro_parsing` após tentativa do parser.
 
 ## Frontend
 
-O frontend é uma SPA monolítica: **todo o app vive em `frontend/src/App.jsx`** (login, upload, tabela, status badges, SSE consumer). Ao procurar um componente, é nesse arquivo.
+O frontend é uma SPA cujo núcleo ainda é monolítico: login, upload, tabela, status badges e SSE consumer vivem em `frontend/src/App.jsx`. Componentes extraídos ficam em `frontend/src/components/` — atualmente `ContratoSelector.jsx` (F2 — tela intermediária de seleção de contrato pós-login). Ao procurar lógica de fluxo principal, comece em `App.jsx`; só os componentes nomeados é que estão isolados.
 
 Documentação relacionada:
 
@@ -216,6 +232,8 @@ A interface segue a identidade visual institucional do governo federal brasileir
 - Tabela usa `table-layout: fixed` + `<colgroup>` com larguras explícitas + `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` nas células para evitar quebra de layout.
 - Bug fixes em andamento devem ser registrados em `bug_fix/` (diretório acordado em `planning/PROJECT_BUILDING.md`).
 
-## Hook de revisão automática
+## Hook de revisão automática (atualmente inerte)
 
-`.claude/settings.json` registra um hook `Stop` que executa `.claude/hooks/code-reviewer.sh` ao final de cada turno (timeout 600s, statusMessage: "code-reviewer: revisando aderência ao PLAN.md..."). Ou seja, toda resposta passa por uma revisão automática contra o plano antes do turno encerrar — esperar latência adicional ao final é normal e a saída do hook pode aparecer no transcript.
+`.claude/settings.json` registra um hook `Stop` que executa `.claude/hooks/code-reviewer.sh` ao final de cada turno (timeout 600s, statusMessage: "code-reviewer: revisando aderência ao PLAN.md..."). O script chama o CLI externo `codex exec` (LLM da OpenAI) em sandbox read-only para gerar `CODE-REVIEW.md` comparando o código contra `docs/PLAN.md`.
+
+**Status atual**: o hook continua registrado mas é tratado como inerte — não confiar nele. Razões: (a) `codex` pode não estar instalado no host (PowerShell/Windows; o `.sh` depende do shell encontrar `bash`), (b) custo de uma LLM externa rodando a cada turno é proibitivo para uso contínuo. O script sempre retorna `exit 0` para não bloquear o ciclo do Claude, então a única consequência de estar quebrado é não gerar o `CODE-REVIEW.md` — nada falha visivelmente. Se quiser reativar, validar instalação do `codex`, ajustar shebang para shell disponível no host e considerar o custo.

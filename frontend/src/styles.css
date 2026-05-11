@@ -832,15 +832,70 @@ tr:hover td { background: #f8fbff; }
   min-width: 0;
 }
 
-.contrato-numero {
+.contrato-primary {
   font-weight: 600;
   color: var(--text-primary);
+  font-size: 0.95rem;
 }
 
-.contrato-meta {
+.contrato-secondary {
   font-size: 0.82rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
 }
+
+.estado-item { padding: 14px; }
+
+.estado-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+}
+
+.estado-uf {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.estado-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.breadcrumb {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.breadcrumb b { color: var(--text-secondary); font-weight: 600; }
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-back {
+  background: transparent;
+  color: var(--blue);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn-back:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: var(--blue);
+}
+.btn-back:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .topbar-contrato {
   font-size: 0.82rem;

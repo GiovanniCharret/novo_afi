@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation plan — F6 Totalizadores no painel de upload</title>
+<style>
+  :root {
+    --ivory:    #FAF9F5;
+    --slate:    #141413;
+    --clay:     #D97757;
+    --oat:      #E3DACC;
+    --olive:    #788C5D;
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --white:    #FFFFFF;
+
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans);
+    background: var(--ivory);
+    color: var(--gray-700);
+    line-height: 1.55;
+    padding: 56px 32px 120px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  /* header */
+  header.page-head { margin-bottom: 48px; max-width: 820px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gray-500); margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 38px; line-height: 1.15; color: var(--slate);
+    margin-bottom: 18px; letter-spacing: -0.01em;
+  }
+  .prompt-box {
+    background: var(--gray-150); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 16px 20px;
+    font-size: 14.5px; color: var(--gray-700);
+  }
+  .prompt-box .label {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); display: block; margin-bottom: 6px;
+  }
+
+  /* sections */
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .num {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--oat); color: var(--slate);
+    padding: 3px 9px; border-radius: 8px;
+  }
+  .sec-head h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 26px; color: var(--slate); letter-spacing: -0.01em;
+  }
+  .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 720px; margin-bottom: 28px; }
+
+  /* summary */
+  .summary {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 64px;
+  }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .summary .k {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); margin-bottom: 6px;
+  }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+
+  /* milestones */
+  .milestones { display: flex; flex-direction: column; gap: 0; }
+  .milestone {
+    display: grid; grid-template-columns: 120px 28px 1fr;
+    gap: 0 18px; position: relative;
+  }
+  .milestone .when {
+    text-align: right; font-family: var(--mono); font-size: 12px;
+    color: var(--gray-500); padding-top: 4px;
+  }
+  .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+  .milestone .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--white); border: 3px solid var(--clay);
+    margin-top: 4px; flex-shrink: 0;
+  }
+  .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+  .milestone .dot.blocked { background: var(--white); border-color: var(--gray-500); }
+  .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+  .milestone:last-child .line { display: none; }
+  .milestone .body { padding-bottom: 36px; }
+  .milestone .body h3 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 19px; color: var(--slate); margin-bottom: 4px;
+  }
+  .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 620px; }
+  .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .milestone .tag {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+  }
+
+  /* diagram */
+  .diagram {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 28px; overflow-x: auto;
+  }
+  .diagram svg { display: block; min-width: 760px; }
+  .diagram text { font-family: var(--mono); }
+  .caption { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+
+  /* mockup */
+  .mocks { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 900px) { .mocks { grid-template-columns: 1fr; } }
+  .mock {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; overflow: hidden;
+  }
+  .mock .mock-label {
+    padding: 12px 18px; border-bottom: 1.5px solid var(--gray-300);
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); background: var(--gray-150);
+  }
+  .mock .mock-body { padding: 22px; }
+
+  /* totalizadores card mock */
+  .tot-card {
+    border: 1.5px solid var(--gray-300); border-radius: 10px;
+    padding: 18px; background: var(--ivory);
+  }
+  .tot-title { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 2px; }
+  .tot-sub { font-size: 12px; color: var(--gray-500); margin-bottom: 18px; font-family: var(--mono); }
+  .tot-row { margin-bottom: 16px; }
+  .tot-row .lbl { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 6px; }
+  .tot-row .lbl .left { color: var(--gray-700); font-weight: 600; }
+  .tot-row .lbl .right { color: var(--gray-500); font-family: var(--mono); }
+  .bar { height: 10px; background: var(--gray-150); border-radius: 999px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--clay); border-radius: 999px; }
+  .bar > span.olive { background: var(--olive); }
+  .tot-foot {
+    display: flex; justify-content: space-between;
+    border-top: 1px dashed var(--gray-300); padding-top: 12px; margin-top: 4px;
+    font-size: 12.5px; color: var(--gray-500);
+  }
+  .tot-foot strong { color: var(--slate); font-weight: 600; }
+
+  /* empty-state variant */
+  .tot-empty {
+    padding: 18px; background: var(--ivory);
+    border: 1px dashed var(--gray-300); border-radius: 10px;
+    font-size: 13px; color: var(--gray-500);
+  }
+  .tot-empty strong { color: var(--slate); display: block; margin-bottom: 4px; font-weight: 600; }
+
+  /* code */
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 980px) { .code-grid { grid-template-columns: 1fr; } }
+  .code-block { display: flex; flex-direction: column; gap: 10px; }
+  .code-block .file-label { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+  .code {
+    background: var(--slate); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; flex: 1;
+  }
+  .code pre {
+    font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.65; color: #E8E6DE; white-space: pre;
+  }
+  .code .kw  { color: var(--clay); }
+  .code .str { color: var(--olive); }
+  .code .cm  { color: var(--gray-500); }
+  .code .fn  { color: #C9B98A; }
+
+  /* risk table */
+  .risks {
+    border: 1.5px solid var(--gray-300); border-radius: 12px;
+    overflow: hidden; background: var(--white);
+  }
+  .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; gap: 0; }
+  @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+  .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+  .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+  .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+  @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+  .risks .head {
+    background: var(--gray-150); font-weight: 600; color: var(--slate);
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .sev {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    padding: 2px 8px; border-radius: 6px; font-weight: 600;
+  }
+  .sev.high { background: #F3D9CC; color: #8A3B1E; }
+  .sev.med  { background: var(--oat); color: var(--slate); }
+  .sev.low  { background: #E4E9DC; color: #4B5C39; }
+
+  /* open questions */
+  .open-q { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .q {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-left: 4px solid var(--clay); border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .q .qt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+  .q .qd { font-size: 13.5px; color: var(--gray-500); }
+  .q .owner { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); margin-top: 8px; }
+
+  /* DoD list */
+  .dod { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; max-width: 820px; }
+  @media (max-width: 720px) { .dod { grid-template-columns: 1fr; } }
+  .dod-item { display: flex; gap: 10px; font-size: 14px; color: var(--gray-700); }
+  .dod-item .box {
+    width: 16px; height: 16px; border: 1.5px solid var(--gray-300);
+    border-radius: 4px; flex-shrink: 0; margin-top: 3px; background: var(--white);
+  }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · GFIP — Recebimento de NFs · feature F6</div>
+    <h1>Totalizadores no painel de upload</h1>
+    <div class="prompt-box">
+      <span class="label">Objetivo</span>
+      Card no painel de upload mostrando, para o contrato ativo na sessão,
+      quanto já foi enviado em NFs vs. valor de contrato e CDE, com progresso
+      visual. Atualiza ao montar e após cada <code>batch_done</code> do SSE.
+      Fonte da spec original: <code>planning/PLAN.md</code> seção F6.
+    </div>
+  </header>
+
+  <!-- ============================================================= -->
+
+  <div class="summary">
+    <div class="cell"><div class="k">Esforço</div><div class="v accent">~1 dia</div></div>
+    <div class="cell"><div class="k">Endpoint novo</div><div class="v">1</div></div>
+    <div class="cell"><div class="k">Mudança de schema</div><div class="v">nenhuma</div></div>
+    <div class="cell"><div class="k">Depende de</div><div class="v">F2 ✅</div></div>
+  </div>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Milestones</h2></div>
+    <p class="sec-intro">Fases do nosso ciclo (Spec → Backend → Frontend → DoD), com checkpoint humano entre cada uma. Nada user-visible até a fase C concluir.</p>
+
+    <div class="milestones">
+      <div class="milestone">
+        <div class="when">Fase A · Spec</div>
+        <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Spec congelada</h3>
+          <p>Endpoint, shape de resposta e regras de divisão por zero acordados. Já registrado em <code>planning/PLAN.md</code> linha 257. Checkpoint humano: aprovar shape antes de partir para backend.</p>
+          <div class="tags"><span class="tag">planning/PLAN.md</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B · Backend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Endpoint <code>/api/contratos/{id}/totais</code></h3>
+          <p>SQL agregado em uma query só (<code>SUM(valor_total)</code> + <code>COUNT(DISTINCT numero_nf)</code> com <code>JOIN</code> em <code>upload_batches</code> filtrando por <code>contrato_id</code>). Retorna percentuais como <code>null</code> quando <code>valor_contrato = 0</code>. Testes: contrato vazio, contrato com valor zero, contrato com NFs.</p>
+          <div class="tags"><span class="tag">backend/app/server.py</span><span class="tag">backend/tests/test_totais.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase C · Frontend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Card <code>&lt;TotalizadoresCard&gt;</code></h3>
+          <p>Componente novo em <code>frontend/src/components/</code>. Duas barras horizontais (vs. contrato; vs. CDE) + contagem de NFs distintas. Valores formatados como <code>R$ X.XXX.XXX,XX</code> via <code>Intl.NumberFormat('pt-BR')</code>. Recarrega no mount e em cada evento <code>batch_done</code> do consumer SSE em <code>App.jsx</code>.</p>
+          <div class="tags"><span class="tag">frontend/src/components/TotalizadoresCard.jsx</span><span class="tag">frontend/src/App.jsx</span><span class="tag">styles.css</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase D · DoD</div>
+        <div class="dot-col"><span class="dot"></span></div>
+        <div class="body">
+          <h3>Definition of Done</h3>
+          <p>Build do frontend, smoke visual no navegador, suíte de testes verde, registro em <code>docs/MAIN_PROD_CHANGES.md</code> se o parser foi tocado (não foi, nesta feature), aprovação humana. Checklist completo em <code>planning/DEFINITION_OF_DONE.md</code>.</p>
+          <div class="tags"><span class="tag">planning/DEFINITION_OF_DONE.md</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>Fluxo de dados</h2></div>
+    <p class="sec-intro">Carregamento inicial (sólido) e refresh disparado pelo SSE após cada batch (clay tracejado). O cálculo é uma única query agregada — não há iteração no Python.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 860 340" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+          <marker id="arrowClay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#D97757"/>
+          </marker>
+        </defs>
+
+        <g font-size="12" fill="#141413">
+          <rect x="20"  y="20"  width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="43" text-anchor="middle" font-weight="600">&lt;TotalizadoresCard&gt;</text>
+          <text x="115" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">frontend/src/components</text>
+
+          <rect x="20"  y="266" width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="289" text-anchor="middle" font-weight="600">SSE consumer</text>
+          <text x="115" y="306" text-anchor="middle" fill="#87867F" font-size="10.5">App.jsx · batch_done</text>
+
+          <rect x="340" y="150" width="180" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="430" y="173" text-anchor="middle" font-weight="600">GET /api/contratos</text>
+          <text x="430" y="190" text-anchor="middle" fill="#87867F" font-size="10.5">/{id}/totais · server.py</text>
+
+          <rect x="660" y="150" width="180" height="54" rx="10" fill="#141413"/>
+          <text x="750" y="173" text-anchor="middle" font-weight="600" fill="#FAF9F5">nf_entries (agg)</text>
+          <text x="750" y="190" text-anchor="middle" fill="#C9B98A" font-size="10.5">SUM + COUNT DISTINCT</text>
+
+          <rect x="660" y="20" width="180" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="750" y="43" text-anchor="middle" font-weight="600">contratos</text>
+          <text x="750" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">valor_contrato, valor_cde</text>
+        </g>
+
+        <g stroke="#87867F" stroke-width="1.5" fill="none">
+          <path d="M210 47 L340 165" marker-end="url(#arrow)"/>
+          <path d="M520 165 L660 47" marker-end="url(#arrow)"/>
+          <path d="M520 180 L660 180" marker-end="url(#arrow)"/>
+          <path d="M660 177 C 530 100, 350 100, 220 47" marker-end="url(#arrow)" stroke-dasharray="0"/>
+        </g>
+        <g stroke="#D97757" stroke-width="1.5" fill="none" stroke-dasharray="5 4">
+          <path d="M115 266 L115 74" marker-end="url(#arrowClay)"/>
+        </g>
+
+        <g font-size="10.5" fill="#87867F">
+          <text x="240" y="100">mount + refresh</text>
+          <text x="540" y="100">JOIN valor_contrato</text>
+          <text x="548" y="172">aggregate query</text>
+          <text x="280" y="80" fill="#D97757">refetch on batch_done</text>
+        </g>
+      </svg>
+      <p class="caption">Cinza = request inicial e join contratos↔nf_entries. Clay tracejado = trigger de refresh disparado por <code>batch_done</code> do SSE no consumer existente.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Mockups</h2></div>
+    <p class="sec-intro">Layout pretendido do card no painel de upload. Caso "valor_contrato = 0" tem variante explícita à direita — sem barras, mensagem.</p>
+
+    <div class="mocks">
+      <div class="mock">
+        <div class="mock-label">A · contrato com valor definido</div>
+        <div class="mock-body">
+          <div class="tot-card">
+            <div class="tot-title">CPFL · 2ª Tranche · LPT</div>
+            <div class="tot-sub">ECFS 101/2005</div>
+
+            <div class="tot-row">
+              <div class="lbl">
+                <span class="left">Enviado vs. contrato</span>
+                <span class="right">45,7%</span>
+              </div>
+              <div class="bar"><span style="width: 45.7%;"></span></div>
+              <div class="lbl" style="margin-top: 4px;">
+                <span class="right">R$ 980.000,00 de R$ 2.143.980,00</span>
+              </div>
+            </div>
+
+            <div class="tot-row">
+              <div class="lbl">
+                <span class="left">Enviado vs. CDE</span>
+                <span class="right">57,1%</span>
+              </div>
+              <div class="bar"><span class="olive" style="width: 57.1%;"></span></div>
+              <div class="lbl" style="margin-top: 4px;">
+                <span class="right">R$ 980.000,00 de R$ 1.715.180,00 (80% do contrato)</span>
+              </div>
+            </div>
+
+            <div class="tot-foot">
+              <span>NFs distintas no banco</span>
+              <span><strong>48</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mock">
+        <div class="mock-label">B · contrato sem valor (valor_contrato = 0)</div>
+        <div class="mock-body">
+          <div class="tot-card">
+            <div class="tot-title">ENERGISA AC · 1ª Tranche · MLA</div>
+            <div class="tot-sub">ECM 008/2022</div>
+
+            <div class="tot-empty">
+              <strong>Valor contratual não definido</strong>
+              Percentuais indisponíveis até o contrato ter <code>valor_contrato &gt; 0</code> registrado na base.
+            </div>
+
+            <div class="tot-foot" style="margin-top: 16px;">
+              <span>NFs distintas no banco</span>
+              <span><strong>3</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Código-chave</h2></div>
+    <p class="sec-intro">Os dois pontos onde dá pra errar feio: a query agregada (perfomance + null-safety) e a integração do refresh no consumer SSE (evitar refetch em cada <code>file_done</code>).</p>
+
+    <div class="code-grid">
+      <div class="code-block">
+        <div class="file-label">backend/app/server.py — endpoint</div>
+        <div class="code"><pre><span class="kw">@app</span>.<span class="fn">get</span>(<span class="str">"/api/contratos/{contrato_id}/totais"</span>)
+<span class="kw">def</span> <span class="fn">totais_contrato</span>(contrato_id: str, db = Depends(get_db)):
+    contrato = db.<span class="fn">get</span>(Contrato, contrato_id)
+    <span class="kw">if not</span> contrato:
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(404, <span class="str">"Contrato não encontrado"</span>)
+
+    <span class="cm"># Uma query só: JOIN nf_entries via upload_batches</span>
+    row = db.<span class="fn">execute</span>(
+        <span class="fn">select</span>(
+            <span class="fn">func.coalesce</span>(<span class="fn">func.sum</span>(NfEntry.valor_total), 0),
+            <span class="fn">func.count</span>(<span class="fn">func.distinct</span>(NfEntry.numero_nf)),
+        ).<span class="fn">join</span>(UploadFile, NfEntry.upload_file_id == UploadFile.id)
+         .<span class="fn">join</span>(UploadBatch, UploadFile.batch_id == UploadBatch.id)
+         .<span class="fn">where</span>(UploadBatch.contrato_id == contrato_id)
+    ).<span class="fn">one</span>()
+    soma, contagem = row
+
+    <span class="kw">def</span> <span class="fn">pct</span>(num, den):                            <span class="cm"># null-safe</span>
+        <span class="kw">return</span> <span class="kw">None</span> <span class="kw">if</span> den == 0 <span class="kw">else float</span>(num) / <span class="kw">float</span>(den)
+
+    <span class="kw">return</span> {
+        <span class="str">"contrato_id"</span>: contrato.id,
+        <span class="str">"numero"</span>: contrato.numero,
+        <span class="str">"valor_contrato"</span>: contrato.valor_contrato,
+        <span class="str">"valor_cde"</span>: contrato.valor_cde,
+        <span class="str">"soma_nfs_enviadas"</span>: soma,
+        <span class="str">"pct_enviado_sobre_contrato"</span>: <span class="fn">pct</span>(soma, contrato.valor_contrato),
+        <span class="str">"pct_enviado_sobre_cde"</span>: <span class="fn">pct</span>(soma, contrato.valor_cde),
+        <span class="str">"total_nfs_no_banco"</span>: contagem,
+    }</pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="file-label">frontend/src/App.jsx — gatilho de refresh</div>
+        <div class="code"><pre><span class="cm">// dentro do reader.read() loop do SSE consumer:</span>
+<span class="kw">if</span> (evt.type === <span class="str">"batch_done"</span>) {
+  setIsUploading(<span class="kw">false</span>);
+  <span class="cm">// dispara refresh do card; não bloqueia outras UI updates</span>
+  totalizadoresRef.current?.<span class="fn">reload</span>();
+}
+
+<span class="cm">// TotalizadoresCard expõe reload via useImperativeHandle:</span>
+<span class="kw">const</span> TotalizadoresCard = <span class="fn">forwardRef</span>((props, ref) =&gt; {
+  <span class="kw">const</span> [data, setData] = <span class="fn">useState</span>(<span class="kw">null</span>);
+  <span class="kw">const</span> load = <span class="fn">useCallback</span>(<span class="kw">async</span> () =&gt; {
+    <span class="kw">const</span> r = <span class="kw">await</span> <span class="fn">fetch</span>(
+      <span class="str">`/api/contratos/${props.contratoId}/totais`</span>,
+      { credentials: <span class="str">"same-origin"</span> }
+    );
+    <span class="kw">if</span> (r.ok) <span class="fn">setData</span>(<span class="kw">await</span> r.<span class="fn">json</span>());
+  }, [props.contratoId]);
+
+  <span class="fn">useEffect</span>(() =&gt; { <span class="fn">load</span>(); }, [load]);
+  <span class="fn">useImperativeHandle</span>(ref, () =&gt; ({ reload: load }), [load]);
+  <span class="cm">// ... render barras + foot</span>
+});</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Riscos &amp; mitigações</h2></div>
+    <div class="risks">
+      <div class="row">
+        <div class="cell head">Risco</div>
+        <div class="cell head">Sev</div>
+        <div class="cell head">Mitigação</div>
+      </div>
+      <div class="row">
+        <div class="cell">Divisão por zero quando <code>valor_contrato = 0</code> (acontece — ~30 contratos da base têm valor zero).</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">Helper <code>pct(num, den)</code> retorna <code>None</code> se denominador zero; frontend renderiza variante "Valor contratual não definido" sem barras (mock B).</div>
+      </div>
+      <div class="row">
+        <div class="cell">Refresh a cada <code>file_done</code> derruba o backend em batches de 550 PDFs — seria ~550 queries durante o upload.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Refetch só em <code>batch_done</code> (1 query no fim) ou ao montar. Nunca em <code>file_done</code>. Decisão documentada no PR.</div>
+      </div>
+      <div class="row">
+        <div class="cell"><code>COUNT(DISTINCT numero_nf)</code> conta NFs duplicadas como uma só — mas a UNIQUE em <code>business_key</code> já garante isso a nível de linha; o DISTINCT é defesa em profundidade.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Mantido. Custo é desprezível (~110 contratos × milhares de NFs no pior caso) e o intent fica claro na query.</div>
+      </div>
+      <div class="row">
+        <div class="cell">SOMA vai contar NFs de batches pré-F2 (<code>contrato_id IS NULL</code>) sob o contrato errado se alguém forçar o id.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Filtro é <code>WHERE upload_batches.contrato_id = :id</code> — batches sem contrato não casam. Adicionar teste explícito do caso pré-F2.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
+    <div class="open-q">
+      <div class="q">
+        <div class="qt">Mostrar progresso por tranche dentro do mesmo contrato?</div>
+        <div class="qd">Hoje o card é por contrato. Alguns contratos têm múltiplas tranches (ex.: ECFS 327/2013 — 1ª Tranche, mas há ECFS 283/2010 — 4ª Tranche da mesma sigla). Spec atual trata cada (sigla, tranche) como contrato distinto na base — ok manter. Mas se aparecer pedido de "soma por sigla", precisamos de outro endpoint.</div>
+        <div class="owner">Decidir com · usuários, antes da Fase B</div>
+      </div>
+      <div class="q">
+        <div class="qt">Formato visual do "% da CDE": absoluto ou relativo ao contrato?</div>
+        <div class="qd">Mock A mostra <code>R$ 980k de R$ 1,7M (80% do contrato)</code> — dois valores na mesma barra. Alternativa: barra simples, sem a parenteses do "80% do contrato". O 80% vem de <code>participacao_cde</code> e é fixo por contrato — não muda com uploads.</div>
+        <div class="owner">Decidir com · stakeholder do painel, antes da Fase C</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">07</span><h2>Definition of Done</h2></div>
+    <p class="sec-intro">Checklist extraído de <code>planning/DEFINITION_OF_DONE.md</code> aplicado a F6. Tudo abaixo precisa estar verde antes de marcar a feature como concluída.</p>
+    <div class="dod">
+      <div class="dod-item"><span class="box"></span><span>Testes backend cobrindo: contrato sem NFs, contrato com <code>valor_contrato = 0</code>, contrato com mix de batches pré/pós-F2.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Build do frontend (<code>npm run build</code>) sem warnings.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Smoke visual: upload de 1 NF → card atualiza após <code>batch_done</code>.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Suíte completa (<code>pytest</code>) verde.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma alteração em <code>backend/app/main.py</code> (parser intocado nesta feature).</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma nova migration Alembic necessária — schema preservado.</span></div>
+      <div class="dod-item"><span class="box"></span><span><code>CLAUDE.md</code> atualizado se algum endpoint/rota nova precisa de menção.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Aprovação humana no PR.</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
