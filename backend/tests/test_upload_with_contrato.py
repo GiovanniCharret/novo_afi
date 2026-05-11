@@ -11,7 +11,7 @@ Os testes legados em `test_uploads.py` têm `FakeAdapter` com signature antiga
 falhas pré-existentes documentadas.
 """
 from app.db import get_session
-from app.models import Contrato, UploadBatch
+from app.models import Contrato, NfEntry, UploadBatch
 from app.parser_adapter import ParserOutcome
 
 
@@ -110,6 +110,49 @@ def test_upload_with_contrato_persists_contrato_id_on_batch(client, monkeypatch)
         batches = db.query(UploadBatch).all()
         assert len(batches) == 1
         assert batches[0].contrato_id == contrato_id
+
+
+def test_upload_with_contrato_persists_contrato_id_on_nf_entry(client, monkeypatch) -> None:
+    """`NfEntry.contrato_id` é preenchido com o id do contrato selecionado (gap F2)."""
+    contrato_id = _seed_contrato("ECFS 101/2005")
+    authenticate(client)
+    _select_contrato(client, contrato_id)
+
+    class FakeAdapter:
+        def parse_pdf_bytes(self, filename, content, debug_dir, contrato_numero):
+            return ParserOutcome(
+                status="processado",
+                rows=[
+                    {
+                        "descricao": "Serviço de instalação",
+                        "ncm": "não se aplica",
+                        "quant": 1,
+                        "preco_unitario": "5656,23",
+                        "numero_nf": "123",
+                        "tipo_nota": "service",
+                        "data_emissao": "03/10/2024",
+                        "cnpj": "01.126.556/0001-91",
+                        "fornecedor": "Fornecedor Teste",
+                        "valor": "5656,23",
+                        "contrato": contrato_numero,
+                    }
+                ],
+                reason=None,
+                error=None,
+            )
+
+    monkeypatch.setattr("app.server.LegacyParserAdapter", FakeAdapter)
+
+    response = client.post("/api/uploads", files=_make_pdf_files(1))
+    assert response.status_code == 200
+
+    with get_session() as db:
+        entries = db.query(NfEntry).all()
+        assert len(entries) == 1, f"esperado 1 NfEntry, encontrado {len(entries)}"
+        assert entries[0].contrato_id == contrato_id, (
+            f"NfEntry.contrato_id deveria ser {contrato_id!r}, "
+            f"recebido {entries[0].contrato_id!r}"
+        )
 
 
 # -------- Estado stale: contrato desativado --------

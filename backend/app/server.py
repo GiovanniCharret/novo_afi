@@ -77,6 +77,7 @@ class NfEntryResponse(BaseModel):
     preco_unitario: str | int | float | None
     valor_total: str | int | float | None
     contrato: str | int | float | None
+    contrato_id: str | None
 
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -115,6 +116,7 @@ def serialize_nf_entry(entry: NfEntry) -> dict[str, object]:
         ),
         "valor_total": raw_payload.get("valor", float(entry.valor_total)),
         "contrato": raw_payload.get("contrato", entry.contrato),
+        "contrato_id": entry.contrato_id,
     }
 
 
@@ -133,7 +135,7 @@ def get_or_create_user(session: Session, username: str) -> User:
     return user
 
 
-def create_nf_entry(session: Session, row: dict) -> NfEntry:
+def create_nf_entry(session: Session, row: dict, contrato_id: str | None = None) -> NfEntry:
     entry = NfEntry(
         business_key=build_business_key(row),
         numero_nf=normalize_text(row.get("numero_nf")),
@@ -147,6 +149,7 @@ def create_nf_entry(session: Session, row: dict) -> NfEntry:
         preco_unitario=parse_brazilian_decimal(row.get("preco_unitario")),
         valor_total=parse_brazilian_decimal(row.get("valor")) or 0,
         contrato=normalize_nullable_text(row.get("contrato")),
+        contrato_id=contrato_id,
         raw_payload=row,
     )
     session.add(entry)
@@ -457,7 +460,7 @@ def create_app() -> FastAPI:
                                 if existing is not None:
                                     duplicate_count += 1
                                     continue
-                                create_nf_entry(db, row)
+                                create_nf_entry(db, row, contrato_id=contrato_id)
                                 inserted_count += 1
 
                             file_status = "processado" if inserted_count > 0 else "duplicado"

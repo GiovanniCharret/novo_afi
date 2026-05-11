@@ -449,14 +449,13 @@
     <span class="kw">if not</span> contrato:
         <span class="kw">raise</span> <span class="fn">HTTPException</span>(404, <span class="str">"Contrato não encontrado"</span>)
 
-    <span class="cm"># Uma query só: JOIN nf_entries via upload_batches</span>
+    <span class="cm"># Depende de F2 fechar o gap: nf_entries.contrato_id populado.</span>
+    <span class="cm"># Filtro direto, sem JOIN; coalesce evita NULL quando 0 NFs.</span>
     row = db.<span class="fn">execute</span>(
         <span class="fn">select</span>(
             <span class="fn">func.coalesce</span>(<span class="fn">func.sum</span>(NfEntry.valor_total), 0),
             <span class="fn">func.count</span>(<span class="fn">func.distinct</span>(NfEntry.numero_nf)),
-        ).<span class="fn">join</span>(UploadFile, NfEntry.upload_file_id == UploadFile.id)
-         .<span class="fn">join</span>(UploadBatch, UploadFile.batch_id == UploadBatch.id)
-         .<span class="fn">where</span>(UploadBatch.contrato_id == contrato_id)
+        ).<span class="fn">where</span>(NfEntry.contrato_id == contrato_id)
     ).<span class="fn">one</span>()
     soma, contagem = row
 
@@ -541,15 +540,15 @@
   <section>
     <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
     <div class="open-q">
-      <div class="q">
-        <div class="qt">Mostrar progresso por tranche dentro do mesmo contrato?</div>
-        <div class="qd">Hoje o card é por contrato. Alguns contratos têm múltiplas tranches (ex.: ECFS 327/2013 — 1ª Tranche, mas há ECFS 283/2010 — 4ª Tranche da mesma sigla). Spec atual trata cada (sigla, tranche) como contrato distinto na base — ok manter. Mas se aparecer pedido de "soma por sigla", precisamos de outro endpoint.</div>
-        <div class="owner">Decidir com · usuários, antes da Fase B</div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Mostrar progresso por tranche dentro do mesmo contrato?</div>
+        <div class="qd">Cada <code>(sigla, tranche)</code> é tratado como contrato distinto na base. <strong>Não existe demanda de "soma por sigla"</strong> — confirmado em 2026-05-11. Endpoint adicional não será necessário.</div>
+        <div class="owner">Decidido · 2026-05-11</div>
       </div>
-      <div class="q">
-        <div class="qt">Formato visual do "% da CDE": absoluto ou relativo ao contrato?</div>
-        <div class="qd">Mock A mostra <code>R$ 980k de R$ 1,7M (80% do contrato)</code> — dois valores na mesma barra. Alternativa: barra simples, sem a parenteses do "80% do contrato". O 80% vem de <code>participacao_cde</code> e é fixo por contrato — não muda com uploads.</div>
-        <div class="owner">Decidir com · stakeholder do painel, antes da Fase C</div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Formato visual do "% da CDE"</div>
+        <div class="qd"><strong>Relativo ao contrato</strong> — mantém o Mock A: a barra do CDE mostra <code>R$ X de R$ Y (Z% do contrato)</code>, onde Z vem de <code>participacao_cde</code>. Confirmado em 2026-05-11.</div>
+        <div class="owner">Decidido · 2026-05-11</div>
       </div>
     </div>
   </section>

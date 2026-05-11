@@ -193,27 +193,38 @@ Smoke visual no Docker validado pelo dono. Detalhes do diff em `planning/PROJECT
 
 ---
 
-## F2 — Tela de seleção de contrato
+## F2 — Tela de seleção de contrato ✅ concluída em 2026-05-11
 
 **Objetivo**: passo obrigatório entre login e área de upload onde o usuário escolhe o contrato em que vai trabalhar. O contrato fica na sessão e é associado ao batch.
 
 ### Subetapas
-- [ ] Criar tabela `contratos` (schema acima).
-- [ ] Script de seed `backend/app/seeds/seed_contratos.py` lê `base_contratos.json` e faz `INSERT ... ON CONFLICT (numero) DO UPDATE`. Executado no `lifespan` após `init_db()`.
-- [ ] `GET /api/contratos` (autenticado) retorna contratos ativos ordenados por `numero`. Campos: `id, numero, sigla, uf, tranche, tipo_contrato, valor_contrato, valor_cde, participacao_cde`.
-- [ ] `POST /api/session/contrato` recebe `{"contrato_id": "..."}`, valida, persiste em `request.session["contrato_id"]`, retorna o contrato.
-- [ ] `GET /api/session/contrato` retorna o contrato selecionado ou 404.
-- [ ] `POST /api/uploads` lê `contrato_id` da sessão; se ausente, retorna `HTTP 400 {"detail": "Nenhum contrato selecionado."}`.
-- [ ] Associar `contrato_id` ao `UploadBatch` criado.
-- [ ] Frontend: após login, redirecionar para tela de seleção de contrato (busca + lista). Confirmar antes de avançar.
-- [ ] Exibir contrato ativo no topbar da área logada.
+- [x] Criar tabela `contratos` (schema acima). — `models.py:Contrato` + Alembic `0002_f2_contratos.py`.
+- [x] Script de seed `backend/app/seeds/seed_contratos.py` lê `base_contratos.json` e faz `INSERT ... ON CONFLICT (numero) DO UPDATE`. Executado no `lifespan` após `init_db()`.
+- [x] `GET /api/contratos` (autenticado) retorna contratos ativos ordenados por `numero`. Campos: `id, numero, sigla, uf, tranche, tipo_contrato, valor_contrato, valor_cde, participacao_cde`. — `server.py:284`.
+- [x] `POST /api/session/contrato` recebe `{"contrato_id": "..."}`, valida, persiste em `request.session["contrato_id"]`, retorna o contrato. — `server.py:319`. Inativo/inexistente → 404 (adversarial #21).
+- [x] `GET /api/session/contrato` retorna o contrato selecionado ou 404. — `server.py:295`. Limpa sessão se contrato sumiu entre seleção e consulta.
+- [x] `POST /api/uploads` lê `contrato_id` da sessão; se ausente, retorna `HTTP 400 {"detail": "Nenhum contrato selecionado."}`. — via `Depends(require_contrato)` em `dependencies.py`.
+- [x] Associar `contrato_id` ao `UploadBatch` criado. — `server.py:382`.
+- [x] Associar `contrato_id` à `NfEntry` criada. — `create_nf_entry(db, row, contrato_id=...)` em `server.py:137`/`server.py:462`. Teste `test_upload_with_contrato_persists_contrato_id_on_nf_entry`. Nota: rows pré-F2 ou inseridas sem contrato ativo na sessão ficam com `contrato_id = NULL` (coluna é nullable por isso).
+- [x] Frontend: após login, redirecionar para tela de seleção de contrato (busca + lista). Confirmar antes de avançar. — `App.jsx:479` + `frontend/src/components/ContratoSelector.jsx`.
+- [x] Exibir contrato ativo no topbar da área logada. — `App.jsx:495` (`.topbar-contrato`).
 
 ### Critérios de Sucesso
-- `GET /api/contratos` retorna lista para autenticado, 401 para anônimo.
-- `POST /api/session/contrato` com id válido persiste na sessão; inválido → 404.
-- `POST /api/uploads` sem contrato na sessão → 400.
-- `upload_batches.contrato_id` reflete o id correto após upload.
-- Tela de seleção filtra por `numero`, `sigla` e `uf`.
+- ✅ `GET /api/contratos` retorna lista para autenticado, 401 para anônimo. — `test_contratos_endpoints.py`.
+- ✅ `POST /api/session/contrato` com id válido persiste na sessão; inválido → 404.
+- ✅ `POST /api/uploads` sem contrato na sessão → 400. — `test_upload_with_contrato.py`.
+- ✅ `upload_batches.contrato_id` reflete o id correto após upload.
+- ✅ `nf_entries.contrato_id` reflete o id correto após upload.
+- ✅ Tela de seleção filtra (ver evolução abaixo).
+
+### Evolução pós-spec (2026-05-11)
+A spec original previa "Tela de seleção filtra por `numero`, `sigla` e `uf`" como lista única. Foi refatorada para **dois níveis (Estado → Contrato)** com base em feedback humano:
+- Nível 1: lista de estados (UF distintos) com contagem por estado, ordem alfabética em pt-BR, filtro por nome do estado/sigla UF.
+- Nível 2: lista de contratos do estado escolhido, formato `sigla · tranche · tipo_contrato` (linha primária) + `numero` em fonte monoespaçada na linha secundária. Filtro por sigla/tranche/tipo/número.
+- Botão "Voltar para estados" no nível 2; breadcrumb mostra o estado atual.
+- Endpoint `/api/contratos` não muda — agregação por UF é client-side.
+
+Motivação: "as letrinhas confundem" (siglas técnicas como `ECFS 327/2013` não são bons pontos de busca humana). Mockup HTML aprovado em `planning/` antes da implementação.
 
 ---
 
