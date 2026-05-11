@@ -26,6 +26,7 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 ### Independências (qualquer momento, contanto que respeitem o DoD)
 
 - **F3** — lê `contratos`; só precisa que F2 tenha rodado o seed (não a UI completa de seleção).
+- **F3b** — lê `nf_entries.contrato_id`; depende de F2 ✅ concluída (caso contrário só vê NFs com `contrato_id IS NULL`).
 - **F4** — usa `banco_de_nf/` já existente; independente das demais.
 - **F5** — limite hard de 550, sem dependências.
 
@@ -42,10 +43,11 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 ```
 1. F8a ✅ parser non-interactive + exceções tipadas      (concluída 2026-05-06)
 2. F5  ✅ limite 550                                     (concluída 2026-05-07)
-3. F2  — seleção de contrato + seed validado             (desbloqueia F6)
-4. F3  — consulta de contratos                           (depende só do seed)
-5. F4  — visualizar/baixar PDF                           (independente)
-6. F6  — totalizadores                                   (consome F2)
+3. F2  ✅ seleção de contrato + seed validado            (concluída 2026-05-11)
+4. F3  — consulta de contratos (browser estático)        (depende só do seed)
+5. F3b — consulta de NFs por contrato                    (depende de F2 ✅)
+6. F4  — visualizar/baixar PDF                           (independente)
+7. F6  — totalizadores                                   (consome F2)
 7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
 8. F1  — auth real                                       (desbloqueia F7)
 9. F7  — e-mails transacionais                           (consome F1)
@@ -243,6 +245,36 @@ Motivação: "as letrinhas confundem" (siglas técnicas como `ECFS 327/2013` nã
 - `?uf=SP` retorna apenas SP; `?tipo_contrato=MLA` retorna apenas MLA; `?com_valor=true` retorna apenas com valor > 0.
 - Filtros combinados (`?uf=SP&tipo_contrato=LPT`) funcionam como `AND`.
 - Tela renderiza sem erros com base vazia.
+
+---
+
+## F3b — Consulta de NFs por contrato
+
+**Objetivo**: tela dedicada para consulta das NFs persistidas no banco filtradas por contrato. Operador escolhe contrato em dropdown e filtra por colunas da `nf_entries` (número, data emissão, fornecedor, CNPJ, valor, tipo, descrição). Feature irmã de F3 (browser de contratos) — F3 lê a base estática `contratos`, F3b lê `nf_entries` dinâmico. Spec visual completa em `planning/F3b-consulta-nfs.html`.
+
+### Subetapas
+- [ ] Estender `GET /api/nf-entries` com query params opcionais: `?contrato_id=&q=&data_inicio=&data_fim=&valor_min=&valor_max=&tipo_nota=`. Todos defaults `None`; sem param preserva comportamento atual da tabela principal de upload. `q` faz `ILIKE %x%` em `numero_nf | fornecedor | cnpj | descricao` via `OR`. Demais filtros combinam por `AND`. Intervalos de data/valor inclusivos. Ordenação default por `data_emissao DESC`.
+- [ ] Tela "Notas" no frontend, 3ª aba ao lado de Upload e Contratos. Link no topbar também.
+- [ ] Dropdown de contrato no topo da tela, populado por `GET /api/contratos`. Formato do item: `sigla · tranche · tipo (numero)`.
+- [ ] Barra de filtros: campo texto livre (busca em `q`), intervalo de data emissão, intervalo de valor total, select de `tipo_nota`. Debounce de 300ms + `AbortController` no fetch.
+- [ ] Tabela com colunas: Número, Emissão, Fornecedor, CNPJ, Descrição, Valor total, Tipo. `table-layout: fixed` + ellipsis (regras de design).
+- [ ] Footer da tabela exibe contagem de NFs filtradas + soma do `valor_total` (formato BRL via `Intl.NumberFormat('pt-BR')`).
+- [ ] Empty state quando sem contrato selecionado: "Selecione um contrato para ver as NFs". Hint adicional quando contrato escolhido mas zero NFs: "NFs anteriores à F2 podem não estar associadas ao contrato".
+
+### Critérios de Sucesso
+- `?contrato_id=X` retorna apenas NFs com `nf_entries.contrato_id = X`.
+- `?q=instalação` retorna NFs cuja `descricao` / `numero_nf` / `fornecedor` / `cnpj` contenham "instalação" (case-insensitive).
+- `?data_inicio=2024-01-01&data_fim=2024-12-31` filtra inclusivamente.
+- `?valor_min=1000&valor_max=5000` filtra inclusivamente.
+- Combinação `?contrato_id=X&q=Y&data_inicio=Z` funciona como `AND`.
+- Sem params, response idêntica ao comportamento atual da tabela de upload (regressão obrigatória).
+- Tela renderiza sem erros quando contrato sem NFs (empty state com hint).
+- Soma do footer bate exatamente com a soma das NFs visíveis.
+
+### Decisões registradas (2026-05-11)
+- **F3b-a**: trocar contrato no dropdown **NÃO** reseta os outros filtros — preserva o "estado mental" do operador (intervalo de data, busca textual). Botão "limpar filtros" disponível como reset explícito.
+- **F3b-b**: ao entrar na aba "Notas", se houver contrato ativo na sessão (selecionado para upload), o dropdown **pré-seleciona** esse contrato. Operador pode trocar livremente.
+- **F3b-c**: F3b é feature distinta de F3. F3 = browser de contratos (planilha estática); F3b = consulta de NFs filtrada por contrato (dinâmica, lê `nf_entries`).
 
 ---
 

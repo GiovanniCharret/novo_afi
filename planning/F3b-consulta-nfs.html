@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation plan — F3b Consulta de NFs por contrato</title>
+<style>
+  :root {
+    --ivory:    #FAF9F5;
+    --slate:    #141413;
+    --clay:     #D97757;
+    --oat:      #E3DACC;
+    --olive:    #788C5D;
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --white:    #FFFFFF;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans); background: var(--ivory);
+    color: var(--gray-700); line-height: 1.55;
+    padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 48px; max-width: 820px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gray-500); margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: 38px;
+    line-height: 1.15; color: var(--slate);
+    margin-bottom: 18px; letter-spacing: -0.01em;
+  }
+  .prompt-box {
+    background: var(--gray-150); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 16px 20px;
+    font-size: 14.5px; color: var(--gray-700);
+  }
+  .prompt-box .label {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); display: block; margin-bottom: 6px;
+  }
+
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .num {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--oat); color: var(--slate);
+    padding: 3px 9px; border-radius: 8px;
+  }
+  .sec-head h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 26px; color: var(--slate); letter-spacing: -0.01em;
+  }
+  .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 720px; margin-bottom: 28px; }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 64px;
+  }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .summary .k {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); margin-bottom: 6px;
+  }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+
+  .milestones { display: flex; flex-direction: column; gap: 0; }
+  .milestone { display: grid; grid-template-columns: 120px 28px 1fr; gap: 0 18px; position: relative; }
+  .milestone .when { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+  .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+  .milestone .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--white); border: 3px solid var(--clay);
+    margin-top: 4px; flex-shrink: 0;
+  }
+  .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+  .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+  .milestone:last-child .line { display: none; }
+  .milestone .body { padding-bottom: 36px; }
+  .milestone .body h3 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 19px; color: var(--slate); margin-bottom: 4px;
+  }
+  .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 620px; }
+  .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .milestone .tag {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+  }
+
+  .diagram {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 28px; overflow-x: auto;
+  }
+  .diagram svg { display: block; min-width: 760px; }
+  .diagram text { font-family: var(--mono); }
+  .caption { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+
+  .mocks { display: grid; grid-template-columns: 1fr; gap: 28px; }
+  .mock {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; overflow: hidden;
+  }
+  .mock .mock-label {
+    padding: 12px 18px; border-bottom: 1.5px solid var(--gray-300);
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); background: var(--gray-150);
+  }
+  .mock .mock-body { padding: 22px; }
+
+  .sim-topbar {
+    background: #0d3558; color: #fff;
+    padding: 10px 18px; display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 3px solid #1b80c4; border-radius: 6px 6px 0 0; margin-bottom: 0;
+  }
+  .sim-topbar .brand { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .sim-topbar .links { display: flex; gap: 14px; align-items: center; font-size: 13px; }
+  .sim-topbar .links a { color: #cbd5e1; padding: 4px 8px; border-radius: 3px; cursor: default; }
+  .sim-topbar .links a.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; }
+  .sim-topbar .ctx { font-size: 11px; color: #cbd5e1; background: rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 3px; font-family: var(--mono); }
+
+  .sim-menu {
+    background: #f1f5f9; border-bottom: 1px solid #cbd5e1;
+    padding: 0 18px; display: flex; gap: 0;
+  }
+  .sim-menu .tab {
+    padding: 10px 14px; font-size: 13px; color: #4a5568; cursor: default;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .sim-menu .tab.active { color: #0d3558; font-weight: 600; border-bottom-color: #1b80c4; }
+
+  .picker {
+    padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background: #fff;
+    display: flex; gap: 12px; align-items: center;
+  }
+  .picker label { font-size: 12.5px; color: #4a5568; font-weight: 600; }
+  .picker select {
+    flex: 1; max-width: 520px;
+    border: 1px solid #cbd5e1; border-radius: 4px;
+    padding: 8px 10px; font-size: 13px; background: #fff; color: #1e293b;
+    font-family: inherit;
+  }
+  .picker .info { font-size: 12px; color: #87867F; font-family: var(--mono); }
+
+  .filter-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 18px;
+    background: var(--ivory); border-bottom: 1px solid var(--gray-300);
+    align-items: center;
+  }
+  .filter-bar input, .filter-bar select {
+    border: 1px solid var(--gray-300); border-radius: 4px;
+    padding: 6px 8px; font-size: 13px; background: #fff; color: var(--gray-700);
+    font-family: inherit;
+  }
+  .filter-bar input.txt { flex: 1; min-width: 200px; }
+  .filter-bar input[type="date"], .filter-bar input[type="number"] { width: 130px; }
+  .filter-bar .grp { display: flex; gap: 4px; align-items: center; font-size: 11.5px; color: var(--gray-500); }
+  .filter-bar .count {
+    margin-left: auto; font-family: var(--mono); font-size: 11.5px;
+    color: var(--gray-500);
+  }
+
+  table.nfs { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  table.nfs th, table.nfs td {
+    padding: 8px 10px; text-align: left; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.nfs th {
+    background: #f8fafc; color: #0d3558; font-weight: 600;
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  table.nfs td.num { font-family: var(--mono); color: var(--gray-500); }
+  table.nfs td.right { text-align: right; font-variant-numeric: tabular-nums; }
+  table.nfs td.descricao { color: #1e293b; }
+  .tot-foot {
+    padding: 12px 18px; background: #f8fafc;
+    display: flex; justify-content: space-between;
+    font-size: 12.5px; color: var(--gray-500);
+    border-top: 1px solid #e2e8f0;
+  }
+  .tot-foot strong { color: var(--slate); font-weight: 600; }
+
+  .empty-state {
+    padding: 40px 18px; text-align: center; color: var(--gray-500);
+    background: var(--ivory);
+  }
+  .empty-state strong { color: var(--slate); display: block; font-size: 15px; margin-bottom: 4px; }
+
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 980px) { .code-grid { grid-template-columns: 1fr; } }
+  .code-block { display: flex; flex-direction: column; gap: 10px; }
+  .code-block .file-label { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+  .code {
+    background: var(--slate); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; flex: 1;
+  }
+  .code pre {
+    font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.65; color: #E8E6DE; white-space: pre;
+  }
+  .code .kw  { color: var(--clay); }
+  .code .str { color: var(--olive); }
+  .code .cm  { color: var(--gray-500); }
+  .code .fn  { color: #C9B98A; }
+
+  .risks {
+    border: 1.5px solid var(--gray-300); border-radius: 12px;
+    overflow: hidden; background: var(--white);
+  }
+  .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; gap: 0; }
+  @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+  .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+  .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+  .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+  @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+  .risks .head {
+    background: var(--gray-150); font-weight: 600; color: var(--slate);
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .sev {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    padding: 2px 8px; border-radius: 6px; font-weight: 600;
+  }
+  .sev.high { background: #F3D9CC; color: #8A3B1E; }
+  .sev.med  { background: var(--oat); color: var(--slate); }
+  .sev.low  { background: #E4E9DC; color: #4B5C39; }
+
+  .open-q { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .q {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-left: 4px solid var(--clay); border-radius: 10px; padding: 16px 20px;
+  }
+  .q .qt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+  .q .qd { font-size: 13.5px; color: var(--gray-500); }
+  .q .owner { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); margin-top: 8px; }
+
+  .dod { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; max-width: 820px; }
+  @media (max-width: 720px) { .dod { grid-template-columns: 1fr; } }
+  .dod-item { display: flex; gap: 10px; font-size: 14px; color: var(--gray-700); }
+  .dod-item .box {
+    width: 16px; height: 16px; border: 1.5px solid var(--gray-300);
+    border-radius: 4px; flex-shrink: 0; margin-top: 3px; background: var(--white);
+  }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · GFIP — Recebimento de NFs · feature F3b</div>
+    <h1>Consulta de NFs por contrato</h1>
+    <div class="prompt-box">
+      <span class="label">Objetivo</span>
+      Tela onde operador escolhe um contrato e vê a tabela de todas as NFs
+      daquele contrato no banco, com filtros por número, data de emissão,
+      fornecedor, CNPJ, valor e tipo. Lê <code>nf_entries</code> filtrando
+      por <code>contrato_id</code> (populado a partir da F2 ✅). Feature
+      irmã da F3 (browser de contratos), proposta nesta sessão.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Esforço</div><div class="v accent">~1 dia</div></div>
+    <div class="cell"><div class="k">Endpoint</div><div class="v">1 estendido</div></div>
+    <div class="cell"><div class="k">Schema</div><div class="v">nenhum</div></div>
+    <div class="cell"><div class="k">Depende de</div><div class="v">F2 ✅</div></div>
+  </div>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Milestones</h2></div>
+    <p class="sec-intro">Backend é direto (estender <code>GET /api/nf-entries</code>). Frontend pode pegar carona na navegação introduzida pela F3 (aba + link no topbar) — implementar F3 antes ou em paralelo.</p>
+
+    <div class="milestones">
+      <div class="milestone">
+        <div class="when">Fase A · Spec</div>
+        <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Decisões registradas</h3>
+          <p>Seleção do contrato via dropdown searchable (não a 2-níveis do <code>ContratoSelector</code>); filtros por colunas da <code>nf_entries</code>; clique na linha não faz nada (F4 traz PDF); colunas fixas; acesso por aba "Notas" + link no topbar.</p>
+          <div class="tags"><span class="tag">planning/PLAN.md (a adicionar F3b)</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B · Backend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Estender <code>GET /api/nf-entries</code></h3>
+          <p>Adicionar params opcionais <code>?contrato_id=&amp;q=&amp;data_inicio=&amp;data_fim=&amp;valor_min=&amp;valor_max=&amp;tipo_nota=</code>. Sem params → comportamento atual preservado. <code>q</code> faz <code>ILIKE %x%</code> em <code>numero_nf | fornecedor | cnpj | descricao</code> via <code>OR</code>. Data e valor são intervalos inclusivos. Filtros entre si combinam com <code>AND</code>. Testes: cada filtro isolado, combinação, base vazia, regressão sem params.</p>
+          <div class="tags"><span class="tag">backend/app/server.py</span><span class="tag">tests/test_nf_entries_filters.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase C · Frontend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Tela "Notas" + dropdown de contrato</h3>
+          <p>Novo componente <code>&lt;NfsBrowser&gt;</code> em <code>frontend/src/components/</code>. App.jsx evolui o state de navegação para <code>"upload" | "contratos" | "notas"</code>. Dropdown de contrato no topo da tela populado por <code>/api/contratos</code> (formato <code>sigla · tranche · tipo (numero)</code>). Sem contrato selecionado → empty state. Filtros disparam debounced fetch (300ms) + <code>AbortController</code>. Footer da tabela mostra <strong>contagem</strong> e <strong>soma do valor total</strong> dos itens filtrados.</p>
+          <div class="tags"><span class="tag">frontend/src/App.jsx</span><span class="tag">components/NfsBrowser.jsx</span><span class="tag">styles.css</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase D · DoD</div>
+        <div class="dot-col"><span class="dot"></span></div>
+        <div class="body">
+          <h3>Definition of Done</h3>
+          <p>Build do frontend sem warnings; smoke visual (cada filtro funciona, combinação <code>AND</code> coerente, footer soma valores corretamente, contrato sem NFs renderiza empty state); suíte de testes verde; CLAUDE.md menciona novos params; aprovação humana.</p>
+          <div class="tags"><span class="tag">planning/DEFINITION_OF_DONE.md</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>Fluxo de dados</h2></div>
+    <p class="sec-intro">Dois fetches independentes: lista de contratos no mount (para popular o dropdown) e lista de NFs em cada mudança de filtro. Sem cache cross-mount; debounce protege o backend.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 860 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+          <marker id="arrowClay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#D97757"/>
+          </marker>
+        </defs>
+        <g font-size="12" fill="#141413">
+          <rect x="20"  y="20"  width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="43" text-anchor="middle" font-weight="600">Dropdown de contrato</text>
+          <text x="115" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">NfsBrowser · mount</text>
+
+          <rect x="20"  y="220" width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="243" text-anchor="middle" font-weight="600">FilterBar</text>
+          <text x="115" y="260" text-anchor="middle" fill="#87867F" font-size="10.5">debounced 300ms</text>
+
+          <rect x="340" y="20" width="200" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="440" y="43" text-anchor="middle" font-weight="600">GET /api/contratos</text>
+          <text x="440" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">popula dropdown</text>
+
+          <rect x="340" y="220" width="200" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="440" y="243" text-anchor="middle" font-weight="600">GET /api/nf-entries</text>
+          <text x="440" y="260" text-anchor="middle" fill="#87867F" font-size="10.5">?contrato_id=&amp;q=&amp;…</text>
+
+          <rect x="660" y="120" width="180" height="54" rx="10" fill="#141413"/>
+          <text x="750" y="143" text-anchor="middle" font-weight="600" fill="#FAF9F5">nf_entries</text>
+          <text x="750" y="160" text-anchor="middle" fill="#C9B98A" font-size="10.5">WHERE contrato_id ...</text>
+
+          <rect x="660" y="20" width="180" height="54" rx="10" fill="#141413"/>
+          <text x="750" y="43" text-anchor="middle" font-weight="600" fill="#FAF9F5">contratos</text>
+          <text x="750" y="60" text-anchor="middle" fill="#C9B98A" font-size="10.5">WHERE ativo = true</text>
+        </g>
+        <g stroke="#87867F" stroke-width="1.5" fill="none">
+          <path d="M210 47 L340 47" marker-end="url(#arrow)"/>
+          <path d="M540 47 L660 47" marker-end="url(#arrow)"/>
+          <path d="M210 247 L340 247" marker-end="url(#arrow)"/>
+          <path d="M540 247 L660 160" marker-end="url(#arrow)"/>
+        </g>
+        <g stroke="#D97757" stroke-width="1.5" fill="none" stroke-dasharray="5 4">
+          <path d="M115 74 L115 220" marker-end="url(#arrowClay)"/>
+        </g>
+        <g font-size="10.5" fill="#87867F">
+          <text x="240" y="40">no mount</text>
+          <text x="240" y="240">on filter change</text>
+          <text x="555" y="200">JOIN não necessário</text>
+          <text x="125" y="160" fill="#D97757">contrato escolhido<br/>vira param</text>
+          <text x="125" y="180" fill="#D97757">contrato_id</text>
+        </g>
+      </svg>
+      <p class="caption">Sem JOIN entre as duas queries — o frontend liga as pontas via <code>contrato_id</code>. Mudar o dropdown reseta os outros filtros? Decisão na Fase C.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Mockup</h2></div>
+    <p class="sec-intro">Tela com contrato selecionado e 3 NFs visíveis. Filtros parciais aplicados. Footer mostra contagem + soma.</p>
+
+    <div class="mocks">
+      <div class="mock">
+        <div class="mock-label">A · Tela com contrato selecionado e filtros aplicados</div>
+        <div class="mock-body" style="padding: 0;">
+
+          <div class="sim-topbar">
+            <span class="brand">GFIP - Recebimento de Notas Fiscais</span>
+            <div class="links">
+              <a>Upload</a>
+              <a>Contratos</a>
+              <a class="active">Notas</a>
+              <span class="ctx">ECFS 101/2005</span>
+              <a>Sair</a>
+            </div>
+          </div>
+
+          <div class="sim-menu">
+            <span class="tab">Upload de notas</span>
+            <span class="tab">Contratos</span>
+            <span class="tab active">Notas</span>
+          </div>
+
+          <div class="picker">
+            <label>Contrato:</label>
+            <select>
+              <option>ECFS 101/2005 — CPFL · 2ª Tranche · LPT</option>
+              <option>ECFS 283/2010 — EQUATORIAL PARÁ · 4ª Tranche · LPT</option>
+            </select>
+            <span class="info">48 NFs no banco para este contrato</span>
+          </div>
+
+          <div class="filter-bar">
+            <input type="text" class="txt" placeholder="Buscar (nº, fornecedor, CNPJ, descrição)…" value="instalação" />
+            <div class="grp">data: <input type="date" value="2024-01-01"/> <span>até</span> <input type="date" value="2024-12-31"/></div>
+            <div class="grp">valor: <input type="number" placeholder="min" value="1000"/> <span>até</span> <input type="number" placeholder="max" /></div>
+            <select><option>Tipo: todos</option><option>service</option><option>produto</option></select>
+            <span class="count">3 de 48 NFs</span>
+          </div>
+
+          <table class="nfs">
+            <colgroup>
+              <col style="width: 10%"><col style="width: 11%"><col style="width: 20%">
+              <col style="width: 13%"><col style="width: 26%"><col style="width: 12%"><col style="width: 8%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Número</th><th>Emissão</th><th>Fornecedor</th>
+                <th>CNPJ</th><th>Descrição</th>
+                <th class="right">Valor total</th><th>Tipo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">123</td><td>03/10/2024</td><td>Fornecedor Teste A</td>
+                <td class="num">01.126.556/0001-91</td><td class="descricao">Serviço de instalação elétrica</td>
+                <td class="right">R$ 5.656,23</td><td>service</td>
+              </tr>
+              <tr>
+                <td class="num">124</td><td>15/10/2024</td><td>Fornecedor Teste B</td>
+                <td class="num">02.118.842/0001-25</td><td class="descricao">Instalação de medidores</td>
+                <td class="right">R$ 12.480,00</td><td>service</td>
+              </tr>
+              <tr>
+                <td class="num">128</td><td>22/11/2024</td><td>Fornecedor Teste A</td>
+                <td class="num">01.126.556/0001-91</td><td class="descricao">Mão de obra para instalação</td>
+                <td class="right">R$ 8.300,50</td><td>service</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="tot-foot">
+            <span><strong>3</strong> NFs filtradas (de 48 no contrato)</span>
+            <span>Soma: <strong>R$ 26.436,73</strong></span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top: 22px;">
+        <div class="mock-label">B · Estado inicial (sem contrato escolhido)</div>
+        <div class="mock-body" style="padding: 0;">
+          <div class="picker">
+            <label>Contrato:</label>
+            <select><option>— Selecione um contrato —</option></select>
+            <span class="info">110 contratos disponíveis</span>
+          </div>
+          <div class="empty-state">
+            <strong>Selecione um contrato para ver as NFs</strong>
+            Use o dropdown acima. Você pode filtrar adicionalmente por número, data, fornecedor, CNPJ, valor ou tipo após escolher.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Código-chave</h2></div>
+    <p class="sec-intro">Backend constrói <code>WHERE</code> incremental; <code>q</code> faz <code>OR</code> entre 4 colunas. Frontend tem <strong>uma</strong> regra que vale relembrar: ao mudar o contrato no dropdown, NÃO resetar os outros filtros — operador pode estar "passeando" entre contratos com o mesmo filtro de data.</p>
+
+    <div class="code-grid">
+      <div class="code-block">
+        <div class="file-label">backend/app/server.py — endpoint estendido</div>
+        <div class="code"><pre><span class="kw">@app</span>.<span class="fn">get</span>(<span class="str">"/api/nf-entries"</span>)
+<span class="kw">def</span> <span class="fn">list_nf_entries</span>(
+    request: Request, db: DbSession,
+    contrato_id: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    q: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    data_inicio: date | <span class="kw">None</span> = <span class="kw">None</span>,
+    data_fim: date | <span class="kw">None</span> = <span class="kw">None</span>,
+    valor_min: Decimal | <span class="kw">None</span> = <span class="kw">None</span>,
+    valor_max: Decimal | <span class="kw">None</span> = <span class="kw">None</span>,
+    tipo_nota: str | <span class="kw">None</span> = <span class="kw">None</span>,
+):
+    <span class="fn">get_authenticated_user</span>(request)
+    stmt = <span class="fn">select</span>(NfEntry)
+
+    <span class="kw">if</span> contrato_id:
+        stmt = stmt.<span class="fn">where</span>(NfEntry.contrato_id == contrato_id)
+    <span class="kw">if</span> q:
+        like = <span class="str">f"%{q}%"</span>
+        stmt = stmt.<span class="fn">where</span>(<span class="fn">or_</span>(
+            NfEntry.numero_nf.<span class="fn">ilike</span>(like),
+            NfEntry.fornecedor.<span class="fn">ilike</span>(like),
+            NfEntry.cnpj.<span class="fn">ilike</span>(like),
+            NfEntry.descricao.<span class="fn">ilike</span>(like),
+        ))
+    <span class="kw">if</span> data_inicio:
+        stmt = stmt.<span class="fn">where</span>(NfEntry.data_emissao &gt;= data_inicio)
+    <span class="kw">if</span> data_fim:
+        stmt = stmt.<span class="fn">where</span>(NfEntry.data_emissao &lt;= data_fim)
+    <span class="kw">if</span> valor_min <span class="kw">is not</span> <span class="kw">None</span>:
+        stmt = stmt.<span class="fn">where</span>(NfEntry.valor_total &gt;= valor_min)
+    <span class="kw">if</span> valor_max <span class="kw">is not</span> <span class="kw">None</span>:
+        stmt = stmt.<span class="fn">where</span>(NfEntry.valor_total &lt;= valor_max)
+    <span class="kw">if</span> tipo_nota:
+        stmt = stmt.<span class="fn">where</span>(NfEntry.tipo_nota == tipo_nota)
+
+    rows = db.<span class="fn">scalars</span>(stmt.<span class="fn">order_by</span>(NfEntry.data_emissao.<span class="fn">desc</span>())).<span class="fn">all</span>()
+    <span class="kw">return</span> [<span class="fn">serialize_nf_entry</span>(e) <span class="kw">for</span> e <span class="kw">in</span> rows]</pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="file-label">frontend/src/components/NfsBrowser.jsx — soma client-side</div>
+        <div class="code"><pre><span class="kw">function</span> <span class="fn">formatBRL</span>(n) {
+  <span class="kw">return new</span> <span class="fn">Intl.NumberFormat</span>(<span class="str">"pt-BR"</span>, {
+    style: <span class="str">"currency"</span>, currency: <span class="str">"BRL"</span>
+  }).<span class="fn">format</span>(n);
+}
+
+<span class="kw">function</span> <span class="fn">NfsBrowser</span>() {
+  <span class="kw">const</span> [contratoId, setContratoId] = <span class="fn">useState</span>(<span class="str">""</span>);
+  <span class="kw">const</span> [filters, setFilters] = <span class="fn">useState</span>({
+    q: <span class="str">""</span>, data_inicio: <span class="str">""</span>, data_fim: <span class="str">""</span>,
+    valor_min: <span class="str">""</span>, valor_max: <span class="str">""</span>, tipo_nota: <span class="str">""</span>
+  });
+  <span class="kw">const</span> nfs = <span class="fn">useDebouncedFetch</span>(<span class="str">"/api/nf-entries"</span>,
+    { contrato_id: contratoId, ...filters });
+
+  <span class="kw">const</span> soma = nfs.<span class="fn">reduce</span>(
+    (acc, n) =&gt; acc + <span class="fn">Number</span>(<span class="fn">parseBR</span>(n.valor_total)), 0
+  );
+
+  <span class="kw">if</span> (!contratoId) <span class="kw">return</span> &lt;EmptyState/&gt;;
+  <span class="kw">return</span> (
+    &lt;&gt;
+      &lt;FilterBar filters={filters} onChange={setFilters} /&gt;
+      &lt;Table rows={nfs} /&gt;
+      &lt;Footer count={nfs.length} soma={<span class="fn">formatBRL</span>(soma)} /&gt;
+    &lt;/&gt;
+  );
+}</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Riscos &amp; mitigações</h2></div>
+    <div class="risks">
+      <div class="row">
+        <div class="cell head">Risco</div>
+        <div class="cell head">Sev</div>
+        <div class="cell head">Mitigação</div>
+      </div>
+      <div class="row">
+        <div class="cell">Estender <code>GET /api/nf-entries</code> com novos params quebra o consumidor existente em <code>App.jsx</code> (tabela principal pós-upload).</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">Todos os params com default <code>None</code>. Sem param = WHERE vazio = lista completa, idêntica ao comportamento atual. Teste de regressão obrigatório.</div>
+      </div>
+      <div class="row">
+        <div class="cell">NFs pré-F2 têm <code>contrato_id = NULL</code>. Filtrar por contrato esconde elas — comportamento esperado, mas pode surpreender o operador.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">No empty state, se contagem do contrato = 0, exibir hint: "Nenhuma NF encontrada. NFs anteriores à seleção de contrato (F2) podem não estar associadas." Não bloqueia entrega.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Soma client-side da coluna <code>valor_total</code> diverge da soma real se o frontend recebe a string formatada brasileira (<code>"5.656,23"</code>) e parseia errado.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Backend já serializa <code>valor_total</code> do <code>raw_payload</code> (string BR) ou do campo Decimal. Frontend usa helper <code>parseBR</code> dedicado. Teste: NF com valor "1.234,56" deve somar exato.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Dropdown de contratos carrega 110 entradas — sem busca interna, escolher contrato vira scroll demorado.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Em base de 110, <code>&lt;select&gt;</code> nativo aceita digitar pra pular pelo primeiro caractere. Suficiente. Se base crescer pra 1000+, trocar por combo searchable.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Filtro <code>q</code> com <code>%</code> ou <code>_</code> literal vira wildcard de SQL LIKE.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">Aceitável neste cenário — operadores não digitam esses chars em buscas reais. Se virar problema, escapar com <code>str.replace</code> antes do <code>f"%{q}%"</code>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
+    <div class="open-q">
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Mudar contrato no dropdown NÃO reseta os outros filtros</div>
+        <div class="qd">Operador passeia entre contratos olhando o mesmo intervalo de datas / mesma busca textual. Botão "limpar filtros" disponível como reset explícito. Confirmado em 2026-05-11.</div>
+        <div class="owner">Decidido · 2026-05-11</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Pré-selecionar contrato da sessão ao entrar na aba</div>
+        <div class="qd">Quando há contrato ativo na sessão (selecionado para upload), o dropdown da aba "Notas" é pré-preenchido com esse contrato. Operador pode trocar livremente. Poupa 1 clique no caminho comum. Confirmado em 2026-05-11.</div>
+        <div class="owner">Decidido · 2026-05-11</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — F3b vai para o <code>PLAN.md</code> agora</div>
+        <div class="qd">Entrada F3b adicionada entre F3 e F4 no <code>planning/PLAN.md</code> com subetapas, critérios e referência cruzada para este HTML. Confirmado em 2026-05-11.</div>
+        <div class="owner">Decidido · 2026-05-11</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">07</span><h2>Definition of Done</h2></div>
+    <p class="sec-intro">Checklist extraído de <code>planning/DEFINITION_OF_DONE.md</code> aplicado a F3b.</p>
+    <div class="dod">
+      <div class="dod-item"><span class="box"></span><span>Testes backend: cada filtro isolado, combinação <code>AND</code>, busca <code>q</code> em cada coluna (numero/fornecedor/cnpj/descricao), intervalo de data e valor inclusivos, regressão sem params.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Build do frontend (<code>npm run build</code>) sem warnings.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Smoke visual: cada filtro funciona, soma do footer bate, empty state aparece quando sem contrato, troca de aba preserva sessão e estado.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Suíte completa (<code>pytest</code>) verde.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma alteração em <code>backend/app/main.py</code>.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma migration Alembic — usa coluna <code>nf_entries.contrato_id</code> já criada pela F2.</span></div>
+      <div class="dod-item"><span class="box"></span><span><code>CLAUDE.md</code> ganha menção dos novos params do endpoint e da nova aba.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Aprovação humana no PR.</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

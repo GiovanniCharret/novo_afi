@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation plan — F3 Página de consulta de contratos</title>
+<style>
+  :root {
+    --ivory:    #FAF9F5;
+    --slate:    #141413;
+    --clay:     #D97757;
+    --oat:      #E3DACC;
+    --olive:    #788C5D;
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --white:    #FFFFFF;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans); background: var(--ivory);
+    color: var(--gray-700); line-height: 1.55;
+    padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 48px; max-width: 820px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gray-500); margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: 38px;
+    line-height: 1.15; color: var(--slate);
+    margin-bottom: 18px; letter-spacing: -0.01em;
+  }
+  .prompt-box {
+    background: var(--gray-150); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 16px 20px;
+    font-size: 14.5px; color: var(--gray-700);
+  }
+  .prompt-box .label {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); display: block; margin-bottom: 6px;
+  }
+
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .num {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--oat); color: var(--slate);
+    padding: 3px 9px; border-radius: 8px;
+  }
+  .sec-head h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 26px; color: var(--slate); letter-spacing: -0.01em;
+  }
+  .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 720px; margin-bottom: 28px; }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 64px;
+  }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .summary .k {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); margin-bottom: 6px;
+  }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+
+  .milestones { display: flex; flex-direction: column; gap: 0; }
+  .milestone { display: grid; grid-template-columns: 120px 28px 1fr; gap: 0 18px; position: relative; }
+  .milestone .when { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+  .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+  .milestone .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--white); border: 3px solid var(--clay);
+    margin-top: 4px; flex-shrink: 0;
+  }
+  .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+  .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+  .milestone:last-child .line { display: none; }
+  .milestone .body { padding-bottom: 36px; }
+  .milestone .body h3 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 19px; color: var(--slate); margin-bottom: 4px;
+  }
+  .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 620px; }
+  .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .milestone .tag {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+  }
+
+  .diagram {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 28px; overflow-x: auto;
+  }
+  .diagram svg { display: block; min-width: 760px; }
+  .diagram text { font-family: var(--mono); }
+  .caption { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+
+  .mocks { display: grid; grid-template-columns: 1fr; gap: 28px; }
+  .mock {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; overflow: hidden;
+  }
+  .mock .mock-label {
+    padding: 12px 18px; border-bottom: 1.5px solid var(--gray-300);
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); background: var(--gray-150);
+  }
+  .mock .mock-body { padding: 22px; }
+
+  /* simulated topbar + menu */
+  .sim-topbar {
+    background: #0d3558; color: #fff;
+    padding: 10px 18px; display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 3px solid #1b80c4; border-radius: 6px 6px 0 0; margin-bottom: 0;
+  }
+  .sim-topbar .brand { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .sim-topbar .links { display: flex; gap: 14px; align-items: center; font-size: 13px; }
+  .sim-topbar .links a { color: #cbd5e1; padding: 4px 8px; border-radius: 3px; cursor: default; }
+  .sim-topbar .links a.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; }
+  .sim-topbar .ctx { font-size: 11px; color: #cbd5e1; background: rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 3px; font-family: var(--mono); }
+
+  .sim-menu {
+    background: #f1f5f9; border-bottom: 1px solid #cbd5e1;
+    padding: 0 18px; display: flex; gap: 0;
+  }
+  .sim-menu .tab {
+    padding: 10px 14px; font-size: 13px; color: #4a5568; cursor: default;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .sim-menu .tab.active { color: #0d3558; font-weight: 600; border-bottom-color: #1b80c4; }
+
+  /* contratos table mock */
+  .filter-bar {
+    display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 18px;
+    background: var(--ivory); border-bottom: 1px solid var(--gray-300);
+  }
+  .filter-bar input, .filter-bar select {
+    border: 1px solid var(--gray-300); border-radius: 4px;
+    padding: 6px 8px; font-size: 13px; background: #fff; color: var(--gray-700);
+    font-family: inherit;
+  }
+  .filter-bar input.txt { flex: 1; min-width: 180px; }
+  .filter-bar label.toggle {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--gray-700); cursor: default;
+  }
+  .filter-bar .count {
+    margin-left: auto; font-family: var(--mono); font-size: 11.5px;
+    color: var(--gray-500); align-self: center;
+  }
+
+  table.contratos { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  table.contratos th, table.contratos td {
+    padding: 8px 10px; text-align: left; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.contratos th {
+    background: #f8fafc; color: #0d3558; font-weight: 600;
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  table.contratos td.num { font-family: var(--mono); color: var(--gray-500); }
+  table.contratos td.right { text-align: right; font-variant-numeric: tabular-nums; }
+  table.contratos tr.inactive { color: var(--gray-500); background: #fafaf8; }
+  table.contratos .badge {
+    display: inline-block; font-size: 10px; font-family: var(--mono);
+    background: #fee2e2; color: #991b1b; padding: 1px 6px; border-radius: 3px; margin-left: 6px;
+  }
+
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 980px) { .code-grid { grid-template-columns: 1fr; } }
+  .code-block { display: flex; flex-direction: column; gap: 10px; }
+  .code-block .file-label { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+  .code {
+    background: var(--slate); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; flex: 1;
+  }
+  .code pre {
+    font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.65; color: #E8E6DE; white-space: pre;
+  }
+  .code .kw  { color: var(--clay); }
+  .code .str { color: var(--olive); }
+  .code .cm  { color: var(--gray-500); }
+  .code .fn  { color: #C9B98A; }
+
+  .risks {
+    border: 1.5px solid var(--gray-300); border-radius: 12px;
+    overflow: hidden; background: var(--white);
+  }
+  .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; gap: 0; }
+  @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+  .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+  .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+  .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+  @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+  .risks .head {
+    background: var(--gray-150); font-weight: 600; color: var(--slate);
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .sev {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    padding: 2px 8px; border-radius: 6px; font-weight: 600;
+  }
+  .sev.high { background: #F3D9CC; color: #8A3B1E; }
+  .sev.med  { background: var(--oat); color: var(--slate); }
+  .sev.low  { background: #E4E9DC; color: #4B5C39; }
+
+  .open-q { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .q {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-left: 4px solid var(--clay); border-radius: 10px; padding: 16px 20px;
+  }
+  .q .qt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+  .q .qd { font-size: 13.5px; color: var(--gray-500); }
+  .q .owner { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); margin-top: 8px; }
+
+  .dod { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; max-width: 820px; }
+  @media (max-width: 720px) { .dod { grid-template-columns: 1fr; } }
+  .dod-item { display: flex; gap: 10px; font-size: 14px; color: var(--gray-700); }
+  .dod-item .box {
+    width: 16px; height: 16px; border: 1.5px solid var(--gray-300);
+    border-radius: 4px; flex-shrink: 0; margin-top: 3px; background: var(--white);
+  }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · GFIP — Recebimento de NFs · feature F3</div>
+    <h1>Página de consulta de contratos</h1>
+    <div class="prompt-box">
+      <span class="label">Objetivo</span>
+      Tela dedicada para busca e visualização dos contratos da base
+      (~110 entradas seedadas de <code>base_contratos.json</code>), sem
+      vínculo com o contrato ativo da sessão. Consulta pura — não toca
+      em NFs nem em totalizadores. Acessível por link no topbar e por
+      tab/menu na área logada. Spec original em <code>planning/PLAN.md</code>
+      seção F3.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Esforço</div><div class="v accent">~1 dia</div></div>
+    <div class="cell"><div class="k">Endpoint</div><div class="v">1 estendido</div></div>
+    <div class="cell"><div class="k">Schema</div><div class="v">nenhum</div></div>
+    <div class="cell"><div class="k">Depende de</div><div class="v">F2 seed ✅</div></div>
+  </div>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Milestones</h2></div>
+    <p class="sec-intro">Spec já alinhada (PLAN.md). Backend e frontend independentes — backend pode ser entregue isolado e validado por curl antes de qualquer pixel.</p>
+
+    <div class="milestones">
+      <div class="milestone">
+        <div class="when">Fase A · Spec</div>
+        <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Decisões registradas</h3>
+          <p>Acesso por <strong>topbar + menu</strong>; inativos ocultos por default com toggle; clique na linha não faz nada (consulta pura); selects HTML nativos; UF mostra nome completo, envia sigla. Checkpoint humano antes de B.</p>
+          <div class="tags"><span class="tag">planning/PLAN.md F3</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B · Backend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Estender <code>GET /api/contratos</code></h3>
+          <p>Adicionar query params opcionais <code>?numero=&amp;sigla=&amp;uf=&amp;tranche=&amp;tipo_contrato=&amp;com_valor=&amp;incluir_inativos=</code>. Sem params → comportamento atual preservado (não quebra <code>ContratoSelector</code>). Filtros combinados por <code>AND</code>; <code>numero</code>/<code>sigla</code> usam <code>ILIKE %x%</code>; <code>com_valor=true</code> aplica <code>valor_contrato &gt; 0</code>. Testes: cada filtro isolado, combinação <code>AND</code>, base vazia, inativos.</p>
+          <div class="tags"><span class="tag">backend/app/server.py</span><span class="tag">tests/test_contratos_endpoints.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase C · Frontend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Tela "Contratos" + navegação</h3>
+          <p>Novo componente <code>&lt;ContratosBrowser&gt;</code> em <code>frontend/src/components/</code>. App.jsx ganha state <code>currentView ∈ {"upload","contratos"}</code> e renderiza por aba. Topbar ganha link "Contratos"; menu horizontal abaixo do topbar com tabs "Upload de notas" e "Contratos" (ativo realça). Tabela <code>table-layout: fixed</code> + ellipsis (regra de design). Filtros disparam debounced fetch (300ms) para o endpoint estendido.</p>
+          <div class="tags"><span class="tag">frontend/src/App.jsx</span><span class="tag">components/ContratosBrowser.jsx</span><span class="tag">styles.css</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase D · DoD</div>
+        <div class="dot-col"><span class="dot"></span></div>
+        <div class="body">
+          <h3>Definition of Done</h3>
+          <p>Build do frontend sem warnings, smoke visual (filtros funcionam, base vazia renderiza sem erro, troca de aba preserva contrato ativo da sessão), suíte de testes verde, sem mudança de schema, aprovação humana.</p>
+          <div class="tags"><span class="tag">planning/DEFINITION_OF_DONE.md</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>Fluxo de dados</h2></div>
+    <p class="sec-intro">Stateless — sem cache, sem WebSocket. Cada mudança de filtro dispara um GET; debounce de 300ms evita rajada enquanto o usuário digita.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 860 280" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+        </defs>
+        <g font-size="12" fill="#141413">
+          <rect x="20"  y="20"  width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="43" text-anchor="middle" font-weight="600">FilterBar (inputs)</text>
+          <text x="115" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">ContratosBrowser.jsx</text>
+
+          <rect x="20"  y="186" width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="209" text-anchor="middle" font-weight="600">debounced fetch</text>
+          <text x="115" y="226" text-anchor="middle" fill="#87867F" font-size="10.5">300ms · cancela anterior</text>
+
+          <rect x="340" y="100" width="200" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="440" y="123" text-anchor="middle" font-weight="600">GET /api/contratos</text>
+          <text x="440" y="140" text-anchor="middle" fill="#87867F" font-size="10.5">?uf=SP&amp;tipo_contrato=LPT</text>
+
+          <rect x="660" y="100" width="180" height="54" rx="10" fill="#141413"/>
+          <text x="750" y="123" text-anchor="middle" font-weight="600" fill="#FAF9F5">contratos</text>
+          <text x="750" y="140" text-anchor="middle" fill="#C9B98A" font-size="10.5">WHERE ... AND ...</text>
+        </g>
+        <g stroke="#87867F" stroke-width="1.5" fill="none">
+          <path d="M115 74 L115 186" marker-end="url(#arrow)"/>
+          <path d="M210 213 L340 130" marker-end="url(#arrow)"/>
+          <path d="M540 127 L660 127" marker-end="url(#arrow)"/>
+          <path d="M660 145 C 540 200, 350 200, 220 100" marker-end="url(#arrow)"/>
+        </g>
+        <g font-size="10.5" fill="#87867F">
+          <text x="130" y="135">onChange</text>
+          <text x="240" y="175">fetch com AbortController</text>
+          <text x="550" y="95">SQL com filters</text>
+          <text x="380" y="200">JSON · &lt;Tabela&gt; renderiza</text>
+        </g>
+      </svg>
+      <p class="caption">Sem schema novo. Endpoint estende o que já existe — sem param, comportamento idêntico ao usado pelo <code>ContratoSelector</code>.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Mockup</h2></div>
+    <p class="sec-intro">Topbar + menu refletindo a decisão "nos dois". Aba "Contratos" ativa. Filtros + tabela com 4 linhas de exemplo (3 ativos, 1 inativo aparece porque o toggle está ligado).</p>
+
+    <div class="mocks">
+      <div class="mock">
+        <div class="mock-label">A · Tela completa de Contratos</div>
+        <div class="mock-body" style="padding: 0;">
+
+          <div class="sim-topbar">
+            <span class="brand">GFIP - Recebimento de Notas Fiscais</span>
+            <div class="links">
+              <a>Upload</a>
+              <a class="active">Contratos</a>
+              <span class="ctx">ECFS 101/2005</span>
+              <a>Sair</a>
+            </div>
+          </div>
+
+          <div class="sim-menu">
+            <span class="tab">Upload de notas</span>
+            <span class="tab active">Contratos</span>
+          </div>
+
+          <div class="filter-bar">
+            <input type="text" class="txt" placeholder="Buscar por número ou sigla…" value="" />
+            <select><option>UF: todas</option><option>São Paulo</option><option>Pará</option></select>
+            <select><option>Tipo: todos</option><option>LPT</option><option>MLA</option></select>
+            <select><option>Tranche: todas</option><option>1ª Tranche</option><option>2ª Tranche</option></select>
+            <label class="toggle"><input type="checkbox" checked /> apenas com valor definido</label>
+            <label class="toggle"><input type="checkbox" /> incluir inativos</label>
+            <span class="count">4 de 110 contratos</span>
+          </div>
+
+          <table class="contratos">
+            <colgroup>
+              <col style="width: 18%"><col style="width: 22%"><col style="width: 8%">
+              <col style="width: 14%"><col style="width: 8%">
+              <col style="width: 14%"><col style="width: 12%"><col style="width: 4%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Número</th><th>Fornecedor</th><th>UF</th>
+                <th>Tranche</th><th>Tipo</th>
+                <th class="right">Valor Contrato</th><th class="right">Valor CDE</th><th class="right">% CDE</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">ECFS 101/2005</td><td>CPFL</td><td>SP</td>
+                <td>2ª Tranche</td><td>LPT</td>
+                <td class="right">R$ 2.143.980,00</td><td class="right">R$ 1.715.180,00</td><td class="right">80,00%</td>
+              </tr>
+              <tr>
+                <td class="num">ECFS 283/2010</td><td>EQUATORIAL PARÁ</td><td>PA</td>
+                <td>4ª Tranche</td><td>LPT</td>
+                <td class="right">R$ 429.344.380,00</td><td class="right">R$ 343.475.504,00</td><td class="right">80,00%</td>
+              </tr>
+              <tr>
+                <td class="num">ECM 001/2020</td><td>EQUATORIAL PARÁ</td><td>PA</td>
+                <td>1ª Tranche</td><td>LPT</td>
+                <td class="right">R$ 57.480.830,00</td><td class="right">R$ 45.984.664,00</td><td class="right">80,00%</td>
+              </tr>
+              <tr class="inactive">
+                <td class="num">ECFS 999/1999 <span class="badge">inativo</span></td><td>FORNECEDOR DESCONTINUADO</td><td>RS</td>
+                <td>1ª Tranche</td><td>LPT</td>
+                <td class="right">R$ 1.000.000,00</td><td class="right">R$ 800.000,00</td><td class="right">80,00%</td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Código-chave</h2></div>
+    <p class="sec-intro">Backend constrói o <code>WHERE</code> incremental (não <code>eval</code>, não SQL string). Frontend usa <code>AbortController</code> para cancelar requests stale enquanto usuário digita.</p>
+
+    <div class="code-grid">
+      <div class="code-block">
+        <div class="file-label">backend/app/server.py — endpoint estendido</div>
+        <div class="code"><pre><span class="kw">@app</span>.<span class="fn">get</span>(<span class="str">"/api/contratos"</span>)
+<span class="kw">def</span> <span class="fn">list_contratos</span>(
+    request: Request, db: DbSession,
+    numero: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    sigla: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    uf: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    tranche: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    tipo_contrato: str | <span class="kw">None</span> = <span class="kw">None</span>,
+    com_valor: bool = <span class="kw">False</span>,
+    incluir_inativos: bool = <span class="kw">False</span>,
+):
+    <span class="fn">get_authenticated_user</span>(request)
+    stmt = <span class="fn">select</span>(Contrato)
+
+    <span class="kw">if not</span> incluir_inativos:
+        stmt = stmt.<span class="fn">where</span>(Contrato.ativo.<span class="fn">is_</span>(<span class="kw">True</span>))
+    <span class="kw">if</span> numero:
+        stmt = stmt.<span class="fn">where</span>(Contrato.numero.<span class="fn">ilike</span>(<span class="str">f"%{numero}%"</span>))
+    <span class="kw">if</span> sigla:
+        stmt = stmt.<span class="fn">where</span>(Contrato.sigla.<span class="fn">ilike</span>(<span class="str">f"%{sigla}%"</span>))
+    <span class="kw">if</span> uf:
+        stmt = stmt.<span class="fn">where</span>(Contrato.uf == uf)
+    <span class="kw">if</span> tranche:
+        stmt = stmt.<span class="fn">where</span>(Contrato.tranche == tranche)
+    <span class="kw">if</span> tipo_contrato:
+        stmt = stmt.<span class="fn">where</span>(Contrato.tipo_contrato == tipo_contrato)
+    <span class="kw">if</span> com_valor:
+        stmt = stmt.<span class="fn">where</span>(Contrato.valor_contrato &gt; 0)
+
+    rows = db.<span class="fn">scalars</span>(stmt.<span class="fn">order_by</span>(Contrato.numero.<span class="fn">asc</span>())).<span class="fn">all</span>()
+    <span class="kw">return</span> [<span class="fn">serialize_contrato</span>(c) <span class="kw">for</span> c <span class="kw">in</span> rows]</pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="file-label">frontend/src/components/ContratosBrowser.jsx — fetch debounced</div>
+        <div class="code"><pre><span class="kw">function</span> <span class="fn">useContratos</span>(filters) {
+  <span class="kw">const</span> [data, setData] = <span class="fn">useState</span>([]);
+  <span class="fn">useEffect</span>(() =&gt; {
+    <span class="kw">const</span> ctrl = <span class="kw">new</span> <span class="fn">AbortController</span>();
+    <span class="kw">const</span> tid = <span class="fn">setTimeout</span>(<span class="kw">async</span> () =&gt; {
+      <span class="kw">const</span> q = <span class="kw">new</span> <span class="fn">URLSearchParams</span>(
+        <span class="fn">Object.entries</span>(filters).<span class="fn">filter</span>(
+          ([_, v]) =&gt; v !== <span class="str">""</span> &amp;&amp; v !== <span class="kw">false</span>
+        )
+      );
+      <span class="kw">const</span> r = <span class="kw">await</span> <span class="fn">fetch</span>(
+        <span class="str">`/api/contratos?${q}`</span>,
+        { credentials: <span class="str">"same-origin"</span>, signal: ctrl.signal }
+      );
+      <span class="kw">if</span> (r.ok) <span class="fn">setData</span>(<span class="kw">await</span> r.<span class="fn">json</span>());
+    }, 300);
+    <span class="kw">return</span> () =&gt; { <span class="fn">clearTimeout</span>(tid); ctrl.<span class="fn">abort</span>(); };
+  }, [<span class="fn">JSON.stringify</span>(filters)]);
+  <span class="kw">return</span> data;
+}</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Riscos &amp; mitigações</h2></div>
+    <div class="risks">
+      <div class="row">
+        <div class="cell head">Risco</div>
+        <div class="cell head">Sev</div>
+        <div class="cell head">Mitigação</div>
+      </div>
+      <div class="row">
+        <div class="cell">Mudar comportamento do <code>GET /api/contratos</code> quebra o <code>ContratoSelector</code> (F2) — endpoint compartilhado.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">Todos os params têm default <code>None/False</code>: sem params, query é idêntica à atual (WHERE ativo = true ORDER BY numero). Cobertura: adicionar teste regressivo que ataca o endpoint sem params e compara contagem.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Filtro com aspas/escape em <code>numero</code> ou <code>sigla</code> abre janela pra SQL injection se o WHERE for construído por string.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">SQLAlchemy <code>Contrato.numero.ilike(f"%{numero}%")</code> usa binding parametrizado — o <code>f-string</code> só monta o <strong>pattern do LIKE</strong>, não o SQL. Driver escapa o argumento.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Cada keystroke no campo "Buscar" dispara request. Em base de 110 contratos é negligível, mas escala mal.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Debounce de 300ms + <code>AbortController</code> cancela request pendente quando filtros mudam. Já no snippet do código-chave.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Opções dos selects de UF/tranche são hardcoded — base nova com valores inéditos não aparece no dropdown.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Derivar as opções do payload de <code>/api/contratos</code> sem filtros no mount inicial (ou expor <code>GET /api/contratos/facets</code> em fase futura). Para esta entrega, derivar client-side.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Troca de aba pra "Contratos" e volta pra "Upload" perde o estado de upload em andamento.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">A aba "Upload" continua montada (apenas escondida via CSS <code>display:none</code> ou mantida com <code>key</code> estável). Validar no smoke da Fase C.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
+    <div class="open-q">
+      <div class="q">
+        <div class="qt">Ordenação default das colunas</div>
+        <div class="qd">Spec diz "ordenados por <code>numero</code>" (igual ao endpoint atual). Mas <code>ECFS 101/2005</code> e <code>ECM 001/2020</code> não ordenam intuitivamente como string — "ECFS 1..." vem antes de "ECM 1..." mas "ECFS 332" vem depois de "ECFS 101". Ordem por string é consistente — só não é "humana". Proposta: manter ordem por string; em fase futura adicionar headers clicáveis para reordenar.</div>
+        <div class="owner">Decidir antes da Fase C</div>
+      </div>
+      <div class="q">
+        <div class="qt">Exportar resultado filtrado (CSV/XLSX)?</div>
+        <div class="qd">PLAN.md não menciona. Pode ser útil para operadores que copiam linhas para planilhas. Implica novo endpoint <code>/api/contratos.csv</code> ou geração client-side. Fora do escopo F3 a menos que prioridade explícita.</div>
+        <div class="owner">Decidir agora ou diferir para fase futura</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">07</span><h2>Definition of Done</h2></div>
+    <p class="sec-intro">Checklist extraído de <code>planning/DEFINITION_OF_DONE.md</code> aplicado a F3.</p>
+    <div class="dod">
+      <div class="dod-item"><span class="box"></span><span>Testes backend cobrindo: cada filtro isolado, combinação <code>AND</code>, base vazia, <code>incluir_inativos</code>, regressão do uso sem params (ContratoSelector continua OK).</span></div>
+      <div class="dod-item"><span class="box"></span><span>Build do frontend (<code>npm run build</code>) sem warnings.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Smoke visual: troca de aba funciona, filtros funcionam, base vazia renderiza sem erro, contrato ativo na sessão é preservado ao trocar aba.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Suíte completa (<code>pytest</code>) verde.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma alteração em <code>backend/app/main.py</code> (parser intocado).</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma migration Alembic — schema preservado.</span></div>
+      <div class="dod-item"><span class="box"></span><span><code>CLAUDE.md</code> recebe linha de menção da nova aba de navegação e dos novos params do endpoint.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Aprovação humana no PR.</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
