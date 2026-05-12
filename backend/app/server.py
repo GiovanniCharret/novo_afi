@@ -18,6 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .db import get_db, get_session, init_db
 from .dependencies import require_contrato
 from .models import Contrato, NfEntry, UploadBatch, UploadFile as UploadFileRecord, User
+from .storage import get_pdf_path
 from .normalization import (
     build_business_key,
     compute_sha256,
@@ -80,6 +81,7 @@ class NfEntryResponse(BaseModel):
     valor_total: str | int | float | None
     contrato: str | int | float | None
     contrato_id: str | None
+    upload_file_id: str | None
 
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -119,6 +121,7 @@ def serialize_nf_entry(entry: NfEntry) -> dict[str, object]:
         "valor_total": raw_payload.get("valor", float(entry.valor_total)),
         "contrato": raw_payload.get("contrato", entry.contrato),
         "contrato_id": entry.contrato_id,
+        "upload_file_id": entry.upload_file_id,
     }
 
 
@@ -137,7 +140,12 @@ def get_or_create_user(session: Session, username: str) -> User:
     return user
 
 
-def create_nf_entry(session: Session, row: dict, contrato_id: str | None = None) -> NfEntry:
+def create_nf_entry(
+    session: Session,
+    row: dict,
+    contrato_id: str | None = None,
+    upload_file_id: str | None = None,
+) -> NfEntry:
     entry = NfEntry(
         business_key=build_business_key(row),
         numero_nf=normalize_text(row.get("numero_nf")),
@@ -152,6 +160,7 @@ def create_nf_entry(session: Session, row: dict, contrato_id: str | None = None)
         valor_total=parse_brazilian_decimal(row.get("valor")) or 0,
         contrato=normalize_nullable_text(row.get("contrato")),
         contrato_id=contrato_id,
+        upload_file_id=upload_file_id,
         raw_payload=row,
     )
     session.add(entry)
@@ -159,17 +168,22 @@ def create_nf_entry(session: Session, row: dict, contrato_id: str | None = None)
     return entry
 
 
-def save_uploaded_pdf(batch_id: str, filename: str, file_bytes: bytes, sha256: str) -> Path:
+def save_uploaded_pdf(batch_id: str, filename: str, file_bytes: bytes) -> tuple[Path, str]:
+    """Salva o PDF em disco com nome UUID4 + extensão original (F4).
+
+    Returna `(path, stored_filename)`. `stored_filename` é o nome em disco,
+    persistido em `upload_files.stored_filename` para que o endpoint de
+    visualização reconstrua o caminho sem ambiguidade.
+    """
+    import uuid as _uuid
     batch_dir = UPLOAD_STORAGE_DIR / batch_id
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = Path(filename).name or "arquivo.pdf"
-    target_path = batch_dir / safe_name
-    if target_path.exists():
-        target_path = batch_dir / f"{sha256[:12]}_{safe_name}"
-
+    ext = Path(filename).suffix or ".pdf"
+    stored_filename = f"{_uuid.uuid4()}{ext}"
+    target_path = batch_dir / stored_filename
     target_path.write_bytes(file_bytes)
-    return target_path
+    return target_path, stored_filename
 
 
 def build_parser_debug_dir(saved_path: Path) -> Path:
@@ -324,6 +338,39 @@ def create_app() -> FastAPI:
             ],
         }
 
+    @app.get("/api/uploads/files/{upload_file_id}/pdf")
+    def get_pdf(
+        upload_file_id: str,
+        request: Request,
+        db: DbSession,
+        download: bool = False,
+    ):
+        """F4 — serve o PDF original. JOIN com upload_batches + users garante
+        que só o dono do batch pode acessar. 404 (não 403) para id inexistente
+        ou de outro usuário, para não vazar existência."""
+        user_data = get_authenticated_user(request)
+        uf = db.scalar(
+            select(UploadFileRecord)
+            .join(UploadBatch, UploadFileRecord.upload_batch_id == UploadBatch.id)
+            .join(User, UploadBatch.user_id == User.id)
+            .where(UploadFileRecord.id == upload_file_id)
+            .where(User.username == user_data["username"])
+        )
+        if uf is None:
+            raise HTTPException(status_code=404, detail="PDF não encontrado.")
+        try:
+            path = get_pdf_path(uf, UPLOAD_STORAGE_DIR)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="PDF não disponível no disco.")
+        disposition = "attachment" if download else "inline"
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=uf.original_filename,
+            content_disposition_type=disposition,
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
+
     @app.get("/api/contratos")
     def list_contratos(request: Request, db: DbSession) -> list[dict[str, object]]:
         """Lista contratos ativos ordenados por número. Autenticação obrigatória."""
@@ -455,8 +502,23 @@ def create_app() -> FastAPI:
                             })
                             continue
 
-                        saved_path = save_uploaded_pdf(batch.id, filename, file_bytes, sha256)
+                        saved_path, stored_filename = save_uploaded_pdf(batch.id, filename, file_bytes)
                         debug_dir = build_parser_debug_dir(saved_path)
+
+                        # F4 — record criado cedo com status placeholder "processando"
+                        # para que `nf_entries.upload_file_id` possa referenciá-lo via
+                        # FK durante o loop de inserção. Status final é setado depois.
+                        record = UploadFileRecord(
+                            upload_batch_id=batch.id,
+                            original_filename=filename,
+                            stored_filename=stored_filename,
+                            file_sha256=sha256,
+                            status="processando",
+                            inserted_count=0,
+                            duplicate_count=0,
+                        )
+                        db.add(record)
+                        db.flush()
 
                         yield _sse({"event": "file_saved", "filename": filename})
                         yield _sse({"event": "file_parsing", "filename": filename})
@@ -469,17 +531,9 @@ def create_app() -> FastAPI:
                             )
 
                             if outcome.status != "processado":
-                                record = UploadFileRecord(
-                                    upload_batch_id=batch.id,
-                                    original_filename=filename,
-                                    file_sha256=sha256,
-                                    status=outcome.status,
-                                    status_reason=outcome.reason,
-                                    parser_error=outcome.error,
-                                    inserted_count=0,
-                                    duplicate_count=0,
-                                )
-                                db.add(record)
+                                record.status = outcome.status
+                                record.status_reason = outcome.reason
+                                record.parser_error = outcome.error
                                 yield _sse({
                                     "event": "file_done",
                                     "filename": filename,
@@ -509,7 +563,7 @@ def create_app() -> FastAPI:
                                     else:
                                         duplicates_sem_contrato += 1
                                     continue
-                                create_nf_entry(db, row, contrato_id=contrato_id)
+                                create_nf_entry(db, row, contrato_id=contrato_id, upload_file_id=record.id)
                                 inserted_count += 1
 
                             file_status = "processado" if inserted_count > 0 else "duplicado"
@@ -533,16 +587,10 @@ def create_app() -> FastAPI:
                                     # Todos duplicados são pré-F2 (contrato_id NULL).
                                     status_reason = "Já existe na base (sem contrato registrado, anterior à F2)."
 
-                            record = UploadFileRecord(
-                                upload_batch_id=batch.id,
-                                original_filename=filename,
-                                file_sha256=sha256,
-                                status=file_status,
-                                status_reason=status_reason,
-                                inserted_count=inserted_count,
-                                duplicate_count=duplicate_count,
-                            )
-                            db.add(record)
+                            record.status = file_status
+                            record.status_reason = status_reason
+                            record.inserted_count = inserted_count
+                            record.duplicate_count = duplicate_count
                             yield _sse({
                                 "event": "file_done",
                                 "filename": filename,
@@ -555,17 +603,11 @@ def create_app() -> FastAPI:
 
                         except Exception as error:
                             parser_error = str(error)
-                            record = UploadFileRecord(
-                                upload_batch_id=batch.id,
-                                original_filename=filename,
-                                file_sha256=sha256,
-                                status="erro_parsing",
-                                status_reason="Erro ao consolidar o retorno do parser.",
-                                parser_error=parser_error,
-                                inserted_count=0,
-                                duplicate_count=0,
-                            )
-                            db.add(record)
+                            # F4 — record já existe (criado antes do try). Atualiza
+                            # em vez de criar um novo para não duplicar a linha.
+                            record.status = "erro_parsing"
+                            record.status_reason = "Erro ao consolidar o retorno do parser."
+                            record.parser_error = parser_error
                             yield _sse({
                                 "event": "file_done",
                                 "filename": filename,

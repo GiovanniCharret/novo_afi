@@ -260,6 +260,7 @@ export default function NfsBrowser({ selectedContratoId }) {
                   <col className="col-nfs-descricao" />
                   <col className="col-nfs-valor" />
                   <col className="col-nfs-tipo" />
+                  <col className="col-nfs-actions" />
                 </colgroup>
                 <thead>
                   <tr>
@@ -270,20 +271,54 @@ export default function NfsBrowser({ selectedContratoId }) {
                     <th>Descrição</th>
                     <th className="right">Valor total</th>
                     <th>Tipo</th>
+                    <th className="center">PDF</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {nfs.map((nf) => (
-                    <tr key={nf.id}>
-                      <td className="nfs-num" title={String(nf.numero_nf ?? "")}>{nf.numero_nf}</td>
-                      <td title={String(nf.data_emissao ?? "")}>{nf.data_emissao}</td>
-                      <td title={String(nf.fornecedor ?? "")}>{nf.fornecedor}</td>
-                      <td className="nfs-num" title={String(nf.cnpj ?? "")}>{nf.cnpj}</td>
-                      <td title={String(nf.descricao ?? "")}>{nf.descricao}</td>
-                      <td className="right" title={String(nf.valor_total ?? "")}>{nf.valor_total}</td>
-                      <td title={String(nf.tipo_nota ?? "")}>{nf.tipo_nota}</td>
-                    </tr>
-                  ))}
+                  {nfs.map((nf) => {
+                    const hasPdf = Boolean(nf.upload_file_id);
+                    const pdfUrl = hasPdf
+                      ? `/api/uploads/files/${encodeURIComponent(nf.upload_file_id)}/pdf`
+                      : null;
+                    return (
+                      <tr key={nf.id}>
+                        <td className="nfs-num" title={String(nf.numero_nf ?? "")}>{nf.numero_nf}</td>
+                        <td title={String(nf.data_emissao ?? "")}>{nf.data_emissao}</td>
+                        <td title={String(nf.fornecedor ?? "")}>{nf.fornecedor}</td>
+                        <td className="nfs-num" title={String(nf.cnpj ?? "")}>{nf.cnpj}</td>
+                        <td title={String(nf.descricao ?? "")}>{nf.descricao}</td>
+                        <td className="right" title={String(nf.valor_total ?? "")}>{nf.valor_total}</td>
+                        <td title={String(nf.tipo_nota ?? "")}>{nf.tipo_nota}</td>
+                        <td className="nfs-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            disabled={!hasPdf}
+                            title={hasPdf ? "Abrir PDF em nova aba" : "PDF não disponível (anterior à F4)"}
+                            onClick={() => hasPdf && window.open(pdfUrl, "_blank", "noopener,noreferrer")}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            disabled={!hasPdf}
+                            title={hasPdf ? "Baixar PDF" : "PDF não disponível (anterior à F4)"}
+                            onClick={() => hasPdf && window.open(`${pdfUrl}?download=true`, "_blank", "noopener,noreferrer")}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

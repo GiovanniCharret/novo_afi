@@ -44,9 +44,9 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 1. F8a ✅ parser non-interactive + exceções tipadas      (concluída 2026-05-06)
 2. F5  ✅ limite 550                                     (concluída 2026-05-07)
 3. F2  ✅ seleção de contrato + seed validado            (concluída 2026-05-11)
-4. F3  — consulta de contratos (browser estático)        (depende só do seed)
-5. F3b — consulta de NFs por contrato                    (depende de F2 ✅)
-6. F4  — visualizar/baixar PDF                           (independente)
+4. F3b ✅ consulta de NFs por contrato                   (concluída 2026-05-12)
+5. F4  ✅ visualizar/baixar PDF                          (concluída 2026-05-12)
+6. F3  — consulta de contratos (browser estático)        (depende só do seed)
 7. F6  — totalizadores                                   (consome F2)
 7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
 8. F1  — auth real                                       (desbloqueia F7)
@@ -278,22 +278,30 @@ Motivação: "as letrinhas confundem" (siglas técnicas como `ECFS 327/2013` nã
 
 ---
 
-## F4 — Visualizar e baixar PDF persistido
+## F4 — Visualizar e baixar PDF persistido ✅ concluída em 2026-05-12
 
-**Objetivo**: em painéis que listam notas, abrir o PDF original no browser ou baixar, a partir do arquivo já em `backend/banco_de_nf/<batch_id>/`.
+**Objetivo**: em painéis que listam notas, abrir o PDF original no browser ou baixar, a partir do arquivo já em `backend/banco_de_nf/<batch_id>/`. Spec visual completa em `planning/F4-pdf-original.html`.
 
 ### Subetapas
-- [ ] `GET /api/uploads/files/{upload_file_id}/pdf` (autenticado). Localiza o arquivo via join `upload_files` + `upload_batches`. `StreamingResponse` com `application/pdf` e `Content-Disposition: inline` (ou `attachment` se `?download=true`).
-- [ ] Adicionar `upload_file_id` em `nf_entries` (FK → `upload_files.id`, nullable). Preenchido durante o processamento.
-- [ ] Expor `upload_file_id` no payload de `GET /api/nf-entries`.
-- [ ] Tabela de notas no frontend ganha coluna de ação com ícone de visualizar (nova aba) e ícone de download.
-- [ ] Na tela de contratos (F3), ação no nível do contrato leva para consulta filtrada de notas (`GET /api/nf-entries?contrato_id=...`) — não há "PDF de contrato".
-- [ ] Teste: sem auth → 401; id inexistente → 404; id válido → 200 com `application/pdf`.
+- [x] Migration `0003_f4_pdf_paths`: adicionar `upload_files.stored_filename` (TEXT nullable) e `nf_entries.upload_file_id` (FK → `upload_files.id`, nullable). **Backfill agressivo** (Decisão F4-a): durante o upgrade, `os.listdir` em cada batch_dir e popular `stored_filename` para todos os arquivos pré-F4 que existem em disco. — Resultado: 339/339 `upload_files` com `stored_filename` populado.
+- [x] `backend/app/storage.py` com função `get_pdf_path(upload_file, base_dir)`: retorna `Path` resolvido via `stored_filename`; fallback heurístico só para casos onde o backfill falhou.
+- [x] `save_uploaded_pdf` (em `server.py`) passa a gravar `stored_filename` (UUID4 em disco, separado de `original_filename`) no `UploadFileRecord`. `create_nf_entry` recebe e grava `upload_file_id`. — Refactor: `UploadFileRecord` criado upfront (status `"processando"`) para que FK funcione no INSERT das `nf_entries`.
+- [x] `GET /api/uploads/files/{upload_file_id}/pdf` (autenticado). Localiza o `upload_files` via JOIN com `upload_batches` + `users` filtrando `user.username == current_user` (impede vazamento entre usuários). `FileResponse` com `application/pdf`, `Content-Disposition: inline` (default) ou `attachment` se `?download=true`. Cabeçalho `X-Content-Type-Options: nosniff`.
+- [x] Expor `upload_file_id` no payload de `GET /api/nf-entries` (`serialize_nf_entry` + `NfEntryResponse`).
+- [x] Tabela de Notas (F3b) ganha coluna "PDF" com ícones 👁 (abrir em nova aba) e ⬇ (download). NFs sem `upload_file_id` (legacy ou pré-F4) → botões disabled com tooltip "PDF não disponível (anterior à F4)". **Tabela_persistida da Upload NÃO recebe os ícones** (Decisão F4-b).
+- [x] Testes em `tests/test_pdf_endpoint.py`: sem auth → 401; id inexistente → 404; id válido → 200 com `application/pdf`; usuário A não enxerga PDF de usuário B (404, não 403, para não vazar existência); arquivo removido do disco → 404; `?download=true` retorna `attachment` com `original_filename`; fallback heurístico para legacy sem `stored_filename`.
 
 ### Critérios de Sucesso
-- Browser renderiza PDF inline em nova aba.
-- Com `?download=true`, força download com `original_filename` correto.
-- Arquivo servido é byte-a-byte idêntico ao enviado.
+- ✅ Browser renderiza PDF inline em nova aba.
+- ✅ Com `?download=true`, força download com `original_filename` correto.
+- ✅ Arquivo servido é byte-a-byte idêntico ao enviado.
+- ✅ Migration backfill cobre todos os batches existentes em `banco_de_nf/`.
+
+### Decisões registradas (2026-05-12)
+- **F4-a**: backfill **agressivo na migration** (Opção A) — `0003_f4_pdf_paths` faz `os.listdir` em cada batch_dir e popula `stored_filename` para todos os arquivos pré-F4 já no disco. Resolver `get_pdf_path` fica simples (sem lógica de fallback no caminho quente), gasta IO uma vez na deploy.
+- **F4-b**: ícones de PDF **somente na aba Notas**, não na tabela_persistida da Upload. Reforça a separação "Upload = enviar, Notas = consultar". Upload fica focada na função de envio.
+- **F4-c**: F4 **não toca em F3** (browser de contratos, ainda não implementada). Quando F3 for feita, ela integra a navegação contrato → notas filtradas reusando `/api/nf-entries?contrato_id=…` (endpoint já estendido em F3b).
+- **F4-d**: NFs pré-F4 (criadas antes da migration 0003) **NÃO recebem `upload_file_id`** e ficam com botões PDF desabilitados — **limitação aceita** em 2026-05-12. Razão: o schema antigo não armazenava a relação NF→arquivo, e o backfill via timestamp/contrato seria frágil em batches grandes (existe 1 batch com 126 PDFs no banco hoje, onde timestamps próximos inviabilizam o match). PDFs continuam **acessíveis em disco** via `upload_files.stored_filename` — só a navegação direta NF → PDF é que não funciona para legacy. Daqui pra frente, 100% dos uploads novos têm `upload_file_id`. Diagnóstico no momento da decisão: 150 NFs no banco, 2 com `upload_file_id`, 148 sem.
 
 ---
 

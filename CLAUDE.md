@@ -138,7 +138,7 @@ Tabelas principais:
 | `users` | Usuários autenticados. **Após F1**: ganha `email UNIQUE NOT NULL`, `email_confirmed`, `confirmation_token`, `token_expires_at`, `reset_token`, `reset_expires_at`. `username` vira `nullable=True` (mantido por compat com seed legado em `DEBUG=true`). |
 | `upload_batches` | Agrupamento de um envio em lote por usuário. **F2 ✅**: tem `contrato_id FK → contratos.id` (nullable — preserva batches pré-F2; novos exigem via `require_contrato`). **Após F8**: ganha `status` (`processando` \| `concluido` \| `abandonado`). |
 | `upload_files` | Resultado por arquivo dentro de um lote. Status: `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (novo, após F8). |
-| `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **Após F2/F4**: ganha `contrato_id` e `upload_file_id`. **Após F8**: as 11 colunas de `default_nf_template` viram `NOT NULL` (Decisão #8). |
+| `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **F2 ✅**: tem `contrato_id` (FK nullable; populado em uploads pós-F2). **F4 ✅**: tem `upload_file_id` (FK nullable → `upload_files.id`; populado em uploads pós-F4 — pré-F4 fica NULL, ver Decisão F4-d). **Após F8**: as 11 colunas de `default_nf_template` viram `NOT NULL` (Decisão #8). |
 | `contratos` *(F2 ✅)* | Contratos da base, populados via seed do `base_contratos.json` no `lifespan`. ~140 entradas. PK é UUID5 determinístico derivado de `numero` (re-seed mantém IDs estáveis). Coluna `ativo BOOLEAN` permite filtrar sem deletar. |
 | `nf_pending` *(F8)* | NFs com campo obrigatório faltando aguardando preenchimento manual via modal. Schema completo em `planning/PLAN.md` → "Mudanças Transversais de Schema". |
 
@@ -157,11 +157,18 @@ Tabelas principais:
 
 `base_contratos.json` na raiz do projeto é a fonte de verdade dos contratos (~140 entradas, campos `sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato` — valores `LPT` ou `MLA`). O `docker-compose.yml:22` faz bind mount read-only de `./base_contratos.json` para `/app/backend/app/base_contratos.json` dentro do container — assim tanto o seed F2 (`seed_contratos.py:23`) quanto o `contrato_config.py:16` (parser DEV) leem do mesmo arquivo sem precisar duplicar conteúdo, e a regra de preservação do parser não é violada. **Truncar/apagar o arquivo da raiz quebra o startup do FastAPI** (JSONDecodeError no `lifespan`). Seed roda automaticamente no `lifespan` com `INSERT ... ON CONFLICT (numero) DO UPDATE`. Contratos com `valor_contrato = 0` são inseridos normalmente e filtráveis na UI via `?com_valor=true`.
 
-### Storage de PDFs (Decisão #4)
+### Storage de PDFs (Decisão #4 + F4 ✅)
 
 PDFs originais salvos em `backend/banco_de_nf/<batch_id>/<stored_filename>` (configurável via `UPLOAD_STORAGE_DIR`). **Sem object storage** nesta fase — Hostinger é semi-produção; migração para S3/MinIO fica adiada até definição de políticas pelo servidor institucional.
 
-Em F4, acesso a PDF via função abstrata `get_pdf_path(upload_file)` em `backend/app/storage.py` (a criar). `upload_files` ganha `stored_filename` (UUID no disco) além de `original_filename` para que o caminho seja reconstrutível mesmo movendo o diretório base.
+**Estrutura pós-F4** (2026-05-12):
+- Pasta = `batch_id` (UUID4) — agrupa todos os PDFs de um upload em lote.
+- Arquivo = `stored_filename` (UUID4 + `.pdf`) — separado de `original_filename` (gravado no DB) para evitar colisão e dispensar sanitização. Para batches pré-F4, a migration `0003_f4_pdf_paths` fez backfill via `os.listdir` + match com `original_filename` (cobertura 100% dos 339 `upload_files` no momento da migration).
+- Resolver: `backend/app/storage.py:get_pdf_path(upload_file, base_dir)` — preferência por `stored_filename`, fallback heurístico para legados que escaparam do backfill.
+
+**Endpoint** `GET /api/uploads/files/{upload_file_id}/pdf?download=` (autenticado). JOIN com `users` filtra por dono do batch — usuário A recebe 404 (não 403) ao tentar acessar PDF de B, para não vazar existência. `Content-Disposition: inline` default; `?download=true` força `attachment`. `X-Content-Type-Options: nosniff`.
+
+**Limitação aceita (Decisão F4-d)**: `nf_entries` pré-F4 não têm `upload_file_id` (a relação NF→arquivo nunca foi armazenada no schema antigo). Botões PDF na aba Notas ficam **desabilitados** para esses registros com tooltip "PDF não disponível (anterior à F4)". Backfill via timestamp foi descartado por ser frágil em batches grandes (existe 1 batch com 126 PDFs no DB onde timestamps quase iguais inviabilizam o match). PDFs continuam em disco — só a navegação direta NF → PDF é que não funciona para legacy. Daqui pra frente, 100% dos uploads novos têm `upload_file_id`.
 
 **Backup operacional** (TODO de ops, fora do escopo das 7 features): rsync semanal de `UPLOAD_STORAGE_DIR` para destino externo.
 

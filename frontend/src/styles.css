@@ -1076,17 +1076,50 @@ tr:hover td { background: #f8fbff; }
 }
 .nfs-table td.right, .nfs-table th.right { text-align: right; }
 .nfs-table td.right { font-variant-numeric: tabular-nums; }
+.nfs-table td.center, .nfs-table th.center { text-align: center; }
 .nfs-table td.nfs-num {
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
   color: var(--text-secondary);
 }
 .col-nfs-num         { width: 9%; }
-.col-nfs-data        { width: 10%; }
-.col-nfs-fornecedor  { width: 18%; }
-.col-nfs-cnpj        { width: 13%; }
-.col-nfs-descricao   { width: 28%; }
-.col-nfs-valor       { width: 12%; }
+.col-nfs-data        { width: 9%; }
+.col-nfs-fornecedor  { width: 17%; }
+.col-nfs-cnpj        { width: 12%; }
+.col-nfs-descricao   { width: 24%; }
+.col-nfs-valor       { width: 11%; }
 .col-nfs-tipo        { width: 10%; }
+.col-nfs-actions     { width: 8%; }
+
+/* F4 — botões de ação PDF na tabela de Notas */
+.nfs-table td.nfs-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 6px;
+  overflow: visible;
+}
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 3px 7px;
+  cursor: pointer;
+  color: var(--navy);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.icon-btn:hover:not(:disabled) {
+  background: #e6f0f9;
+  border-color: var(--blue);
+}
+.icon-btn:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+.icon-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
 .nfs-foot {
   padding: 12px 22px;

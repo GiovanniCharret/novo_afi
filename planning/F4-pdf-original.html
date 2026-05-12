@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation plan — F4 Visualizar e baixar PDF persistido</title>
+<style>
+  :root {
+    --ivory:    #FAF9F5;
+    --slate:    #141413;
+    --clay:     #D97757;
+    --oat:      #E3DACC;
+    --olive:    #788C5D;
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --white:    #FFFFFF;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans); background: var(--ivory);
+    color: var(--gray-700); line-height: 1.55;
+    padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 48px; max-width: 820px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gray-500); margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: 38px;
+    line-height: 1.15; color: var(--slate);
+    margin-bottom: 18px; letter-spacing: -0.01em;
+  }
+  .prompt-box {
+    background: var(--gray-150); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 16px 20px;
+    font-size: 14.5px; color: var(--gray-700);
+  }
+  .prompt-box .label {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); display: block; margin-bottom: 6px;
+  }
+
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .num {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--oat); color: var(--slate);
+    padding: 3px 9px; border-radius: 8px;
+  }
+  .sec-head h2 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 26px; color: var(--slate); letter-spacing: -0.01em;
+  }
+  .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 720px; margin-bottom: 28px; }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 64px;
+  }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .summary .k {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); margin-bottom: 6px;
+  }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+
+  .milestones { display: flex; flex-direction: column; gap: 0; }
+  .milestone { display: grid; grid-template-columns: 120px 28px 1fr; gap: 0 18px; position: relative; }
+  .milestone .when { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+  .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+  .milestone .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--white); border: 3px solid var(--clay);
+    margin-top: 4px; flex-shrink: 0;
+  }
+  .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+  .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+  .milestone:last-child .line { display: none; }
+  .milestone .body { padding-bottom: 36px; }
+  .milestone .body h3 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 19px; color: var(--slate); margin-bottom: 4px;
+  }
+  .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 620px; }
+  .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .milestone .tag {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--gray-150); border: 1px solid var(--gray-300);
+    border-radius: 6px; padding: 3px 8px; color: var(--gray-700);
+  }
+
+  .diagram {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; padding: 28px; overflow-x: auto;
+  }
+  .diagram svg { display: block; min-width: 760px; }
+  .diagram text { font-family: var(--mono); }
+  .caption { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+
+  .mocks { display: grid; grid-template-columns: 1fr; gap: 28px; }
+  .mock {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-radius: 12px; overflow: hidden;
+  }
+  .mock .mock-label {
+    padding: 12px 18px; border-bottom: 1.5px solid var(--gray-300);
+    font-family: var(--mono); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--gray-500); background: var(--gray-150);
+  }
+  .mock .mock-body { padding: 22px; }
+
+  table.nfs { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  table.nfs th, table.nfs td {
+    padding: 8px 10px; text-align: left; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.nfs th {
+    background: #f8fafc; color: #0d3558; font-weight: 600;
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  table.nfs td.num { font-family: var(--mono); color: var(--gray-500); }
+  table.nfs td.right { text-align: right; font-variant-numeric: tabular-nums; }
+  table.nfs td.actions {
+    text-align: center; display: flex; gap: 8px; justify-content: center;
+    padding: 6px 10px;
+  }
+  .icon-btn {
+    background: transparent; border: 1px solid var(--gray-300);
+    border-radius: 4px; padding: 4px 8px;
+    cursor: default; color: #0d3558;
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px;
+  }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .icon-btn.disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .browser-mock {
+    background: #1f2937; border-radius: 6px;
+    padding: 0; overflow: hidden;
+  }
+  .browser-bar {
+    background: #374151; padding: 8px 12px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #4b5563;
+  }
+  .browser-dots { display: flex; gap: 4px; }
+  .browser-dots span {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #6b7280;
+  }
+  .browser-url {
+    flex: 1;
+    background: #1f2937; color: #d1d5db;
+    padding: 4px 10px; border-radius: 4px;
+    font-family: var(--mono); font-size: 11px;
+  }
+  .browser-body {
+    background: #f3f4f6; padding: 28px; min-height: 240px;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    color: #1f2937;
+  }
+  .pdf-page {
+    background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    width: 280px; min-height: 180px; padding: 16px;
+    font-size: 9px; line-height: 1.4; color: #1f2937;
+  }
+  .pdf-page h4 { font-size: 11px; margin-bottom: 6px; font-weight: 700; }
+
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 980px) { .code-grid { grid-template-columns: 1fr; } }
+  .code-block { display: flex; flex-direction: column; gap: 10px; }
+  .code-block .file-label { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+  .code {
+    background: var(--slate); border-radius: 12px;
+    padding: 18px 20px; overflow-x: auto; flex: 1;
+  }
+  .code pre {
+    font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.65; color: #E8E6DE; white-space: pre;
+  }
+  .code .kw  { color: var(--clay); }
+  .code .str { color: var(--olive); }
+  .code .cm  { color: var(--gray-500); }
+  .code .fn  { color: #C9B98A; }
+
+  .risks {
+    border: 1.5px solid var(--gray-300); border-radius: 12px;
+    overflow: hidden; background: var(--white);
+  }
+  .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; gap: 0; }
+  @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+  .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+  .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+  .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+  @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+  .risks .head {
+    background: var(--gray-150); font-weight: 600; color: var(--slate);
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .sev {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    padding: 2px 8px; border-radius: 6px; font-weight: 600;
+  }
+  .sev.high { background: #F3D9CC; color: #8A3B1E; }
+  .sev.med  { background: var(--oat); color: var(--slate); }
+  .sev.low  { background: #E4E9DC; color: #4B5C39; }
+
+  .open-q { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .q {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-left: 4px solid var(--clay); border-radius: 10px; padding: 16px 20px;
+  }
+  .q .qt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+  .q .qd { font-size: 13.5px; color: var(--gray-500); }
+  .q .owner { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); margin-top: 8px; }
+
+  .dod { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; max-width: 820px; }
+  @media (max-width: 720px) { .dod { grid-template-columns: 1fr; } }
+  .dod-item { display: flex; gap: 10px; font-size: 14px; color: var(--gray-700); }
+  .dod-item .box {
+    width: 16px; height: 16px; border: 1.5px solid var(--gray-300);
+    border-radius: 4px; flex-shrink: 0; margin-top: 3px; background: var(--white);
+  }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · GFIP — Recebimento de NFs · feature F4</div>
+    <h1>Visualizar e baixar PDF persistido</h1>
+    <div class="prompt-box">
+      <span class="label">Objetivo</span>
+      Em painéis que listam notas (tabela_persistida da Upload, aba Notas da F3b),
+      operador pode abrir o PDF original no browser ou baixar. Arquivos já estão
+      em <code>backend/banco_de_nf/&lt;batch_id&gt;/</code> desde a F2 — F4 expõe
+      via endpoint dedicado e adiciona botões nas duas tabelas. Spec original em
+      <code>planning/PLAN.md</code> seção F4.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Esforço</div><div class="v accent">~1,5 dia</div></div>
+    <div class="cell"><div class="k">Endpoint novo</div><div class="v">1</div></div>
+    <div class="cell"><div class="k">Schema</div><div class="v">2 colunas + migration</div></div>
+    <div class="cell"><div class="k">Depende de</div><div class="v">F2 ✅ + F3b ✅</div></div>
+  </div>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Milestones</h2></div>
+    <p class="sec-intro">Schema vem primeiro (migration + abstração de path). Endpoint depois. Frontend por último consumindo o id já exposto no payload da F3b.</p>
+
+    <div class="milestones">
+      <div class="milestone">
+        <div class="when">Fase A · Spec</div>
+        <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Decisões a alinhar</h3>
+          <p>Confirmar: estratégia de backfill para legacy <code>upload_files</code> sem <code>stored_filename</code>; inline ou attachment como default; ícones de ação na tabela_persistida da Upload também (não só na Notas); F3 row-action (consulta filtrada de notas) fica em F4 ou em fase futura.</p>
+          <div class="tags"><span class="tag">planning/PLAN.md F4</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B1 · Schema</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Migration <code>0003_f4_pdf_paths</code></h3>
+          <p>Adicionar <code>upload_files.stored_filename</code> (TEXT nullable — backfill heurístico) e <code>nf_entries.upload_file_id</code> (FK → upload_files.id, nullable). Backfill no upgrade: para cada <code>upload_files</code> antigo, tentar <code>UPLOAD_STORAGE_DIR/&lt;batch_id&gt;/&lt;original_filename&gt;</code>; se existir, gravar; caso contrário, deixar NULL (resolver vai cair em fallback).</p>
+          <div class="tags"><span class="tag">backend/alembic/versions/0003_f4_pdf_paths.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B2 · Storage</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Abstrair <code>storage.py</code></h3>
+          <p>Função <code>get_pdf_path(upload_file)</code>: se <code>stored_filename</code> setado, retorna <code>UPLOAD_STORAGE_DIR/batch_id/stored_filename</code>; senão, fallback heurístico (tenta <code>original_filename</code>, depois <code>{sha[:12]}_{original_filename}</code>). Returns <code>Path</code> ou raise <code>FileNotFoundError</code>. <code>save_uploaded_pdf</code> em <code>server.py</code> passa a gravar <code>stored_filename</code> no record. <code>create_nf_entry</code> recebe <code>upload_file_id</code> e grava.</p>
+          <div class="tags"><span class="tag">backend/app/storage.py</span><span class="tag">backend/app/server.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B3 · Endpoint</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3><code>GET /api/uploads/files/{id}/pdf</code></h3>
+          <p>Autenticado. Carrega <code>UploadFile</code> via JOIN com <code>UploadBatch</code> (verifica auth do dono). 404 se não existir, 404 se arquivo sumiu do disco. <code>FileResponse</code> com <code>media_type="application/pdf"</code>. <code>Content-Disposition: inline; filename=&lt;original&gt;</code> por default, <code>attachment</code> se <code>?download=true</code>. Cabeçalho <code>X-Content-Type-Options: nosniff</code> defensivo. Expor <code>upload_file_id</code> em <code>serialize_nf_entry</code> para frontend conhecer o id.</p>
+          <div class="tags"><span class="tag">backend/app/server.py</span><span class="tag">tests/test_pdf_endpoint.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase C · Frontend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Coluna "Ações" nas tabelas</h3>
+          <p>Tabela de Notas (F3b) e tabela_persistida (Upload) ganham coluna estreita com dois ícones: 👁 (abrir em nova aba) e ⬇ (download). Click no 👁 abre <code>window.open(url, "_blank")</code>; click no ⬇ faz <code>window.location.href = url + "?download=true"</code>. Linhas legacy sem <code>upload_file_id</code> mostram botões disabled com tooltip "PDF não disponível".</p>
+          <div class="tags"><span class="tag">frontend/src/components/NfsBrowser.jsx</span><span class="tag">frontend/src/App.jsx</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase D · DoD</div>
+        <div class="dot-col"><span class="dot"></span></div>
+        <div class="body">
+          <h3>Definition of Done</h3>
+          <p>Migration up + down idempotente; suíte verde; smoke visual abre e baixa PDF de upload novo; PDF de upload legacy abre via fallback heurístico OU mostra disabled; CLAUDE.md menciona endpoint novo + colunas novas; aprovação humana.</p>
+          <div class="tags"><span class="tag">planning/DEFINITION_OF_DONE.md</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>Fluxo de dados</h2></div>
+    <p class="sec-intro">Click no ícone → fetch direto pela URL → backend resolve via JOIN → streaming do disco. Não há cache, nem proxy intermediário; o browser cuida do PDF inline.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 860 320" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+        </defs>
+        <g font-size="12" fill="#141413">
+          <rect x="20"  y="20"  width="190" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="115" y="43" text-anchor="middle" font-weight="600">Botão 👁 / ⬇</text>
+          <text x="115" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">NfsBrowser · App.jsx</text>
+
+          <rect x="340" y="20" width="200" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="440" y="43" text-anchor="middle" font-weight="600">GET /api/uploads</text>
+          <text x="440" y="60" text-anchor="middle" fill="#87867F" font-size="10.5">/files/{id}/pdf</text>
+
+          <rect x="340" y="140" width="200" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="440" y="163" text-anchor="middle" font-weight="600">get_pdf_path()</text>
+          <text x="440" y="180" text-anchor="middle" fill="#87867F" font-size="10.5">storage.py · resolve</text>
+
+          <rect x="340" y="260" width="200" height="44" rx="10" fill="#141413"/>
+          <text x="440" y="287" text-anchor="middle" font-weight="600" fill="#FAF9F5">filesystem</text>
+
+          <rect x="660" y="20" width="180" height="54" rx="10" fill="#141413"/>
+          <text x="750" y="43" text-anchor="middle" font-weight="600" fill="#FAF9F5">upload_files</text>
+          <text x="750" y="60" text-anchor="middle" fill="#C9B98A" font-size="10.5">JOIN batches (auth)</text>
+
+          <rect x="660" y="140" width="180" height="54" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="750" y="163" text-anchor="middle" font-weight="600">FileResponse</text>
+          <text x="750" y="180" text-anchor="middle" fill="#87867F" font-size="10.5">stream PDF</text>
+        </g>
+        <g stroke="#87867F" stroke-width="1.5" fill="none">
+          <path d="M210 47 L340 47" marker-end="url(#arrow)"/>
+          <path d="M540 47 L660 47" marker-end="url(#arrow)"/>
+          <path d="M440 74 L440 140" marker-end="url(#arrow)"/>
+          <path d="M440 194 L440 260" marker-end="url(#arrow)"/>
+          <path d="M540 167 L660 167" marker-end="url(#arrow)"/>
+          <path d="M750 140 C 750 100, 350 100, 220 80" marker-end="url(#arrow)"/>
+        </g>
+        <g font-size="10.5" fill="#87867F">
+          <text x="240" y="40">click</text>
+          <text x="555" y="40">SELECT</text>
+          <text x="447" y="115">stored_filename</text>
+          <text x="447" y="232">readBytes</text>
+          <text x="555" y="160">return path</text>
+          <text x="380" y="100">stream resp</text>
+        </g>
+      </svg>
+      <p class="caption">Streaming via <code>FileResponse</code> não carrega o PDF em memória — o browser faz o range request se precisar. PDFs grandes (50MB+) também trafegam.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Mockups</h2></div>
+    <p class="sec-intro">Coluna de ações compacta à direita da tabela. Linhas pré-F4 (legacy) mostram botões cinza disabled.</p>
+
+    <div class="mocks">
+      <div class="mock">
+        <div class="mock-label">A · Tabela de Notas com coluna de ações</div>
+        <div class="mock-body" style="padding: 0;">
+          <table class="nfs">
+            <colgroup>
+              <col style="width: 8%"><col style="width: 9%"><col style="width: 18%">
+              <col style="width: 12%"><col style="width: 24%"><col style="width: 11%">
+              <col style="width: 9%"><col style="width: 9%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Número</th><th>Emissão</th><th>Fornecedor</th>
+                <th>CNPJ</th><th>Descrição</th>
+                <th class="right">Valor total</th><th>Tipo</th><th style="text-align:center;">PDF</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">123</td><td>03/10/2024</td><td>Fornecedor A</td>
+                <td class="num">01.126.556/0001-91</td><td>Serviço de instalação</td>
+                <td class="right">R$ 5.656,23</td><td>service</td>
+                <td class="actions">
+                  <span class="icon-btn" title="Abrir em nova aba">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </span>
+                  <span class="icon-btn" title="Baixar PDF">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">124</td><td>15/10/2024</td><td>Fornecedor B</td>
+                <td class="num">02.118.842/0001-25</td><td>Instalação de medidores</td>
+                <td class="right">R$ 12.480,00</td><td>service</td>
+                <td class="actions">
+                  <span class="icon-btn" title="Abrir em nova aba">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </span>
+                  <span class="icon-btn" title="Baixar PDF">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">LEGADO-1</td><td>22/11/2023</td><td>Fornecedor C</td>
+                <td class="num">03.000.000/0001-00</td><td>NF anterior à F4</td>
+                <td class="right">R$ 800,00</td><td>service</td>
+                <td class="actions">
+                  <span class="icon-btn disabled" title="PDF não disponível (anterior à F4)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </span>
+                  <span class="icon-btn disabled" title="PDF não disponível">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top: 22px;">
+        <div class="mock-label">B · PDF aberto em nova aba (inline)</div>
+        <div class="mock-body" style="padding: 22px;">
+          <div class="browser-mock">
+            <div class="browser-bar">
+              <div class="browser-dots"><span></span><span></span><span></span></div>
+              <div class="browser-url">localhost:8000/api/uploads/files/abc-123-def/pdf</div>
+            </div>
+            <div class="browser-body">
+              <div class="pdf-page">
+                <h4>NOTA FISCAL DE SERVIÇO</h4>
+                <div>NF nº 123 · Emissão 03/10/2024</div>
+                <div>Fornecedor: Fornecedor A LTDA · CNPJ 01.126.556/0001-91</div>
+                <hr style="margin: 8px 0; border: 0; border-top: 1px dashed #999;">
+                <div>Descrição: Serviço de instalação elétrica</div>
+                <div>Quantidade: 1 · Preço unitário: R$ 5.656,23</div>
+                <div style="font-weight:700; margin-top:6px;">Valor total: R$ 5.656,23</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Código-chave</h2></div>
+    <p class="sec-intro">Resolver de path (<code>storage.py</code>) com fallback heurístico para legacy + endpoint que valida via JOIN para não vazar arquivos de outros usuários.</p>
+
+    <div class="code-grid">
+      <div class="code-block">
+        <div class="file-label">backend/app/storage.py — resolver de path</div>
+        <div class="code"><pre><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+<span class="kw">def</span> <span class="fn">get_pdf_path</span>(upload_file, base_dir: Path) -&gt; Path:
+    <span class="str">"""Resolve o caminho em disco de um upload_files.
+
+    Preferência: stored_filename (F4+). Fallback: heurística para
+    legados pré-F4 — tenta original_filename e depois prefixo SHA.
+    Levanta FileNotFoundError se nenhuma variante existir.
+    """</span>
+    batch_dir = base_dir / upload_file.upload_batch_id
+
+    <span class="kw">if</span> upload_file.stored_filename:
+        p = batch_dir / upload_file.stored_filename
+        <span class="kw">if</span> p.<span class="fn">exists</span>():
+            <span class="kw">return</span> p
+
+    <span class="cm"># Fallback legacy</span>
+    candidates = [
+        batch_dir / upload_file.original_filename,
+    ]
+    <span class="kw">if</span> upload_file.file_sha256:
+        candidates.<span class="fn">append</span>(
+            batch_dir / <span class="str">f"{upload_file.file_sha256[:12]}_{upload_file.original_filename}"</span>
+        )
+    <span class="kw">for</span> p <span class="kw">in</span> candidates:
+        <span class="kw">if</span> p.<span class="fn">exists</span>():
+            <span class="kw">return</span> p
+
+    <span class="kw">raise</span> <span class="fn">FileNotFoundError</span>(
+        <span class="str">f"PDF não encontrado para upload_file {upload_file.id}"</span>
+    )</pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="file-label">backend/app/server.py — endpoint</div>
+        <div class="code"><pre><span class="kw">@app</span>.<span class="fn">get</span>(<span class="str">"/api/uploads/files/{upload_file_id}/pdf"</span>)
+<span class="kw">def</span> <span class="fn">get_pdf</span>(
+    upload_file_id: str, request: Request, db: DbSession,
+    download: bool = <span class="kw">False</span>,
+):
+    <span class="fn">get_authenticated_user</span>(request)
+
+    <span class="cm"># JOIN garante que só o dono do batch (= usuário autenticado)</span>
+    <span class="cm"># pode acessar. Sem JOIN, qualquer auth poderia ler PDFs alheios.</span>
+    uf = db.<span class="fn">scalar</span>(
+        <span class="fn">select</span>(UploadFile)
+        .<span class="fn">join</span>(UploadBatch, UploadFile.upload_batch_id == UploadBatch.id)
+        .<span class="fn">where</span>(UploadFile.id == upload_file_id)
+    )
+    <span class="kw">if</span> uf <span class="kw">is None</span>:
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(404, <span class="str">"upload_file não encontrado"</span>)
+
+    <span class="kw">try</span>:
+        path = <span class="fn">get_pdf_path</span>(uf, UPLOAD_STORAGE_DIR)
+    <span class="kw">except</span> FileNotFoundError:
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(404, <span class="str">"PDF não disponível no disco"</span>)
+
+    disposition = <span class="str">"attachment"</span> <span class="kw">if</span> download <span class="kw">else</span> <span class="str">"inline"</span>
+    <span class="kw">return</span> <span class="fn">FileResponse</span>(
+        path, media_type=<span class="str">"application/pdf"</span>,
+        filename=uf.original_filename,
+        content_disposition_type=disposition,
+        headers={<span class="str">"X-Content-Type-Options"</span>: <span class="str">"nosniff"</span>},
+    )</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Riscos &amp; mitigações</h2></div>
+    <div class="risks">
+      <div class="row">
+        <div class="cell head">Risco</div>
+        <div class="cell head">Sev</div>
+        <div class="cell head">Mitigação</div>
+      </div>
+      <div class="row">
+        <div class="cell">Path traversal — atacante forja <code>upload_file_id</code> contendo <code>../../etc/passwd</code>.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">O id da URL é um UUID que vira lookup em <code>upload_files.id</code>. Nada do path vem do client. <code>stored_filename</code> é gerado pelo backend (UUID4) — não aceita input do usuário.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Vazamento de PDF entre usuários — usuário A acessa PDF do usuário B forjando id.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">JOIN <code>upload_files → upload_batches</code> + filtro <code>upload_batches.user_id = current_user</code>. Teste explícito: criar 2 usuários, usuário 1 tenta acessar PDF de batch do usuário 2 → deve dar 404 (não 403, para não vazar existência).</div>
+      </div>
+      <div class="row">
+        <div class="cell">PDFs legacy pré-F4 sem <code>stored_filename</code> retornam 404 mesmo com arquivo no disco — heurística pode falhar com nomes esquisitos (chars Unicode, espaços).</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Migration de backfill faz <code>os.listdir</code> no diretório de cada batch e tenta casar com <code>original_filename</code> sanitizado. Frontend mostra botão disabled com tooltip "PDF não disponível (anterior à F4)" para os que ainda assim não casarem.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Browser tenta interpretar PDF malformado como HTML (MIME sniffing) e executa JS embutido.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell"><code>X-Content-Type-Options: nosniff</code> + <code>Content-Type: application/pdf</code> explícito. Cliente confia no Content-Type, não sniffa.</div>
+      </div>
+      <div class="row">
+        <div class="cell">PDF grande (50+ MB) consome memória se carregado todo de uma vez.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell"><code>FileResponse</code> do FastAPI faz streaming nativamente, abrindo o arquivo em chunks. Sem carga em RAM. Suporta range requests para o browser navegar no PDF sem baixar tudo.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Mover <code>UPLOAD_STORAGE_DIR</code> para outro disco quebra os paths absolutos hardcoded.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell"><code>get_pdf_path()</code> recebe <code>base_dir</code> como argumento e usa <code>UPLOAD_STORAGE_DIR</code> da env. Mover é mudar 1 variável.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
+    <div class="open-q">
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Backfill agressivo na migration (Opção A)</div>
+        <div class="qd">Migration <code>0003</code> faz <code>os.listdir</code> em cada batch_dir do <code>UPLOAD_STORAGE_DIR</code> e popula <code>stored_filename</code> de uma vez. Gasta IO na deploy mas mantém o resolver simples — sem lógica de fallback no caminho quente. Confirmado em 2026-05-12.</div>
+        <div class="owner">Decidido · 2026-05-12</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Ícones somente na aba Notas</div>
+        <div class="qd">Tabela de Notas (F3b) ganha a coluna "PDF" com ícones 👁/⬇. Tabela_persistida da Upload <strong>NÃO</strong> recebe — Upload é só para subir notas, consultar passa pela Notas. Reforça a separação Upload/Consulta. Confirmado em 2026-05-12.</div>
+        <div class="owner">Decidido · 2026-05-12</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — F3 row-action fica para fase separada</div>
+        <div class="qd">F4 não toca em F3 (browser de contratos). Quando F3 for implementada, ela integra a navegação contrato → notas filtradas via reuso do endpoint <code>/api/nf-entries?contrato_id=…</code> que já existe. Confirmado em 2026-05-12.</div>
+        <div class="owner">Decidido · 2026-05-12</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Legacy <code>nf_entries</code> sem PDF: limitação aceita</div>
+        <div class="qd">NFs pré-F4 (criadas antes da migration 0003) ficam com botões PDF desabilitados. O schema antigo nunca armazenou a relação NF→arquivo, e backfill via timestamp/contrato seria frágil em batches grandes (existe 1 batch com 126 PDFs onde timestamps próximos inviabilizam o match). Diagnóstico no momento da decisão: 150 NFs no banco, 2 com <code>upload_file_id</code>, 148 sem. PDFs continuam em disco — só a navegação NF → PDF é que não funciona para legacy. Confirmado em 2026-05-12.</div>
+        <div class="owner">Decidido · 2026-05-12</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">07</span><h2>Definition of Done</h2></div>
+    <p class="sec-intro">Checklist extraído de <code>planning/DEFINITION_OF_DONE.md</code> aplicado a F4.</p>
+    <div class="dod">
+      <div class="dod-item"><span class="box"></span><span>Migration <code>0003</code> aplica e desfaz sem erro; backfill cobre os batches existentes no <code>banco_de_nf/</code>.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Testes backend: sem auth → 401; id inexistente → 404; arquivo removido do disco → 404; usuário A não vê PDF de usuário B (404, não 403).</span></div>
+      <div class="dod-item"><span class="box"></span><span>Testes: <code>inline</code> default; <code>?download=true</code> retorna <code>attachment</code> com <code>original_filename</code> correto.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Build do frontend (<code>npm run build</code>) sem warnings.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Smoke visual: upload novo abre e baixa; legacy mostra disabled com tooltip.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Suíte completa (<code>pytest</code>) verde.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma alteração em <code>backend/app/main.py</code> (parser intocado).</span></div>
+      <div class="dod-item"><span class="box"></span><span><code>CLAUDE.md</code> ganha menção do endpoint, da seção Storage atualizada e do <code>upload_file_id</code> em <code>nf_entries</code>.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Aprovação humana no PR.</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
