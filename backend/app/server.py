@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, 
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -373,14 +373,22 @@ def create_app() -> FastAPI:
 
     @app.get("/api/contratos")
     def list_contratos(request: Request, db: DbSession) -> list[dict[str, object]]:
-        """Lista contratos ativos ordenados por número. Autenticação obrigatória."""
+        """Lista contratos ativos ordenados por número, com contagem de NFs por contrato.
+
+        F4 follow-up — campo `nfs_count` permite que a aba Notas mostre direto no
+        dropdown quantas NFs cada contrato tem (LEFT JOIN com `nf_entries.contrato_id`).
+        NFs pré-F2 (contrato_id NULL) não entram em nenhuma contagem — comportamento
+        esperado, consistente com o filtro de `contrato_id` no endpoint de NFs.
+        """
         get_authenticated_user(request)
-        rows = db.scalars(
-            select(Contrato)
+        rows = db.execute(
+            select(Contrato, func.count(NfEntry.id).label("nfs_count"))
+            .outerjoin(NfEntry, NfEntry.contrato_id == Contrato.id)
             .where(Contrato.ativo.is_(True))
+            .group_by(Contrato.id)
             .order_by(Contrato.numero.asc())
         ).all()
-        return [serialize_contrato(c) for c in rows]
+        return [{**serialize_contrato(c), "nfs_count": count} for c, count in rows]
 
     @app.get("/api/session/contrato")
     def get_session_contrato(request: Request, db: DbSession) -> dict[str, object]:

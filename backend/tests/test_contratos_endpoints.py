@@ -197,3 +197,47 @@ def test_require_contrato_returns_id_when_authenticated_and_present():
 
     result = require_contrato(fake_request)
     assert result == "abc-123"
+
+
+# -------- F4 follow-up: nfs_count no /api/contratos --------
+
+def test_list_contratos_includes_nfs_count(client) -> None:
+    """`GET /api/contratos` retorna `nfs_count` por contrato via LEFT JOIN."""
+    from datetime import date
+    from decimal import Decimal
+    from app.models import NfEntry
+
+    _seed_contratos([
+        _sample_contrato("ECFS A"),
+        _sample_contrato("ECFS B"),
+        _sample_contrato("ECFS Z"),  # sem nenhuma NF
+    ])
+
+    # 3 NFs para A, 1 para B, 1 sem contrato_id (pré-F2 — não deve contar)
+    with get_session() as db:
+        for i, (numero_nf, cid) in enumerate([
+            ("A1", "id-ECFS A"),
+            ("A2", "id-ECFS A"),
+            ("A3", "id-ECFS A"),
+            ("B1", "id-ECFS B"),
+            ("LEGADO", None),
+        ]):
+            db.add(NfEntry(
+                business_key=f"bk-{i}-{numero_nf}",
+                numero_nf=numero_nf,
+                cnpj="00000000000001",
+                data_emissao=date(2024, 6, 15),
+                tipo_nota="service",
+                descricao=f"desc {numero_nf}",
+                valor_total=Decimal("100"),
+                contrato_id=cid,
+                raw_payload={},
+            ))
+        db.commit()
+
+    authenticate(client)
+    response = client.get("/api/contratos")
+    assert response.status_code == 200
+    data = response.json()
+    counts = {c["numero"]: c["nfs_count"] for c in data}
+    assert counts == {"ECFS A": 3, "ECFS B": 1, "ECFS Z": 0}, counts

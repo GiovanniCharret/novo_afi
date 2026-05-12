@@ -40,9 +40,12 @@ function formatBRL(n) {
 }
 
 function describeContrato(c) {
-  // Formato do item do dropdown: "sigla · tranche · tipo (numero)"
+  // Formato do item do dropdown: "sigla · tranche · tipo (numero) — N NFs no banco"
+  // `nfs_count` vem do endpoint /api/contratos (F4 follow-up, 2026-05-12).
   const meta = [c.sigla, c.tranche, c.tipo_contrato].filter(Boolean).join(" · ");
-  return `${meta} (${c.numero})`;
+  const count = typeof c.nfs_count === "number" ? c.nfs_count : 0;
+  const label = `${count} ${count === 1 ? "NF" : "NFs"} no banco`;
+  return `${meta} (${c.numero}) — ${label}`;
 }
 
 export default function NfsBrowser({ selectedContratoId }) {
@@ -165,11 +168,6 @@ export default function NfsBrowser({ selectedContratoId }) {
             <option key={c.id} value={c.id}>{describeContrato(c)}</option>
           ))}
         </select>
-        {contratoId && (
-          <span className="nfs-picker-info">
-            {totalNoContrato} NF{totalNoContrato === 1 ? "" : "s"} no banco para este contrato
-          </span>
-        )}
       </div>
 
       {!contratoId ? (

@@ -967,12 +967,6 @@ tr:hover td { background: #f8fbff; }
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(27,128,196,0.15);
 }
-.nfs-picker-info {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
-}
-
 .nfs-filter-bar {
   display: flex;
   flex-wrap: wrap;
