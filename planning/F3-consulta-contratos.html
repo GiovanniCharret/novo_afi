@@ -279,7 +279,7 @@
         <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
         <div class="body">
           <h3>Decisões registradas</h3>
-          <p>Acesso por <strong>topbar + menu</strong>; inativos ocultos por default com toggle; clique na linha não faz nada (consulta pura); selects HTML nativos; UF mostra nome completo, envia sigla. Checkpoint humano antes de B.</p>
+          <p>Acesso por <strong>link no topbar</strong> (3º ao lado de Upload/Notas — sem menu de tabs separado, removido em 2026-05-12); inativos ocultos por default com toggle; <strong>clique na linha seleciona o contrato como ativo na sessão e leva para a aba Upload</strong> (decisão F3-c revisada em 2026-05-12 após uso real); selects HTML nativos; UF mostra nome completo, envia sigla; ordem por string em `numero` (manter padrão atual do endpoint); export CSV/XLSX <strong>deferido</strong>.</p>
           <div class="tags"><span class="tag">planning/PLAN.md F3</span></div>
         </div>
       </div>
@@ -299,7 +299,7 @@
         <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
         <div class="body">
           <h3>Tela "Contratos" + navegação</h3>
-          <p>Novo componente <code>&lt;ContratosBrowser&gt;</code> em <code>frontend/src/components/</code>. App.jsx ganha state <code>currentView ∈ {"upload","contratos"}</code> e renderiza por aba. Topbar ganha link "Contratos"; menu horizontal abaixo do topbar com tabs "Upload de notas" e "Contratos" (ativo realça). Tabela <code>table-layout: fixed</code> + ellipsis (regra de design). Filtros disparam debounced fetch (300ms) para o endpoint estendido.</p>
+          <p>Novo componente <code>&lt;ContratosBrowser&gt;</code> em <code>frontend/src/components/</code>. App.jsx evolui o state existente para <code>currentView ∈ {"upload","notas","contratos"}</code>. Topbar ganha 3º link "Contratos" ao lado dos atuais "Upload"/"Notas". Tabela <code>table-layout: fixed</code> + ellipsis (regra de design). Filtros disparam debounced fetch (300ms) para o endpoint estendido. Reusa padrão de <code>AbortController</code> do NfsBrowser.</p>
           <div class="tags"><span class="tag">frontend/src/App.jsx</span><span class="tag">components/ContratosBrowser.jsx</span><span class="tag">styles.css</span></div>
         </div>
       </div>
@@ -378,15 +378,11 @@
             <span class="brand">GFIP - Recebimento de Notas Fiscais</span>
             <div class="links">
               <a>Upload</a>
+              <a>Notas</a>
               <a class="active">Contratos</a>
               <span class="ctx">ECFS 101/2005</span>
               <a>Sair</a>
             </div>
-          </div>
-
-          <div class="sim-menu">
-            <span class="tab">Upload de notas</span>
-            <span class="tab active">Contratos</span>
           </div>
 
           <div class="filter-bar">
@@ -552,15 +548,15 @@
   <section>
     <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
     <div class="open-q">
-      <div class="q">
-        <div class="qt">Ordenação default das colunas</div>
-        <div class="qd">Spec diz "ordenados por <code>numero</code>" (igual ao endpoint atual). Mas <code>ECFS 101/2005</code> e <code>ECM 001/2020</code> não ordenam intuitivamente como string — "ECFS 1..." vem antes de "ECM 1..." mas "ECFS 332" vem depois de "ECFS 101". Ordem por string é consistente — só não é "humana". Proposta: manter ordem por string; em fase futura adicionar headers clicáveis para reordenar.</div>
-        <div class="owner">Decidir antes da Fase C</div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Ordenação default por string (campo <code>numero</code>)</div>
+        <div class="qd">Mantém o padrão atual do endpoint (`ORDER BY numero ASC`). Pode ordenar de forma não intuitiva (`ECFS 332` depois de `ECFS 101`), mas é consistente com o ContratoSelector e com o dropdown da Notas. Headers clicáveis para reordenar fica para fase futura se aparecer demanda. Confirmado em 2026-05-12.</div>
+        <div class="owner">Decidido · 2026-05-12</div>
       </div>
-      <div class="q">
-        <div class="qt">Exportar resultado filtrado (CSV/XLSX)?</div>
-        <div class="qd">PLAN.md não menciona. Pode ser útil para operadores que copiam linhas para planilhas. Implica novo endpoint <code>/api/contratos.csv</code> ou geração client-side. Fora do escopo F3 a menos que prioridade explícita.</div>
-        <div class="owner">Decidir agora ou diferir para fase futura</div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Export CSV/XLSX deferido</div>
+        <div class="qd">F3 entrega visualização + filtros. Se aparecer demanda de export, é trivial reusar <code>frontend/src/lib/exportExcel.js</code> e adicionar uma terceira variante <code>exportContratos(rows)</code>. Fora do escopo desta entrega. Confirmado em 2026-05-12.</div>
+        <div class="owner">Decidido · 2026-05-12</div>
       </div>
     </div>
   </section>

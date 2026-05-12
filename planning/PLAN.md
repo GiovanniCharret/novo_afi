@@ -232,19 +232,27 @@ Motivação: "as letrinhas confundem" (siglas técnicas como `ECFS 327/2013` nã
 
 ## F3 — Página de consulta de contratos
 
-**Objetivo**: tela dedicada para busca e visualização dos contratos da base, sem vínculo com a sessão ativa.
+**Objetivo**: tela dedicada para busca e visualização dos **contratos** da base (planilha estática vinda do seed em F2), sem vínculo com a sessão ativa. Feature irmã de F3b: F3 lê a tabela `contratos`, F3b lê `nf_entries` filtrado por contrato. Spec visual completa em `planning/F3-consulta-contratos.html`.
 
 ### Subetapas
-- [ ] `GET /api/contratos?numero=&sigla=&uf=&tranche=&tipo_contrato=&com_valor=` (autenticado). Filtros opcionais, combinados com `AND`. `com_valor=true` filtra `valor_contrato > 0`.
-- [ ] Tela "Contratos" no frontend, acessível pelo menu da área logada.
+- [ ] Estender `GET /api/contratos` com query params opcionais `?numero=&sigla=&uf=&tranche=&tipo_contrato=&com_valor=&incluir_inativos=`. Defaults `None`/`False` preservam o comportamento atual (regressão obrigatória — endpoint é compartilhado com `ContratoSelector` em F2 e dropdown da Notas em F3b). `numero`/`sigla` usam `ILIKE %x%`. Demais filtros combinam por `AND`.
+- [ ] Tela "Contratos" no frontend (3ª aba). Componente `frontend/src/components/ContratosBrowser.jsx`. App.jsx evolui `currentView` para `{"upload","notas","contratos"}`. Topbar ganha 3º link "Contratos".
 - [ ] Tabela com colunas: Número, Fornecedor (sigla), UF, Tranche, Tipo, Valor Contrato, Valor CDE, % CDE.
-- [ ] Barra de filtros: campo texto livre (busca em `numero` + `sigla`), select de UF, select de tipo (`LPT` / `MLA`), select de tranche, toggle "apenas com valor definido".
-- [ ] Tabela usa `table-layout: fixed` e ellipsis (regras de design já em `CLAUDE.md`).
+- [ ] Barra de filtros: campo texto livre (busca em `numero` + `sigla`), select de UF, select de tipo (`LPT` / `MLA`), select de tranche, toggle "apenas com valor definido", toggle "incluir inativos".
+- [ ] Tabela usa `table-layout: fixed` e ellipsis (regras de design já em `CLAUDE.md`). Debounce 300ms + `AbortController` no fetch (reusa padrão do `NfsBrowser`).
 
 ### Critérios de Sucesso
 - `?uf=SP` retorna apenas SP; `?tipo_contrato=MLA` retorna apenas MLA; `?com_valor=true` retorna apenas com valor > 0.
 - Filtros combinados (`?uf=SP&tipo_contrato=LPT`) funcionam como `AND`.
 - Tela renderiza sem erros com base vazia.
+- Sem params, response idêntica ao comportamento atual (regressão — ContratoSelector e NfsBrowser não quebram).
+
+### Decisões registradas (2026-05-12)
+- **F3-a**: acesso por **link no topbar** (3º ao lado de Upload/Notas). Sem menu de tabs separado — esse foi removido em 2026-05-12 por poluição visual.
+- **F3-b**: inativos ocultos por default; toggle "incluir inativos" disponível.
+- **F3-c**: ~~clique na linha não faz nada~~ → **revisada em 2026-05-12**: clique numa linha **dispara `POST /api/session/contrato` e leva o usuário para a aba Upload com o contrato escolhido como ativo na sessão**. Equivalente a abrir o `ContratoSelector` + confirmar, sem precisar passar pelo logout. Linhas com `ativo=false` ficam visualmente desabilitadas (cor `text-muted` + cursor `not-allowed`) e não respondem ao clique. Tooltip informa o comportamento. Decisão tomada após uso real revelar que abrir a tabela de contratos sem poder selecionar é uma cobertura morta.
+- **F3-d**: ordem default por `numero` string (lexicográfico). Mantém padrão atual do endpoint, consistente com ContratoSelector e dropdown da Notas. Headers clicáveis ficam para fase futura se aparecer demanda.
+- **F3-e**: export CSV/XLSX **deferido**. Se necessário, reusa `frontend/src/lib/exportExcel.js` adicionando variante `exportContratos`.
 
 ---
 

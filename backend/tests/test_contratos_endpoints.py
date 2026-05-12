@@ -241,3 +241,146 @@ def test_list_contratos_includes_nfs_count(client) -> None:
     data = response.json()
     counts = {c["numero"]: c["nfs_count"] for c in data}
     assert counts == {"ECFS A": 3, "ECFS B": 1, "ECFS Z": 0}, counts
+
+
+# -------- F3: filtros opcionais em /api/contratos --------
+
+def test_list_contratos_no_params_preserves_regression(client) -> None:
+    """Sem params → comportamento atual (todos ativos ordenados por numero)."""
+    _seed_contratos([
+        _sample_contrato("ECFS 101/2005", uf="SP", tipo_contrato="LPT", tranche="2ª Tranche"),
+        _sample_contrato("ECFS 280/2009", uf="AC", tipo_contrato="LPT", tranche="4ª Tranche", sigla="ENERGISA"),
+        _sample_contrato("ECM 008/2022", uf="AC", tipo_contrato="MLA", tranche="1ª Tranche", sigla="ENERGISA"),
+        _sample_contrato("ECFS 999/1999", ativo=False),
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos")
+    data = response.json()
+    assert len(data) == 3  # inativo escondido
+    assert [c["numero"] for c in data] == sorted([c["numero"] for c in data])
+
+
+def test_list_contratos_filter_by_numero_ilike(client) -> None:
+    _seed_contratos([
+        _sample_contrato("ECFS 101/2005"),
+        _sample_contrato("ECFS 280/2009"),
+        _sample_contrato("ECM 008/2022"),
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos?numero=ECFS")
+    data = response.json()
+    assert len(data) == 2
+    assert all(c["numero"].startswith("ECFS") for c in data)
+
+
+def test_list_contratos_filter_by_sigla_ilike_case_insensitive(client) -> None:
+    _seed_contratos([
+        _sample_contrato("ECFS 1", sigla="CPFL"),
+        _sample_contrato("ECFS 2", sigla="ENERGISA AC"),
+        _sample_contrato("ECFS 3", sigla="energisa rj"),  # minúsculo
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos?sigla=energisa")
+    data = response.json()
+    assert len(data) == 2, f"esperado 2 (case-insensitive), recebido {len(data)}"
+
+
+def test_list_contratos_filter_by_uf(client) -> None:
+    _seed_contratos([
+        _sample_contrato("ECFS 1", uf="SP"),
+        _sample_contrato("ECFS 2", uf="SP"),
+        _sample_contrato("ECFS 3", uf="AC"),
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos?uf=SP")
+    data = response.json()
+    assert len(data) == 2
+
+
+def test_list_contratos_filter_by_tipo_contrato(client) -> None:
+    _seed_contratos([
+        _sample_contrato("ECFS 1", tipo_contrato="LPT"),
+        _sample_contrato("ECFS 2", tipo_contrato="MLA"),
+        _sample_contrato("ECFS 3", tipo_contrato="MLA"),
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos?tipo_contrato=MLA")
+    data = response.json()
+    assert len(data) == 2
+
+
+def test_list_contratos_com_valor_filter(client) -> None:
+    _seed_contratos([
+        _sample_contrato("ECFS COM_VALOR", valor_contrato=1000000),
+        _sample_contrato("ECFS SEM_VALOR", valor_contrato=0),
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos?com_valor=true")
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["numero"] == "ECFS COM_VALOR"
+
+
+def test_list_contratos_incluir_inativos(client) -> None:
+    _seed_contratos([
+        _sample_contrato("ECFS ATIVO", ativo=True),
+        _sample_contrato("ECFS INATIVO", ativo=False),
+    ])
+    authenticate(client)
+
+    # default — só ativos
+    default_resp = client.get("/api/contratos")
+    assert len(default_resp.json()) == 1
+
+    # com toggle ligado — ambos
+    incl_resp = client.get("/api/contratos?incluir_inativos=true")
+    data = incl_resp.json()
+    assert len(data) == 2
+
+
+def test_list_contratos_combination_is_and(client) -> None:
+    """Filtros combinados aplicam AND."""
+    _seed_contratos([
+        _sample_contrato("ECFS 1", uf="SP", tipo_contrato="LPT", valor_contrato=1000),
+        _sample_contrato("ECFS 2", uf="SP", tipo_contrato="MLA", valor_contrato=1000),
+        _sample_contrato("ECFS 3", uf="AC", tipo_contrato="LPT", valor_contrato=1000),
+        _sample_contrato("ECFS 4", uf="SP", tipo_contrato="LPT", valor_contrato=0),
+    ])
+    authenticate(client)
+    response = client.get("/api/contratos?uf=SP&tipo_contrato=LPT&com_valor=true")
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["numero"] == "ECFS 1"
+
+
+def test_list_contratos_empty_filter_returns_empty(client) -> None:
+    _seed_contratos([_sample_contrato("ECFS 1", uf="SP")])
+    authenticate(client)
+    response = client.get("/api/contratos?uf=ZZ")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_contratos_q_matches_numero_or_sigla(client) -> None:
+    """Param `q` faz ILIKE OR em numero e sigla (busca livre)."""
+    _seed_contratos([
+        _sample_contrato("ECFS 101/2005", sigla="CPFL"),
+        _sample_contrato("ECFS 280/2009", sigla="ENERGISA AC"),
+        _sample_contrato("ECM 008/2022", sigla="ENERGISA AC"),
+        _sample_contrato("ECFS 999/1999", sigla="OUTRO"),
+    ])
+    authenticate(client)
+
+    # casa por sigla
+    r1 = client.get("/api/contratos?q=energisa")
+    assert len(r1.json()) == 2
+
+    # casa por numero
+    r2 = client.get("/api/contratos?q=ECFS")
+    nums = sorted(c["numero"] for c in r2.json())
+    assert nums == ["ECFS 101/2005", "ECFS 280/2009", "ECFS 999/1999"]
+
+    # parcial vale para qualquer um dos dois
+    r3 = client.get("/api/contratos?q=008")
+    assert len(r3.json()) == 1
+    assert r3.json()[0]["numero"] == "ECM 008/2022"

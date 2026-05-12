@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { describeContrato } from "../lib/describeContrato";
 import { exportNfsResumo } from "../lib/exportExcel";
 
 /**
@@ -39,13 +40,12 @@ function formatBRL(n) {
   }).format(n);
 }
 
-function describeContrato(c) {
+function describeContratoNoDropdown(c) {
   // Formato do item do dropdown: "sigla · tranche · tipo (numero) — N NFs no banco"
   // `nfs_count` vem do endpoint /api/contratos (F4 follow-up, 2026-05-12).
-  const meta = [c.sigla, c.tranche, c.tipo_contrato].filter(Boolean).join(" · ");
   const count = typeof c.nfs_count === "number" ? c.nfs_count : 0;
   const label = `${count} ${count === 1 ? "NF" : "NFs"} no banco`;
-  return `${meta} (${c.numero}) — ${label}`;
+  return `${describeContrato(c)} — ${label}`;
 }
 
 export default function NfsBrowser({ selectedContratoId }) {
@@ -165,7 +165,7 @@ export default function NfsBrowser({ selectedContratoId }) {
         >
           <option value="">— Selecione um contrato —</option>
           {contratos.map((c) => (
-            <option key={c.id} value={c.id}>{describeContrato(c)}</option>
+            <option key={c.id} value={c.id}>{describeContratoNoDropdown(c)}</option>
           ))}
         </select>
       </div>

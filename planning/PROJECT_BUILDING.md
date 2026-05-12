@@ -65,24 +65,31 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 
 ---
 
-## Estado atual do repositório (snapshot 2026-05-05)
+## Estado atual do repositório (snapshot 2026-05-12)
 
 ### O que já existe e funciona
 
 - Backend FastAPI com upload + persistência + SSE (Partes 1–7 do MVP em `docs/PLAN.md`).
-- Frontend SPA monolítica em `frontend/src/App.jsx` com login fictício, upload, tabela, status badges.
-- Parser v10 (`backend/app/main.py`) copiado para o repo, junto com `ocr_reader.py`, `cnpj_lookup.py`, `description_cleaner.py`, `contrato_config.py`. Ainda **não roda non-interactive** — F8 vai resolver.
-- FastAPI app movida para `backend/app/server.py` (era `main.py` antes da chegada do parser v10).
-- `backend/app/security.py` criado com esqueleto de hash de senha (Decisão #2).
-- `backend/app/main_v9.deprecated.py` mantido como referência histórica (sufixo torna não-importável).
+- Frontend SPA com 2 abas comutadas no topbar: **Upload** (App.jsx, fluxo herdado) e **Notas** (`components/NfsBrowser.jsx`, F3b).
+- Parser v10 ✅ non-interactive desde F8a (2026-05-06). Parser DEV preservado conforme regra; PROD lives ao lado com marcadores `# FASE PROD`/`# FASE DEV`.
+- Tabela `contratos` ✅ seedada (110 entradas) — F2 (2026-05-11).
+- Endpoints F3b ✅: `/api/nf-entries` com filtros (`?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`), `/api/contratos` com `nfs_count`.
+- F4 ✅: visualização/download de PDF via `GET /api/uploads/files/{id}/pdf` + coluna PDF na aba Notas com botões 👁/⬇.
+- Schema gerenciado via Alembic (3 migrations aplicadas), `start.ps1` roda `alembic upgrade head` no boot.
+- `backend/app/security.py` com esqueleto de hash de senha (Decisão #2 — aguarda F1).
 - 9 das 10 Decisões Pendentes resolvidas; Decisão #10 deferida.
 
-### O que está pendente para começar
+### O que está pendente
 
-- ~~**F5** (limite 550 PDFs/batch): concluída em 2026-05-07.~~
-- **F2** (seleção de contrato + tabela `contratos` + seed): próxima na ordem.
-- **F1** (auth real + Alembic setup): exige migration do schema, gateway para tudo que depende de auth séria.
-- ~~**F8** (refactor non-interactive de `main.py`): desbloqueado em F8a (2026-05-06).~~
+- ~~**F5** (limite 550 PDFs/batch): concluída 2026-05-07.~~
+- ~~**F2** (seleção de contrato + tabela `contratos` + seed): concluída 2026-05-11.~~
+- ~~**F3b** (consulta de NFs por contrato): concluída 2026-05-12.~~
+- ~~**F4** (visualizar/baixar PDF): concluída 2026-05-12.~~
+- ~~**F8a** (parser non-interactive): concluída 2026-05-06.~~
+- **F3** (browser de contratos — planilha estática). Plano em `planning/F3-consulta-contratos.html`. Sem schema novo.
+- **F6** (totalizadores no painel de upload). Plano completo em `planning/F6-totalizadores.html` com decisões fechadas. Sem schema novo.
+- **F1** (auth real + e-mails de confirmação): exige migration `users` + SMTP. Gateway para F7.
+- **F7** (e-mails transacionais — depende de F1).
 - **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): refina UX de NFs com campo faltante. Hoje cai em `erro_parsing`.
 
 ### F8a — concluída em 2026-05-06
@@ -107,7 +114,9 @@ Parser non-interactive entregue. Itens que cobriam:
 
 ### Próxima tarefa concreta proposta
 
-Após F8a e F5 entregues, a ordem do `planning/PLAN.md` aponta para **F2** (seleção de contrato + tabela `contratos` + seed). F8b (modal + `nf_pending`) está reordenada para entrar entre F6 e F1.
+Após F2/F3b/F4 entregues em 2026-05-11 e 2026-05-12, restam **F3** (browser de contratos — UI sem schema, plano em HTML pronto) e **F6** (totalizadores — UI + endpoint agregador, plano em HTML pronto com decisões fechadas). F6 tem ROI visível maior (gráficos no painel); F3 cobre auditoria.
+
+Depois desses dois, o caminho crítico restante é **F1 → F7 → F8b**.
 
 
 

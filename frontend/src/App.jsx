@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 
 import ContratoSelector from "./components/ContratoSelector";
+import ContratosBrowser from "./components/ContratosBrowser";
 import NfsBrowser from "./components/NfsBrowser";
+import { describeContrato } from "./lib/describeContrato";
 import { exportEntriesCompletas } from "./lib/exportExcel";
 
 const defaultLoginForm = { username: "user", password: "password" };
@@ -77,7 +79,7 @@ export default function App() {
   // Após login, fetch GET /api/session/contrato decide entre ContratoSelector e área de upload.
   const [selectedContrato, setSelectedContrato] = useState(null);
   const [contratoBootChecked, setContratoBootChecked] = useState(false);
-  // F3b — aba ativa na área logada: "upload" | "notas". "contratos" reservado para F3.
+  // F3b/F3 — aba ativa na área logada: "upload" | "notas" | "contratos".
   const [currentView, setCurrentView] = useState("upload");
 
   useEffect(() => {
@@ -498,11 +500,18 @@ export default function App() {
           >
             Notas
           </button>
+          <button
+            type="button"
+            className={`topbar-link${currentView === "contratos" ? " is-active" : ""}`}
+            onClick={() => setCurrentView("contratos")}
+          >
+            Contratos
+          </button>
         </nav>
         <div className="topbar-right">
-          {/* F2 — contrato ativo na topbar */}
-          <span className="topbar-contrato" title={`${selectedContrato.sigla} · ${selectedContrato.uf ?? ""}`.trim()}>
-            {selectedContrato.numero}
+          {/* F2 — contrato ativo na topbar. F3 (2026-05-12): mesmo formato do dropdown da Notas. */}
+          <span className="topbar-contrato" title={selectedContrato.numero}>
+            {describeContrato(selectedContrato)}
           </span>
           <span
             className={`status-dot ${apiStatus.loading ? "is-loading" : "is-online"}`}
@@ -518,6 +527,15 @@ export default function App() {
       <main className="main-content">
         {currentView === "notas" && (
           <NfsBrowser selectedContratoId={selectedContrato?.id} />
+        )}
+
+        {currentView === "contratos" && (
+          <ContratosBrowser
+            onPick={(contrato) => {
+              setSelectedContrato(contrato);
+              setCurrentView("upload");
+            }}
+          />
         )}
 
         {currentView === "upload" && (<>

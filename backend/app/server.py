@@ -64,6 +64,7 @@ def serialize_contrato(c: Contrato) -> dict[str, object]:
         "valor_contrato": str(c.valor_contrato),
         "valor_cde": str(c.valor_cde),
         "participacao_cde": str(c.participacao_cde),
+        "ativo": c.ativo,
     }
 
 
@@ -372,21 +373,61 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/api/contratos")
-    def list_contratos(request: Request, db: DbSession) -> list[dict[str, object]]:
-        """Lista contratos ativos ordenados por número, com contagem de NFs por contrato.
+    def list_contratos(
+        request: Request,
+        db: DbSession,
+        numero: str | None = None,
+        sigla: str | None = None,
+        q: str | None = None,
+        uf: str | None = None,
+        tranche: str | None = None,
+        tipo_contrato: str | None = None,
+        com_valor: bool = False,
+        incluir_inativos: bool = False,
+    ) -> list[dict[str, object]]:
+        """Lista contratos com filtros opcionais e contagem de NFs por contrato.
 
-        F4 follow-up — campo `nfs_count` permite que a aba Notas mostre direto no
-        dropdown quantas NFs cada contrato tem (LEFT JOIN com `nf_entries.contrato_id`).
-        NFs pré-F2 (contrato_id NULL) não entram em nenhuma contagem — comportamento
-        esperado, consistente com o filtro de `contrato_id` no endpoint de NFs.
+        F3 ✅ — query params `?numero=&sigla=&q=&uf=&tranche=&tipo_contrato=&com_valor=&incluir_inativos=`.
+        Defaults `None`/`False` preservam regressão: sem params, comportamento idêntico
+        ao usado por ContratoSelector (F2) e dropdown da Notas (F3b).
+
+        Semântica:
+        - `q`: busca livre via ILIKE OR sobre `numero` e `sigla` (campo texto único do
+          frontend que casa qualquer um dos dois).
+        - `numero` / `sigla`: ILIKE individuais (uso fino via API).
+        - Demais filtros: igualdade exata, combinam por AND.
+
+        Sempre retorna `nfs_count` (F4 follow-up — LEFT JOIN com `nf_entries.contrato_id`).
+        NFs pré-F2 (contrato_id NULL) não entram em nenhuma contagem.
         """
         get_authenticated_user(request)
-        rows = db.execute(
+        stmt = (
             select(Contrato, func.count(NfEntry.id).label("nfs_count"))
             .outerjoin(NfEntry, NfEntry.contrato_id == Contrato.id)
-            .where(Contrato.ativo.is_(True))
-            .group_by(Contrato.id)
-            .order_by(Contrato.numero.asc())
+        )
+        if not incluir_inativos:
+            stmt = stmt.where(Contrato.ativo.is_(True))
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(
+                Contrato.numero.ilike(like),
+                Contrato.sigla.ilike(like),
+            ))
+        if numero:
+            stmt = stmt.where(Contrato.numero.ilike(f"%{numero}%"))
+        if sigla:
+            stmt = stmt.where(Contrato.sigla.ilike(f"%{sigla}%"))
+        if uf:
+            stmt = stmt.where(Contrato.uf == uf)
+        if tranche:
+            stmt = stmt.where(Contrato.tranche == tranche)
+        if tipo_contrato:
+            stmt = stmt.where(Contrato.tipo_contrato == tipo_contrato)
+        if com_valor:
+            stmt = stmt.where(Contrato.valor_contrato > 0)
+
+        rows = db.execute(
+            stmt.group_by(Contrato.id).order_by(Contrato.numero.asc())
         ).all()
         return [{**serialize_contrato(c), "nfs_count": count} for c, count in rows]
 

@@ -110,11 +110,12 @@ browser
 
 0. (Após F5/F2) `POST /api/uploads` valida que `len(files) <= 550` (caso contrário 422) e que há `contrato_id` na sessão (caso contrário 400).
 1. Frontend envia `POST /api/uploads` com lista de arquivos PDF.
-2. O backend salva cada PDF em `backend/banco_de_nf/<batch_id>/`.
-3. `LegacyParserAdapter.parse_pdf_bytes(filename, content, debug_dir, contrato_numero)` invoca `backend/app/main.py` via subprocess (timeout 180s) com flags `--non-interactive --contrato N --input-dir X --output-dir Y`. **Após F8a**: `contrato_numero=None` cai no placeholder `DEFAULT_CONTRATO_PRE_F2 = "ECFS 101/2005"` (vira código morto após F2 wirear `request.session["contrato_id"]`). Adapter classifica `process.returncode`: 2 = `ParserCampoFaltante` (Tipo 1), 3 = `ParserEstruturaQuebrada` (Tipo 2), outros != 0 = falha genérica. Em F8b, exit 2 vai virar `nf_pending` + modal em vez de `erro_parsing`.
-4. O parser gera um `.xlsx` em `output_dfs/` que é lido como DataFrame. Os artefatos (`log.json`, `output_dfs/`, `stdout.txt`, `stderr.txt`) são copiados para `backend/app/parser_debug/<batch_id>/<arquivo>/` para diagnóstico.
-5. Cada linha do DataFrame é inserida em `nf_entries` se a `business_key` for inédita; caso contrário, conta como `duplicado`.
-6. O resultado por arquivo (`processado`, `duplicado`, `rejeitado`, `erro_parsing`) é persistido em `upload_files`.
+2. O backend salva cada PDF em `backend/banco_de_nf/<batch_id>/<stored_filename>`. **Após F4**: `stored_filename` é UUID4 + `.pdf` gerado por `save_uploaded_pdf` (separado de `original_filename`); ambos vão pro `UploadFileRecord`.
+3. **Após F4**: `UploadFileRecord` é criado upfront com `status="processando"` e `db.flush()` antes do parser rodar, para que `nf_entries.upload_file_id` (FK) tenha um id válido durante a inserção das linhas. O status final é setado depois.
+4. `LegacyParserAdapter.parse_pdf_bytes(filename, content, debug_dir, contrato_numero)` invoca `backend/app/main.py` via subprocess (timeout 180s) com flags `--non-interactive --contrato N --input-dir X --output-dir Y`. **Após F8a**: `contrato_numero=None` cai no placeholder `DEFAULT_CONTRATO_PRE_F2 = "ECFS 101/2005"` (vira código morto após F2 wirear `request.session["contrato_id"]`). Adapter classifica `process.returncode`: 2 = `ParserCampoFaltante` (Tipo 1), 3 = `ParserEstruturaQuebrada` (Tipo 2), outros != 0 = falha genérica. Em F8b, exit 2 vai virar `nf_pending` + modal em vez de `erro_parsing`.
+5. O parser gera um `.xlsx` em `output_dfs/` que é lido como DataFrame. Os artefatos (`log.json`, `output_dfs/`, `stdout.txt`, `stderr.txt`) são copiados para `backend/app/parser_debug/<batch_id>/<arquivo>/` para diagnóstico.
+6. Cada linha do DataFrame é inserida em `nf_entries` se a `business_key` for inédita; caso contrário, conta como `duplicado`. **Após F2/F4**: novas `nf_entries` recebem `contrato_id` (da sessão) e `upload_file_id` (do record criado no passo 3).
+7. O resultado por arquivo (`processado`, `duplicado`, `rejeitado`, `erro_parsing`) atualiza o `UploadFileRecord` existente — não cria um novo.
 
 ### Deduplicação
 
@@ -137,12 +138,14 @@ Tabelas principais:
 |---|---|
 | `users` | Usuários autenticados. **Após F1**: ganha `email UNIQUE NOT NULL`, `email_confirmed`, `confirmation_token`, `token_expires_at`, `reset_token`, `reset_expires_at`. `username` vira `nullable=True` (mantido por compat com seed legado em `DEBUG=true`). |
 | `upload_batches` | Agrupamento de um envio em lote por usuário. **F2 ✅**: tem `contrato_id FK → contratos.id` (nullable — preserva batches pré-F2; novos exigem via `require_contrato`). **Após F8**: ganha `status` (`processando` \| `concluido` \| `abandonado`). |
-| `upload_files` | Resultado por arquivo dentro de um lote. Status: `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (novo, após F8). |
+| `upload_files` | Resultado por arquivo dentro de um lote. Status: `processando` (transitório, F4+) \| `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (novo, após F8). **F4 ✅**: tem `stored_filename` (TEXT nullable, UUID4 em disco; backfill na migration 0003) ao lado de `original_filename`. |
 | `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **F2 ✅**: tem `contrato_id` (FK nullable; populado em uploads pós-F2). **F4 ✅**: tem `upload_file_id` (FK nullable → `upload_files.id`; populado em uploads pós-F4 — pré-F4 fica NULL, ver Decisão F4-d). **Após F8**: as 11 colunas de `default_nf_template` viram `NOT NULL` (Decisão #8). |
 | `contratos` *(F2 ✅)* | Contratos da base, populados via seed do `base_contratos.json` no `lifespan`. ~140 entradas. PK é UUID5 determinístico derivado de `numero` (re-seed mantém IDs estáveis). Coluna `ativo BOOLEAN` permite filtrar sem deletar. |
 | `nf_pending` *(F8)* | NFs com campo obrigatório faltando aguardando preenchimento manual via modal. Schema completo em `planning/PLAN.md` → "Mudanças Transversais de Schema". |
 
-**Schema management**: Alembic ativo em produção/dev. `scripts/start.ps1` roda `alembic upgrade head` antes de subir o backend (`docker compose run --rm backend alembic upgrade head` — idempotente). Migrations em `backend/alembic/versions/` (`0001_baseline.py`, `0002_f2_contratos.py`). **Testes não rodam migrations** — `tests/conftest.py` chama `init_db()` (`create_all`) direto sobre SQLite temporário, então qualquer mudança de schema precisa coexistir nas duas trilhas (modelos + nova revision Alembic) ou o teste fica defasado em relação ao banco real.
+**Schema management**: Alembic ativo em produção/dev. `scripts/start.ps1` roda `alembic upgrade head` antes de subir o backend (`docker compose run --rm backend alembic upgrade head` — idempotente). Migrations em `backend/alembic/versions/` (`0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`). **Testes não rodam migrations** — `tests/conftest.py` chama `init_db()` (`create_all`) direto sobre SQLite temporário, então qualquer mudança de schema precisa coexistir nas duas trilhas (modelos + nova revision Alembic) ou o teste fica defasado em relação ao banco real.
+
+**Migration 0003 detalhe**: roda backfill agressivo (`os.listdir` em cada batch_dir) para popular `upload_files.stored_filename` em rows pré-F4. Em ambientes sem `UPLOAD_STORAGE_DIR` ou sem o dir físico, a migration apenas cria as colunas e segue (sem erro). Operação é idempotente — re-rodar não duplica.
 
 ### Credenciais do MVP (legado — será removido em F1)
 
@@ -211,6 +214,16 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 
 **Por que `asyncio.to_thread`**: `subprocess.run` com `capture_output=True` pode bloquear até 180s. Rodar em thread pool libera o event loop para enviar os eventos SSE entre arquivos.
 
+## API — endpoints relevantes
+
+| Endpoint | Notas |
+|---|---|
+| `GET /api/contratos` | Lista contratos ativos com `nfs_count` (LEFT JOIN agregado). `?numero&sigla&uf&tranche&tipo_contrato&com_valor&incluir_inativos` previstos em F3 (não implementados). |
+| `GET /api/session/contrato` / `POST /api/session/contrato` | F2 — leitura/escrita do contrato ativo na sessão. 404 para inativo/inexistente. |
+| `POST /api/uploads` | SSE de upload em lote. F2 ✅ exige contrato. F5 ✅ limite 550. F4 ✅ retorna `stored_filename` no record. |
+| `GET /api/nf-entries` | F3b ✅: query params `?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`. Defaults `None` preservam regressão (tabela_persistida da Upload). `q` faz `ILIKE` em `numero_nf | fornecedor | cnpj | descricao` via `OR`. Payload inclui `contrato_id` e `upload_file_id` (F4 ✅). |
+| `GET /api/uploads/files/{id}/pdf?download=` | F4 ✅: serve PDF do disco. JOIN com `users` filtra por dono — outro usuário recebe 404 (não 403). `Content-Disposition: inline` default. |
+
 ## Regras de validação de upload
 
 - **Limite hard de 550 PDFs por batch** (F5): validado no backend no início do endpoint, antes de qualquer IO. Retorna `HTTP 422` se excedido. O frontend também avisa ao selecionar mais de 550 arquivos, mas a validação canônica é a do backend.
@@ -219,7 +232,18 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 
 ## Frontend
 
-O frontend é uma SPA cujo núcleo ainda é monolítico: login, upload, tabela, status badges e SSE consumer vivem em `frontend/src/App.jsx`. Componentes extraídos ficam em `frontend/src/components/` — atualmente `ContratoSelector.jsx` (F2 — tela intermediária de seleção de contrato pós-login). Ao procurar lógica de fluxo principal, comece em `App.jsx`; só os componentes nomeados é que estão isolados.
+O frontend é uma SPA cujo núcleo ainda é monolítico: login, upload, tabela_persistida, status badges e SSE consumer vivem em `frontend/src/App.jsx`. Componentes extraídos ficam em `frontend/src/components/`:
+
+- `ContratoSelector.jsx` *(F2)* — tela intermediária de seleção de contrato pós-login. Refatorado para 2 níveis (Estado → Contrato) em 2026-05-11.
+- `NfsBrowser.jsx` *(F3b)* — aba "Notas" para consulta filtrada de NFs por contrato, com dropdown, filtros (busca livre, data, valor, tipo), tabela e footer com soma BRL. Inclui coluna PDF com botões 👁/⬇ (F4) — disabled para NFs pré-F4 sem `upload_file_id`.
+
+Função utilitária extraída em `frontend/src/lib/`:
+
+- `exportExcel.js` — duas variantes: `exportEntriesCompletas` (11 colunas, usado pela tabela_persistida da Upload) e `exportNfsResumo` (7 colunas, usado pela aba Notas).
+
+App.jsx tem state `currentView ∈ {"upload","notas"}` que comuta entre as duas telas via links no topbar (não há menu de tabs — removido em 2026-05-12 por poluição visual). Trocar de contrato exige logout + login (sem botão dedicado); `handleLogout` zera entriesState/uploadState/etc.
+
+A tabela_persistida da Upload filtra por `contrato_id` ativo na sessão (não mostra NFs de outros contratos). Antes do fix de 2026-05-12 ela mostrava todas as NFs do banco — bug visual sutil onde "trocar contrato" parecia persistir dados.
 
 Documentação relacionada:
 

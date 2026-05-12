@@ -2,7 +2,7 @@
 
 Este documento descreve a modelagem do PostgreSQL.
 
-**Status**: o schema do MVP (Partes 1–7 de `docs/PLAN.md`) está em produção. As mudanças planejadas para o próximo ciclo (F1–F8 de `planning/PLAN.md`) estão listadas em "Mudanças planejadas" abaixo. Ver `planning/PLAN.md` → "Mudanças Transversais de Schema" para os DDLs canônicos das próximas migrations.
+**Status**: o schema do MVP (Partes 1–7 de `docs/PLAN.md`) está em produção. **F2 ✅, F3b ✅, F4 ✅, F5 ✅, F8a ✅** entregues em 2026-05-06/11/12 — schema evoluído via Alembic em `backend/alembic/versions/0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`. Pendentes: F1 (auth real), F3 (browser de contratos — só UI, sem schema), F6 (totalizadores — sem schema), F7 (e-mails), F8b. Ver `planning/PLAN.md` → "Mudanças Transversais de Schema" para os DDLs canônicos das próximas migrations.
 
 ## Direcao Adotada
 
@@ -352,23 +352,24 @@ Coluna existente alterada:
 
 Hash de senha (Decisao #2): `passlib[bcrypt]` cost 10. `CryptContext` configurado com `schemes=["argon2", "bcrypt"]` para permitir migracao automatica para argon2id quando a instituicao definir o algoritmo institucional. Esqueleto em `backend/app/security.py`.
 
-### Tabela `contratos` (nova) — F2
+### Tabela `contratos` ✅ F2 (2026-05-11)
 
-Seed a partir de `base_contratos.json` (~140 entradas). DDL completo em `planning/PLAN.md`.
+Seed a partir de `base_contratos.json` (~140 entradas) via `backend/app/seeds/seed_contratos.py` no `lifespan`. Migration `0002_f2_contratos`.
 
-Campos: `id, numero (UNIQUE), sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato (LPT|MLA), ativo, created_at`.
+Campos: `id (UUID5 deterministico do numero), numero (UNIQUE), sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato (LPT|MLA), ativo, created_at`.
 
-### Tabela `upload_batches` — F2 + F8
+### Tabela `upload_batches` ✅ F2 (parcial) + F8 (pendente)
 
-- `contrato_id VARCHAR(36) NOT NULL REFERENCES contratos(id)` (nullable em batches antigos via migration; obrigatorio em novos).
-- `status VARCHAR(16)` — `processando` | `concluido` | `abandonado` (introduzido em F8 para suportar bloqueio/abandono de pendencias — Decisao #8).
+- ✅ `contrato_id VARCHAR(36) REFERENCES contratos(id)` (nullable para preservar batches pré-F2; obrigatorio em novos via `require_contrato`).
+- ⏳ `status VARCHAR(16)` — `processando` | `concluido` | `abandonado` (sera introduzido em F8 — Decisao #8).
 
-### Tabela `nf_entries` — F2 + F4 + F8
+### Tabela `nf_entries` ✅ F2 + F4
 
 Colunas novas:
 
-- `contrato_id VARCHAR(36) REFERENCES contratos(id)` — complementa o `contrato` texto livre atual (este permanece como legado).
-- `upload_file_id VARCHAR(36) REFERENCES upload_files(id)` — necessario para F4 (visualizar/baixar PDF a partir da linha).
+- ✅ `contrato_id VARCHAR(36) REFERENCES contratos(id)` — populado em uploads pós-F2; pré-F2 = NULL. Complementa o `contrato` texto livre (legado).
+- ✅ `upload_file_id VARCHAR(36) REFERENCES upload_files(id)` — populado em uploads pós-F4; pré-F4 = NULL (limitação aceita, Decisão F4-d: schema antigo nunca armazenou a relação NF→arquivo, backfill via timestamp é frágil em batches grandes).
+- ⏳ **Mudanca critica em F8 (Decisao #8)**: as **11 colunas** que vem de `default_nf_template` viram `NOT NULL`. Pendente.
 
 **Mudanca critica em F8 (Decisao #8)**: as **11 colunas** que vem de `default_nf_template` (`descricao, ncm, quant, preco_unitario, numero_nf, tipo_nota, data_emissao, cnpj, fornecedor, valor, contrato`) viram `NOT NULL`. Linha com qualquer campo `""` ou `None` e considerada falha grave do parser e nao pode entrar no banco. Eventual backfill de linhas historicas com NULL pode ser necessario antes do `ALTER COLUMN ... SET NOT NULL`.
 
@@ -394,16 +395,18 @@ CREATE TABLE nf_pending (
 
 Status: `aguardando` | `resolvido` | `abandonado`. Indices em `status` e `upload_batch_id`.
 
-### Tabela `upload_files` — F8
+### Tabela `upload_files` ✅ F4 + ⏳ F8
 
-Status `aguardando_preenchimento` adicionado ao enum logico (linha tem 1+ NF em `nf_pending`). Sem schema change na coluna em si — o enum hoje e `VARCHAR`.
+- ✅ `stored_filename TEXT NULLABLE` (F4 — migration 0003) — UUID4 + `.pdf` em disco, separado de `original_filename`. Backfill agressivo populou todos os pré-F4 que existiam em disco. Resolver: `backend/app/storage.py:get_pdf_path()`.
+- ✅ Status `processando` adicionado ao enum lógico (F4) — usado como placeholder durante o parse, antes de virar `processado`/`duplicado`/`erro_parsing`/`rejeitado`.
+- ⏳ Status `aguardando_preenchimento` (F8 pendente) — linha tem 1+ NF em `nf_pending`.
 
-Coluna nova:
+### Schema management ✅ Decisao #3 (concluida em F2)
 
-- `stored_filename VARCHAR(255)` — UUID ou nome real no disco. Permite migracao futura para object storage sem mudar a logica de identificar o arquivo (Decisao #4 de storage).
+**Alembic ativo** desde 2026-05-07. `scripts/start.ps1` roda `docker compose run --rm backend alembic upgrade head` antes de subir o backend — idempotente. Migrations em `backend/alembic/versions/`:
 
-### Schema management — Decisao #3
+- `0001_baseline.py` — schema do MVP (users, upload_batches, upload_files, nf_entries).
+- `0002_f2_contratos.py` — tabela `contratos` + FKs `upload_batches.contrato_id` e `nf_entries.contrato_id`.
+- `0003_f4_pdf_paths.py` — `upload_files.stored_filename` + `nf_entries.upload_file_id` + backfill agressivo do `stored_filename` (`os.listdir` por batch_dir).
 
-Hoje: `init_db()` (`SQLAlchemy create_all`) no `lifespan`. Adicionar coluna em tabela existente nao funciona com `create_all`.
-
-A partir de F1: **Alembic**, executado via `alembic upgrade head` no `start.ps1` antes de `docker compose up`. Primeira migration = baseline gerada via autogenerate contra schema atual. Migrations subsequentes uma por feature. Testes (`conftest.py`) continuam usando `init_db()` direto sobre os models — testes nao rodam migrations.
+Testes (`conftest.py`) continuam usando `init_db()` direto sobre os models — testes nao rodam migrations. **Toda mudança de schema precisa coexistir em duas trilhas** (models.py + nova revision Alembic), caso contrário o teste fica defasado em relação ao banco real.

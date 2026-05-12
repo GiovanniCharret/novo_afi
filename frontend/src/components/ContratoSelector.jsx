@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { UF_NOMES, SEM_UF_KEY, SEM_UF_NOME } from "../lib/ufNomes";
+
 /**
  * F2 — Tela de seleção de contrato em dois níveis (Estado → Contrato).
  *
@@ -9,19 +11,6 @@ import { useEffect, useMemo, useState } from "react";
  *
  * Filtro é por step. Confirmar dispara `POST /api/session/contrato` → `onSelect`.
  */
-
-// Map UF → nome completo. Inclui SEM_UF para contratos com uf nulo.
-const UF_NOMES = {
-  AC: "Acre", AL: "Alagoas", AM: "Amazonas", AP: "Amapá", BA: "Bahia",
-  CE: "Ceará", DF: "Distrito Federal", ES: "Espírito Santo", GO: "Goiás",
-  MA: "Maranhão", MG: "Minas Gerais", MS: "Mato Grosso do Sul", MT: "Mato Grosso",
-  PA: "Pará", PB: "Paraíba", PE: "Pernambuco", PI: "Piauí", PR: "Paraná",
-  RJ: "Rio de Janeiro", RN: "Rio Grande do Norte", RO: "Rondônia", RR: "Roraima",
-  RS: "Rio Grande do Sul", SC: "Santa Catarina", SE: "Sergipe", SP: "São Paulo",
-  TO: "Tocantins",
-};
-const SEM_UF_KEY = "__sem_uf__";
-const SEM_UF_NOME = "Sem estado definido";
 
 export default function ContratoSelector({ onSelect, onLogout, username }) {
   const [contratos, setContratos] = useState([]);
