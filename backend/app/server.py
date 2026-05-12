@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
@@ -9,7 +11,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, 
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -250,9 +252,47 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/api/nf-entries", response_model=list[NfEntryResponse])
-    def list_nf_entries(request: Request, db: DbSession):
+    def list_nf_entries(
+        request: Request,
+        db: DbSession,
+        contrato_id: str | None = None,
+        q: str | None = None,
+        data_inicio: date | None = None,
+        data_fim: date | None = None,
+        valor_min: Decimal | None = None,
+        valor_max: Decimal | None = None,
+        tipo_nota: str | None = None,
+    ):
+        """F3b — filtros opcionais. Sem params, comportamento idêntico ao da F2:
+        retorna todas as NFs ordenadas por `created_at DESC` (regressão obrigatória
+        para a tabela principal de upload). Frontend da F3b sorta client-side por
+        `data_emissao DESC` quando precisar.
+        """
         get_authenticated_user(request)
-        entries = db.scalars(select(NfEntry).order_by(NfEntry.created_at.desc())).all()
+        stmt = select(NfEntry)
+
+        if contrato_id:
+            stmt = stmt.where(NfEntry.contrato_id == contrato_id)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(
+                NfEntry.numero_nf.ilike(like),
+                NfEntry.fornecedor.ilike(like),
+                NfEntry.cnpj.ilike(like),
+                NfEntry.descricao.ilike(like),
+            ))
+        if data_inicio:
+            stmt = stmt.where(NfEntry.data_emissao >= data_inicio)
+        if data_fim:
+            stmt = stmt.where(NfEntry.data_emissao <= data_fim)
+        if valor_min is not None:
+            stmt = stmt.where(NfEntry.valor_total >= valor_min)
+        if valor_max is not None:
+            stmt = stmt.where(NfEntry.valor_total <= valor_max)
+        if tipo_nota:
+            stmt = stmt.where(NfEntry.tipo_nota == tipo_nota)
+
+        entries = db.scalars(stmt.order_by(NfEntry.created_at.desc())).all()
         return [serialize_nf_entry(entry) for entry in entries]
 
     @app.get("/api/upload-batches/{batch_id}")
@@ -453,12 +493,21 @@ def create_app() -> FastAPI:
 
                             inserted_count = 0
                             duplicate_count = 0
+                            # Coleta `contrato_id` dos duplicados para enriquecer
+                            # a mensagem ao operador. NFs pré-F2 têm contrato_id=None,
+                            # contadas separadamente.
+                            duplicate_contrato_ids: set[str] = set()
+                            duplicates_sem_contrato = 0
 
                             for row in outcome.rows:
                                 business_key = build_business_key(row)
                                 existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
                                 if existing is not None:
                                     duplicate_count += 1
+                                    if existing.contrato_id:
+                                        duplicate_contrato_ids.add(existing.contrato_id)
+                                    else:
+                                        duplicates_sem_contrato += 1
                                     continue
                                 create_nf_entry(db, row, contrato_id=contrato_id)
                                 inserted_count += 1
@@ -466,7 +515,23 @@ def create_app() -> FastAPI:
                             file_status = "processado" if inserted_count > 0 else "duplicado"
                             status_reason = None
                             if file_status == "duplicado":
-                                status_reason = "Todas as linhas extraidas deste arquivo ja existiam na base."
+                                # Resolve contrato_id -> numero via uma query batched (sem N+1).
+                                numeros: list[str] = []
+                                if duplicate_contrato_ids:
+                                    contratos_dup = db.scalars(
+                                        select(Contrato).where(Contrato.id.in_(duplicate_contrato_ids))
+                                    ).all()
+                                    numeros = sorted({c.numero for c in contratos_dup})
+                                if numeros and not duplicates_sem_contrato:
+                                    if len(numeros) == 1:
+                                        status_reason = f"Já foi arquivado no contrato {numeros[0]}."
+                                    else:
+                                        status_reason = f"Já foi arquivado nos contratos: {', '.join(numeros)}."
+                                elif numeros and duplicates_sem_contrato:
+                                    status_reason = f"Já foi arquivado (em {', '.join(numeros)} + outras anteriores à F2)."
+                                else:
+                                    # Todos duplicados são pré-F2 (contrato_id NULL).
+                                    status_reason = "Já existe na base (sem contrato registrado, anterior à F2)."
 
                             record = UploadFileRecord(
                                 upload_batch_id=batch.id,

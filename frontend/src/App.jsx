@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import * as XLSX from "xlsx";
 
 import ContratoSelector from "./components/ContratoSelector";
+import NfsBrowser from "./components/NfsBrowser";
+import { exportEntriesCompletas } from "./lib/exportExcel";
 
 const defaultLoginForm = { username: "user", password: "password" };
 
@@ -14,25 +15,6 @@ function formatSelectedFiles(files) {
   if (files.length === 0) return "Nenhum PDF selecionado.";
   if (files.length === 1) return files[0].name;
   return `${files.length} arquivos selecionados`;
-}
-
-function exportEntriesToExcel(rows) {
-  const worksheetRows = rows.map((row) => ({
-    descricao: row.descricao,
-    ncm: row.ncm,
-    quant: row.quantidade,
-    preco_unitario: row.preco_unitario,
-    numero_nf: row.numero_nf,
-    tipo_nota: row.tipo_nota,
-    data_emissao: row.data_emissao,
-    cnpj: row.cnpj,
-    fornecedor: row.fornecedor,
-    valor: row.valor_total,
-    contrato: row.contrato,
-  }));
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(worksheetRows), "Notas");
-  XLSX.writeFile(workbook, "tabela_persistida_notas.xlsx");
 }
 
 const STATUS_LABELS = {
@@ -95,6 +77,8 @@ export default function App() {
   // Após login, fetch GET /api/session/contrato decide entre ContratoSelector e área de upload.
   const [selectedContrato, setSelectedContrato] = useState(null);
   const [contratoBootChecked, setContratoBootChecked] = useState(false);
+  // F3b — aba ativa na área logada: "upload" | "notas". "contratos" reservado para F3.
+  const [currentView, setCurrentView] = useState("upload");
 
   useEffect(() => {
     let active = true;
@@ -176,7 +160,11 @@ export default function App() {
     async function loadEntries() {
       setEntriesState((current) => ({ ...current, loading: true, error: "" }));
       try {
-        const response = await fetch("/api/nf-entries", { credentials: "same-origin" });
+        // F3b follow-up — tabela_persistida filtra por contrato ativo. Sem filtro,
+        // trocar de contrato repopulava com TODAS as NFs do banco (bug visual:
+        // "tabela se mantinha" entre sessões).
+        const url = `/api/nf-entries?contrato_id=${encodeURIComponent(selectedContrato.id)}`;
+        const response = await fetch(url, { credentials: "same-origin" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const rows = await response.json();
         if (!active) return;
@@ -237,7 +225,12 @@ export default function App() {
   }
 
   async function refreshEntries() {
-    const response = await fetch("/api/nf-entries", { credentials: "same-origin" });
+    if (!selectedContrato) {
+      setEntriesState({ loading: false, rows: [], error: "" });
+      return;
+    }
+    const url = `/api/nf-entries?contrato_id=${encodeURIComponent(selectedContrato.id)}`;
+    const response = await fetch(url, { credentials: "same-origin" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const rows = await response.json();
     setEntriesState({ loading: false, rows, error: "" });
@@ -490,6 +483,22 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <span className="topbar-brand">GFIP - Recebimento de Notas Fiscais</span>
+        <nav className="topbar-nav">
+          <button
+            type="button"
+            className={`topbar-link${currentView === "upload" ? " is-active" : ""}`}
+            onClick={() => setCurrentView("upload")}
+          >
+            Upload
+          </button>
+          <button
+            type="button"
+            className={`topbar-link${currentView === "notas" ? " is-active" : ""}`}
+            onClick={() => setCurrentView("notas")}
+          >
+            Notas
+          </button>
+        </nav>
         <div className="topbar-right">
           {/* F2 — contrato ativo na topbar */}
           <span className="topbar-contrato" title={`${selectedContrato.sigla} · ${selectedContrato.uf ?? ""}`.trim()}>
@@ -507,6 +516,11 @@ export default function App() {
       </header>
 
       <main className="main-content">
+        {currentView === "notas" && (
+          <NfsBrowser selectedContratoId={selectedContrato?.id} />
+        )}
+
+        {currentView === "upload" && (<>
         <div className={`upload-row${hasResults ? " upload-row--split" : ""}`}>
           <section className="card upload-card">
             <div className="card-header">
@@ -626,7 +640,7 @@ export default function App() {
                 className="btn-ghost"
                 type="button"
                 disabled={entriesState.loading || entriesState.rows.length === 0}
-                onClick={() => exportEntriesToExcel(entriesState.rows)}
+                onClick={() => exportEntriesCompletas(entriesState.rows)}
               >
                 Exportar Excel
               </button>
@@ -691,6 +705,7 @@ export default function App() {
             </div>
           )}
         </section>
+        </>)}
       </main>
 
       <footer className="app-footer">

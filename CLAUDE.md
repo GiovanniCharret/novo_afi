@@ -120,6 +120,15 @@ browser
 
 A `business_key` é derivada de `numero_nf|cnpj|data_emissao|valor_total|descricao` (ver `backend/app/normalization.py`). A coluna tem constraint `UNIQUE` no banco — a verificação no backend é a primeira linha de defesa; o banco é o reforço.
 
+**Mensagem de duplicidade enriquecida** (2026-05-12): quando o upload detecta duplicidade, `status_reason` informa em qual contrato a NF original foi arquivada. Implementado em `server.py:507-525` — durante o loop de dedup, coleta `existing.contrato_id` dos duplicados num set; ao final, uma query batched resolve os IDs para `numero` e compõe o texto. 4 cenários cobertos em `tests/test_duplicate_reason.py`:
+
+- Todos sob o mesmo contrato → `"Já foi arquivado no contrato ECFS X/YYYY."`
+- Espalhados em N contratos → `"Já foi arquivado nos contratos: A, B, ..."`
+- Pré-F2 (`contrato_id NULL`) → `"Já existe na base (sem contrato registrado, anterior à F2)."`
+- Mistura → `"Já foi arquivado (em A, B + outras anteriores à F2)."`
+
+Frontend não muda: `App.jsx:606` já renderiza `item.status_reason`.
+
 ### Banco de dados
 
 Tabelas principais:
