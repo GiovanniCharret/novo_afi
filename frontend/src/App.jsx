@@ -13,6 +13,20 @@ const defaultLoginForm = { username: "user", password: "password" };
 // Frontend é rede de segurança duplicada; backend é canônico.
 const MAX_FILES_PER_BATCH = 550;
 
+function formatRelativeTime(timestamp) {
+  // F3-c (2026-05-13) — formato relativo conciso para o badge "cache de sessão".
+  if (!timestamp) return "";
+  const diffMs = Date.now() - timestamp;
+  const secs = Math.floor(diffMs / 1000);
+  if (secs < 10) return "agora";
+  if (secs < 60) return `há ${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `há ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return `há ${Math.floor(hours / 24)}d`;
+}
+
 function formatSelectedFiles(files) {
   if (files.length === 0) return "Nenhum PDF selecionado.";
   if (files.length === 1) return files[0].name;
@@ -60,15 +74,16 @@ export default function App() {
     message: "Aguardando autenticacao.",
   });
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [entriesState, setEntriesState] = useState({
-    loading: false,
-    rows: [],
-    error: "",
-  });
-  const [uploadState, setUploadState] = useState({
+  // F3-c (2026-05-13) — estados visuais por contrato.
+  // Trocar de contrato troca o snapshot; logout zera tudo.
+  // shape: { [contratoId]: { entries: { rows }, upload: { results, batchId, updatedAt } } }
+  const [contratoSlices, setContratoSlices] = useState({});
+  // Estado de fetch de entries (global porque só há um fetch em vôo por vez).
+  const [entriesGlobal, setEntriesGlobal] = useState({ loading: false, error: "" });
+  // Estado da operação de upload atual (global — uma operação por vez).
+  // Note: `results` e `batchId` migraram para `contratoSlices`.
+  const [uploadProgress, setUploadProgress] = useState({
     submitting: false,
-    results: [],
-    batchId: null,
     progress: 0,
     phase: "idle",
     progressMessage: "",
@@ -81,6 +96,36 @@ export default function App() {
   const [contratoBootChecked, setContratoBootChecked] = useState(false);
   // F3b/F3 — aba ativa na área logada: "upload" | "notas" | "contratos".
   const [currentView, setCurrentView] = useState("upload");
+
+  // ── Slice helpers (F3-c per-contract state cache) ────────────────
+  const EMPTY_SLICE = { entries: { rows: [] }, upload: { results: [], batchId: null, updatedAt: null } };
+
+  function readSlice(id) {
+    return id ? (contratoSlices[id] ?? EMPTY_SLICE) : EMPTY_SLICE;
+  }
+
+  function patchEntries(id, patch) {
+    if (!id) return;
+    setContratoSlices((prev) => {
+      const cur = prev[id] ?? EMPTY_SLICE;
+      return { ...prev, [id]: { ...cur, entries: { ...cur.entries, ...patch } } };
+    });
+  }
+
+  function patchUpload(id, patch) {
+    if (!id) return;
+    setContratoSlices((prev) => {
+      const cur = prev[id] ?? EMPTY_SLICE;
+      const nextUpload = typeof patch === "function" ? patch(cur.upload) : { ...cur.upload, ...patch };
+      return { ...prev, [id]: { ...cur, upload: nextUpload } };
+    });
+  }
+
+  const currentSlice = selectedContrato ? readSlice(selectedContrato.id) : EMPTY_SLICE;
+  const currentEntries = currentSlice.entries.rows;
+  const currentResults = currentSlice.upload.results;
+  const currentBatchId = currentSlice.upload.batchId;
+  const lastUploadAt = currentSlice.upload.updatedAt;
 
   useEffect(() => {
     let active = true;
@@ -157,23 +202,25 @@ export default function App() {
 
   useEffect(() => {
     if (!authState.isAuthenticated) return;
-    if (!selectedContrato) return;  // F2 — só carrega entries quando há contrato
+    if (!selectedContrato) return;
+    const contratoId = selectedContrato.id;
     let active = true;
     async function loadEntries() {
-      setEntriesState((current) => ({ ...current, loading: true, error: "" }));
+      setEntriesGlobal({ loading: true, error: "" });
       try {
-        // F3b follow-up — tabela_persistida filtra por contrato ativo. Sem filtro,
-        // trocar de contrato repopulava com TODAS as NFs do banco (bug visual:
-        // "tabela se mantinha" entre sessões).
-        const url = `/api/nf-entries?contrato_id=${encodeURIComponent(selectedContrato.id)}`;
+        // F3b — tabela_persistida filtra por contrato ativo. F3-c (2026-05-13) —
+        // gravamos no slice do contrato para que trocar de contrato preserve o
+        // snapshot anterior sem refetch desnecessário.
+        const url = `/api/nf-entries?contrato_id=${encodeURIComponent(contratoId)}`;
         const response = await fetch(url, { credentials: "same-origin" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const rows = await response.json();
         if (!active) return;
-        setEntriesState({ loading: false, rows, error: "" });
+        patchEntries(contratoId, { rows });
+        setEntriesGlobal({ loading: false, error: "" });
       } catch (error) {
         if (!active) return;
-        setEntriesState({ loading: false, rows: [], error: `Nao foi possivel carregar os lancamentos: ${error.message}.` });
+        setEntriesGlobal({ loading: false, error: `Nao foi possivel carregar os lancamentos: ${error.message}.` });
       }
     }
     loadEntries();
@@ -217,25 +264,29 @@ export default function App() {
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     setSelectedFiles([]);
-    setUploadState({ submitting: false, error: "", results: [], batchId: null, progress: 0, phase: "idle", progressMessage: "" });
-    setEntriesState({ loading: false, rows: [], error: "" });
+    setUploadProgress({ submitting: false, progress: 0, phase: "idle", progressMessage: "" });
+    setEntriesGlobal({ loading: false, error: "" });
+    // F3-c (2026-05-13) — logout zera todos os slices de contrato em definitivo.
+    setContratoSlices({});
     setAuthState({ loading: false, isAuthenticated: false, user: null, error: "" });
     setApiStatus({ loading: false, message: "Aguardando autenticacao." });
     // F2 — backend já limpa contrato_id da sessão no logout; refletir no estado local.
     setSelectedContrato(null);
     setContratoBootChecked(false);
+    setCurrentView("upload");
   }
 
-  async function refreshEntries() {
-    if (!selectedContrato) {
-      setEntriesState({ loading: false, rows: [], error: "" });
+  async function refreshEntries(contratoId) {
+    if (!contratoId) {
+      setEntriesGlobal({ loading: false, error: "" });
       return;
     }
-    const url = `/api/nf-entries?contrato_id=${encodeURIComponent(selectedContrato.id)}`;
+    const url = `/api/nf-entries?contrato_id=${encodeURIComponent(contratoId)}`;
     const response = await fetch(url, { credentials: "same-origin" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const rows = await response.json();
-    setEntriesState({ loading: false, rows, error: "" });
+    patchEntries(contratoId, { rows });
+    setEntriesGlobal({ loading: false, error: "" });
   }
 
   async function uploadWithSSE(files, onEvent) {
@@ -299,16 +350,24 @@ export default function App() {
 
   async function handleUploadSubmit() {
     if (selectedFiles.length === 0) {
-      setUploadState({ submitting: false, results: [], batchId: null, progress: 0, phase: "idle", progressMessage: "" });
+      setUploadProgress({ submitting: false, progress: 0, phase: "idle", progressMessage: "" });
       return;
     }
+    if (!selectedContrato) return;  // F2 — guarda; require_contrato no backend
 
     const totalFiles = selectedFiles.length;
+    // F3-c (2026-05-13) — snapshot do contratoId no início do upload. Se o
+    // usuário trocar de contrato no meio do envio, o slice correto continua
+    // recebendo os eventos.
+    const uploadContratoId = selectedContrato.id;
 
-    setUploadState({
-      submitting: true,
+    patchUpload(uploadContratoId, {
       results: buildPendingResults(selectedFiles),
       batchId: null,
+      updatedAt: Date.now(),
+    });
+    setUploadProgress({
+      submitting: true,
       progress: 3,
       phase: "uploading",
       progressMessage: `Enviando ${totalFiles} arquivo${totalFiles > 1 ? "s" : ""}…`,
@@ -320,52 +379,52 @@ export default function App() {
       let doneCount = 0;
 
       await uploadWithSSE(selectedFiles, (event) => {
-        // Eventos de progresso intermediário por arquivo
         if (event.event in SSE_STATUS_MAP) {
           const newStatus = SSE_STATUS_MAP[event.event];
 
-          // Calcular progresso global baseado no evento
           let progress;
           let phase = "uploading";
           let progressMessage;
 
           if (event.event === "file_saved") {
             savedCount++;
-            // Fase 1: 5% → 60% proporcional aos arquivos salvos
             progress = 5 + Math.round((savedCount / totalFiles) * 55);
             progressMessage = `Salvando arquivos… (${savedCount}/${totalFiles})`;
           } else if (event.event === "file_parsing") {
-            // Transição para fase 2 no primeiro arquivo processando
             phase = "processing";
             progress = Math.max(62, 62 + Math.round((doneCount / totalFiles) * 20));
             progressMessage = "Processando PDFs no backend…";
           } else {
-            // file_queued: mantém progresso atual
             progress = undefined;
           }
 
-          setUploadState((current) => ({
+          setUploadProgress((current) => ({
             ...current,
             ...(progress !== undefined ? { progress } : {}),
             phase,
             progressMessage: progressMessage ?? current.progressMessage,
-            results: current.results.map((r) =>
+          }));
+          patchUpload(uploadContratoId, (cur) => ({
+            ...cur,
+            results: cur.results.map((r) =>
               r.filename === event.filename ? { ...r, status: newStatus } : r
             ),
           }));
           return;
         }
 
-        // Evento de conclusão por arquivo
         if (event.event === "file_done") {
           doneCount++;
           const processingProgress = Math.min(83, 62 + Math.round((doneCount / totalFiles) * 20));
-          setUploadState((current) => ({
+          setUploadProgress((current) => ({
             ...current,
             phase: "processing",
             progress: processingProgress,
             progressMessage: `Processando PDFs… (${doneCount}/${totalFiles})`,
-            results: current.results.map((r) =>
+          }));
+          patchUpload(uploadContratoId, (cur) => ({
+            ...cur,
+            results: cur.results.map((r) =>
               r.filename === event.filename
                 ? {
                     ...r,
@@ -381,23 +440,22 @@ export default function App() {
           return;
         }
 
-        // Evento de lote concluído
         if (event.event === "batch_done") {
           batchId = event.batch_id;
-          setUploadState((current) => ({
+          setUploadProgress((current) => ({
             ...current,
-            batchId,
             progress: 87,
             phase: "refreshing",
             progressMessage: "Atualizando tabela de notas…",
           }));
+          patchUpload(uploadContratoId, { batchId, updatedAt: Date.now() });
         }
       });
 
       setSelectedFiles([]);
-      await refreshEntries();
+      await refreshEntries(uploadContratoId);
 
-      setUploadState((current) => ({
+      setUploadProgress((current) => ({
         ...current,
         submitting: false,
         progress: 100,
@@ -405,10 +463,13 @@ export default function App() {
         progressMessage: "Concluído.",
       }));
     } catch (error) {
-      setUploadState({
-        submitting: false,
+      patchUpload(uploadContratoId, {
         results: buildUploadErrorResults(selectedFiles, error.message),
         batchId: null,
+        updatedAt: Date.now(),
+      });
+      setUploadProgress({
+        submitting: false,
         progress: 0,
         phase: "idle",
         progressMessage: "",
@@ -479,7 +540,7 @@ export default function App() {
     );
   }
 
-  const hasResults = uploadState.results.length > 0;
+  const hasResults = currentResults.length > 0;
 
   return (
     <div className="app-shell">
@@ -576,36 +637,36 @@ export default function App() {
               </div>
             )}
 
-            {(uploadState.submitting || uploadState.phase === "done") && (
+            {(uploadProgress.submitting || uploadProgress.phase === "done") && (
               <div className="progress-block">
                 <div className="progress-phases">
-                  <span className={uploadState.phase === "uploading" ? "phase-active" : (uploadState.progress > 60 ? "phase-done" : "phase-idle")}>
+                  <span className={uploadProgress.phase === "uploading" ? "phase-active" : (uploadProgress.progress > 60 ? "phase-done" : "phase-idle")}>
                     ① Envio
                   </span>
-                  <span className={uploadState.phase === "processing" ? "phase-active" : (uploadState.progress > 85 ? "phase-done" : "phase-idle")}>
+                  <span className={uploadProgress.phase === "processing" ? "phase-active" : (uploadProgress.progress > 85 ? "phase-done" : "phase-idle")}>
                     ② Processamento
                   </span>
-                  <span className={uploadState.phase === "refreshing" ? "phase-active" : (uploadState.phase === "done" ? "phase-done" : "phase-idle")}>
+                  <span className={uploadProgress.phase === "refreshing" ? "phase-active" : (uploadProgress.phase === "done" ? "phase-done" : "phase-idle")}>
                     ③ Tabela
                   </span>
                 </div>
                 <div className="progress-track">
                   <div
-                    className={`progress-fill${uploadState.phase === "processing" ? " is-processing" : ""}`}
-                    style={{ width: `${uploadState.progress}%` }}
+                    className={`progress-fill${uploadProgress.phase === "processing" ? " is-processing" : ""}`}
+                    style={{ width: `${uploadProgress.progress}%` }}
                   />
                 </div>
-                <span className="progress-label">{uploadState.progressMessage}</span>
+                <span className="progress-label">{uploadProgress.progressMessage}</span>
               </div>
             )}
 
             <button
               className="btn-primary upload-btn"
               type="button"
-              disabled={uploadState.submitting || selectedFiles.length > MAX_FILES_PER_BATCH}
+              disabled={uploadProgress.submitting || selectedFiles.length > MAX_FILES_PER_BATCH}
               onClick={handleUploadSubmit}
             >
-              {uploadState.submitting ? "Enviando…" : "Enviar PDFs"}
+              {uploadProgress.submitting ? "Enviando…" : "Enviar PDFs"}
             </button>
           </section>
 
@@ -615,16 +676,21 @@ export default function App() {
                 <div>
                   <p className="section-kicker">Processamento</p>
                   <h2 className="card-title">Status por arquivo</h2>
+                  {lastUploadAt && !uploadProgress.submitting && (
+                    <p className="cache-badge" title="Último upload deste contrato nesta sessão">
+                      Último upload {formatRelativeTime(lastUploadAt)}
+                    </p>
+                  )}
                 </div>
-                {uploadState.batchId && (
-                  <span className="batch-label" title={uploadState.batchId}>
-                    Lote {uploadState.batchId.slice(0, 8)}
+                {currentBatchId && (
+                  <span className="batch-label" title={currentBatchId}>
+                    Lote {currentBatchId.slice(0, 8)}
                   </span>
                 )}
               </div>
 
               <ul className="results-list">
-                {uploadState.results.map((item, index) => (
+                {currentResults.map((item, index) => (
                   <li key={`${item.filename}-${index}`} className="result-item">
                     <div className="result-row">
                       <span className="result-filename" title={item.filename}>{item.filename}</span>
@@ -652,22 +718,22 @@ export default function App() {
             </div>
             <div className="table-header-right">
               <span className="row-count">
-                {entriesState.loading ? "Atualizando…" : `${entriesState.rows.length} registros`}
+                {entriesGlobal.loading ? "Atualizando…" : `${currentEntries.length} registros`}
               </span>
               <button
                 className="btn-ghost"
                 type="button"
-                disabled={entriesState.loading || entriesState.rows.length === 0}
-                onClick={() => exportEntriesCompletas(entriesState.rows)}
+                disabled={entriesGlobal.loading || currentEntries.length === 0}
+                onClick={() => exportEntriesCompletas(currentEntries)}
               >
                 Exportar Excel
               </button>
             </div>
           </div>
 
-          {entriesState.error && <p className="inline-error">{entriesState.error}</p>}
+          {entriesGlobal.error && <p className="inline-error">{entriesGlobal.error}</p>}
 
-          {!entriesState.loading && entriesState.rows.length === 0 ? (
+          {!entriesGlobal.loading && currentEntries.length === 0 ? (
             <div className="empty-state">
               <p>Nenhuma nota carregada ainda. Envie PDFs para popular a base.</p>
             </div>
@@ -703,7 +769,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entriesState.rows.map((row) => (
+                  {currentEntries.map((row) => (
                     <tr key={row.id}>
                       <td title={String(row.descricao ?? "")}>{row.descricao}</td>
                       <td title={String(row.ncm ?? "")}>{row.ncm}</td>

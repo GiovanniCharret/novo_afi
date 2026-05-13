@@ -107,7 +107,8 @@
     "valor_contrato": 19624900,
     "valor_cde": 16681170,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "encerramento" 
   },
   "ECFS 306/2010": {
     "sigla": "CERCI",

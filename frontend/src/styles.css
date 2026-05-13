@@ -1248,3 +1248,11 @@ tr:hover td { background: #f8fbff; }
   opacity: 0.6;
   cursor: progress;
 }
+
+/* F3-c — badge "cache de sessão" no header do painel de Processamento. */
+.cache-badge {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+}
