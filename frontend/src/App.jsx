@@ -5,6 +5,7 @@ import ContratosBrowser from "./components/ContratosBrowser";
 import NfsBrowser from "./components/NfsBrowser";
 import { describeContrato } from "./lib/describeContrato";
 import { exportEntriesCompletas } from "./lib/exportExcel";
+import { parseBR } from "./lib/parseBR";
 
 const defaultLoginForm = { username: "user", password: "password" };
 
@@ -788,6 +789,32 @@ export default function App() {
               </table>
             </div>
           )}
+
+          {currentEntries.length > 0 && (() => {
+            // F6 — rodapé compacto do Anexo I (2026-05-13): contagem de NFs
+            // distintas + valor total + percentuais sobre contrato e CDE.
+            // Cálculo client-side a partir das rows já carregadas; evita
+            // request extra (mesmo dado do /api/contratos/{id}/totais).
+            const nfsDistintas = new Set(currentEntries.map((r) => r.numero_nf)).size;
+            const totalEnviado = currentEntries.reduce((acc, r) => acc + parseBR(r.valor_total), 0);
+            const valorContrato = parseFloat(selectedContrato.valor_contrato);
+            const valorCde = parseFloat(selectedContrato.valor_cde);
+            const fmtBRL = (n) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+            const fmtPct = (n) => new Intl.NumberFormat("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
+            const pctContrato = valorContrato > 0 ? totalEnviado / valorContrato : null;
+            const pctCde = valorCde > 0 ? totalEnviado / valorCde : null;
+            return (
+              <div className="anexo-footer">
+                <span><strong>{nfsDistintas}</strong> NF{nfsDistintas === 1 ? "" : "s"} distinta{nfsDistintas === 1 ? "" : "s"}</span>
+                <span className="anexo-sep">·</span>
+                <span>Total: <strong>{fmtBRL(totalEnviado)}</strong></span>
+                <span className="anexo-sep">·</span>
+                <span>{pctContrato !== null ? <><strong>{fmtPct(pctContrato)}</strong> do contrato</> : "Contrato sem valor"}</span>
+                <span className="anexo-sep">·</span>
+                <span>{pctCde !== null ? <><strong>{fmtPct(pctCde)}</strong> da CDE</> : "CDE sem valor"}</span>
+              </div>
+            );
+          })()}
         </section>
         </>)}
       </main>

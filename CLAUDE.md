@@ -218,7 +218,7 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 
 | Endpoint | Notas |
 |---|---|
-| `GET /api/contratos` | Lista contratos ativos com `nfs_count` (LEFT JOIN agregado). `?numero&sigla&uf&tranche&tipo_contrato&com_valor&incluir_inativos` previstos em F3 (não implementados). |
+| `GET /api/contratos` | F3 ✅: query params `?q&numero&sigla&uf&tranche&tipo_contrato&com_valor&incluir_inativos`. Defaults `None`/`False` preservam regressão (ContratoSelector F2 e dropdown da Notas F3b). `q` faz `ILIKE` em `numero OR sigla`. `numero`/`sigla` são ILIKE individuais. Demais filtros = igualdade exata combinada por AND. Sempre retorna `nfs_count` (F4 follow-up) e `ativo` (F3-c — usado pelo frontend para desabilitar clique em inativos). |
 | `GET /api/session/contrato` / `POST /api/session/contrato` | F2 — leitura/escrita do contrato ativo na sessão. 404 para inativo/inexistente. |
 | `POST /api/uploads` | SSE de upload em lote. F2 ✅ exige contrato. F5 ✅ limite 550. F4 ✅ retorna `stored_filename` no record. |
 | `GET /api/nf-entries` | F3b ✅: query params `?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`. Defaults `None` preservam regressão (tabela_persistida da Upload). `q` faz `ILIKE` em `numero_nf | fornecedor | cnpj | descricao` via `OR`. Payload inclui `contrato_id` e `upload_file_id` (F4 ✅). |
@@ -236,12 +236,23 @@ O frontend é uma SPA cujo núcleo ainda é monolítico: login, upload, tabela_p
 
 - `ContratoSelector.jsx` *(F2)* — tela intermediária de seleção de contrato pós-login. Refatorado para 2 níveis (Estado → Contrato) em 2026-05-11.
 - `NfsBrowser.jsx` *(F3b)* — aba "Notas" para consulta filtrada de NFs por contrato, com dropdown, filtros (busca livre, data, valor, tipo), tabela e footer com soma BRL. Inclui coluna PDF com botões 👁/⬇ (F4) — disabled para NFs pré-F4 sem `upload_file_id`.
+- `ContratosBrowser.jsx` *(F3, 2026-05-13)* — aba "Contratos", browser da base estática. Filtros: busca livre `q`, selects de UF/Tipo/Tranche (derivados do payload no mount), toggles "apenas com valor definido" e "incluir inativos". **Clique em linha dispara `POST /api/session/contrato` + leva para Upload** (Decisão F3-c revisada em 2026-05-13). Linhas inativas têm cursor `not-allowed`.
 
-Função utilitária extraída em `frontend/src/lib/`:
+Funções utilitárias em `frontend/src/lib/`:
 
 - `exportExcel.js` — duas variantes: `exportEntriesCompletas` (11 colunas, usado pela tabela_persistida da Upload) e `exportNfsResumo` (7 colunas, usado pela aba Notas).
+- `describeContrato.js` *(2026-05-13)* — formato canônico `SIGLA · Xª Tranche · LPT (ECFS 123/2024)`. Usado pelo topbar (label do contrato ativo), dropdown da Notas e tooltip do ContratosBrowser.
+- `ufNomes.js` *(2026-05-13)* — mapa UF → nome completo + constantes `SEM_UF_KEY`/`SEM_UF_NOME`. Usado pelo ContratoSelector e ContratosBrowser.
 
-App.jsx tem state `currentView ∈ {"upload","notas"}` que comuta entre as duas telas via links no topbar (não há menu de tabs — removido em 2026-05-12 por poluição visual). Trocar de contrato exige logout + login (sem botão dedicado); `handleLogout` zera entriesState/uploadState/etc.
+App.jsx tem state `currentView ∈ {"upload","notas","contratos"}` que comuta entre as três telas via 3 links no topbar (não há menu de tabs — removido em 2026-05-12 por poluição visual). Contrato pode ser trocado **sem logout** clicando numa linha do ContratosBrowser.
+
+### Cache de sessão por contrato (F3-c upgrade, 2026-05-13)
+
+`App.jsx` mantém um Map `contratoSlices: { [contratoId]: { entries: { rows }, upload: { results, batchId, updatedAt } } }`. Cada contrato preserva, dentro da sessão, o último painel de status por arquivo e a lista de entries — trocar de contrato troca o snapshot exibido sem perder a memória do anterior. `handleLogout` zera o Map em definitivo. Operação atual de upload (`uploadProgress` — submitting/phase/progress/progressMessage) e fetch state global de entries (`entriesGlobal.loading/error`) permanecem fora do Map porque referem-se a uma ação em andamento, não a um contrato específico.
+
+O SSE faz **snapshot do `selectedContrato.id`** no início do `handleUploadSubmit` — trocar de contrato no meio do upload não bagunça os slices, os eventos sempre escrevem no slice do contrato onde o upload começou. `refreshEntries(contratoId)` recebe o id como argumento pelo mesmo motivo.
+
+Badge sutil no header do card "Status por arquivo": `Último upload {tempo relativo}` via helper `formatRelativeTime` no topo de `App.jsx`. Sinaliza ao operador que o painel mostra dados de uma jornada anterior na mesma sessão.
 
 A tabela_persistida da Upload filtra por `contrato_id` ativo na sessão (não mostra NFs de outros contratos). Antes do fix de 2026-05-12 ela mostrava todas as NFs do banco — bug visual sutil onde "trocar contrato" parecia persistir dados.
 

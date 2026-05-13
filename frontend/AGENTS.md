@@ -9,29 +9,34 @@
 ## Estrutura
 
 - `src/main.jsx` — ponto de entrada do frontend.
-- `src/App.jsx` — **SPA cujo núcleo continua monolítico**: login, upload, tabela_persistida, status badges, SSE consumer. State `currentView ∈ {"upload","notas"}` comuta entre as duas telas via links no topbar.
+- `src/App.jsx` — **SPA cujo núcleo continua monolítico**: login, upload, tabela_persistida, status badges, SSE consumer. State `currentView ∈ {"upload","notas","contratos"}` comuta entre as três telas via links no topbar. Mantém Map `contratoSlices` para cache de sessão por contrato (F3-c, 2026-05-13).
 - `src/components/`
   - `ContratoSelector.jsx` *(F2)* — tela intermediária pós-login. Dois níveis: Estado → Contrato.
   - `NfsBrowser.jsx` *(F3b)* — aba "Notas". Dropdown de contrato + filtros + tabela + footer com soma BRL. Coluna PDF com botões 👁/⬇ (F4).
-- `src/lib/exportExcel.js` — 2 variantes: `exportEntriesCompletas` (Upload, 11 colunas) e `exportNfsResumo` (Notas, 7 colunas).
-- `src/styles.css` — estilos globais e layout (~17KB).
+  - `ContratosBrowser.jsx` *(F3)* — aba "Contratos". Browser da base estática com filtros (`q`, UF, tipo, tranche, toggles). Clique em linha troca o contrato ativo e leva para Upload.
+- `src/lib/`
+  - `exportExcel.js` — 2 variantes: `exportEntriesCompletas` (Upload, 11 colunas) e `exportNfsResumo` (Notas, 7 colunas).
+  - `describeContrato.js` — formato canônico `SIGLA · tranche · tipo (numero)` usado em topbar, dropdown Notas, tooltip Contratos.
+  - `ufNomes.js` — mapa UF → nome completo + constantes `SEM_UF_KEY`/`SEM_UF_NOME`.
+- `src/styles.css` — estilos globais e layout (~20KB após F3/F3b/F4).
 - `vite.config.js` — build emite `assets/app.js` + `assets/index.css` em `backend/app/static/`.
 - `package.json` — `npm run build` para produção.
 
-## Estado entregue (MVP, Partes 1-7 + F2 ✅ + F3b ✅ + F4 ✅ + F5 ✅)
+## Estado entregue (MVP, Partes 1-7 + F2 ✅ + F3 ✅ + F3b ✅ + F4 ✅ + F5 ✅)
 
 - Tela de login com credenciais fictícias (será removida em F1).
-- ContratoSelector pós-login (2 níveis), com contrato ativo exibido no topbar.
+- ContratoSelector pós-login (2 níveis), com contrato ativo exibido no topbar no formato `SIGLA · tranche · tipo (numero)`.
 - Upload em lote via `POST /api/uploads` com SSE; limite 550 PDFs/batch (F5).
 - Aba Notas com filtros, soma BRL e botões 👁/⬇ para abrir/baixar PDF original (F4).
+- Aba Contratos: browser filtrável da base estática; clicar em linha troca contrato ativo sem logout.
 - Tabela_persistida da Upload filtra por contrato ativo (não mostra NFs de outros contratos).
 - Mensagem de duplicidade na Upload menciona o contrato onde a NF já está arquivada.
-- Estados de carregamento, vazio e erro tratados em ambas as telas.
+- Cache de sessão por contrato: trocar contrato preserva o snapshot dos painéis; badge "Último upload {relativo}" sinaliza dados de jornada anterior. Logout zera tudo.
+- Estados de carregamento, vazio e erro tratados em todas as telas.
 
 ## Limitações que serão resolvidas no próximo ciclo
 
 - **Autenticação fictícia** (`user`/`password`) — F1 vai substituir por cadastro com e-mail + bcrypt + confirmação. Decisões #1, #2, #5 resolvidas em `planning/PLAN.md`.
-- **Sem browser de contratos** — F3 vai adicionar aba/tela dedicada para consulta da base estática de contratos. Plano em `planning/F3-consulta-contratos.html`.
 - **Sem totalizadores gráficos** — F6 vai adicionar card no painel de upload com barras "enviado vs. contrato" e "enviado vs. CDE". Plano em `planning/F6-totalizadores.html`.
 - **Legacy NFs sem PDF clicável** (pré-F4) — limitação aceita (Decisão F4-d). Botões aparecem disabled com tooltip.
 - **Sem tratamento de campo faltando** — F8b introduz modal de preenchimento manual quando o parser não consegue extrair campo obrigatório (Decisão #8 Tipo 1). **Bloqueia o batch** até o usuário preencher.

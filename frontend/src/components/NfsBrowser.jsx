@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { describeContrato } from "../lib/describeContrato";
 import { exportNfsResumo } from "../lib/exportExcel";
+import { parseBR } from "../lib/parseBR";
+import TotalizadoresCard from "./TotalizadoresCard";
 
 /**
  * F3b — Consulta de NFs por contrato.
@@ -24,14 +26,6 @@ const EMPTY_FILTERS = {
   valor_max: "",
   tipo_nota: "",
 };
-
-function parseBR(v) {
-  if (v == null) return 0;
-  if (typeof v === "number") return v;
-  const s = String(v).replace(/\./g, "").replace(",", ".");
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
-}
 
 function formatBRL(n) {
   return new Intl.NumberFormat("pt-BR", {
@@ -237,6 +231,10 @@ export default function NfsBrowser({ selectedContratoId }) {
           </div>
 
           {error && <p className="inline-error">{error}</p>}
+
+          {contratoSelecionado && (
+            <TotalizadoresCard contrato={contratoSelecionado} />
+          )}
 
           {nfs.length === 0 && !loading ? (
             <div className="nfs-empty">

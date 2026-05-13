@@ -1256,3 +1256,119 @@ tr:hover td { background: #f8fbff; }
   color: var(--text-muted);
   font-family: ui-monospace, 'SF Mono', Consolas, monospace;
 }
+
+/* ── F6: Totais (strip compacto, 2026-05-13) ────────────── */
+
+.totais-strip {
+  padding: 14px 22px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.totais-loading {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.totais-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) 1.6fr 1.6fr;
+  gap: 22px;
+  align-items: start;
+  margin-top: 6px;
+}
+.totais-grid--empty {
+  grid-template-columns: minmax(160px, 0.8fr) 1fr;
+}
+@media (max-width: 720px) {
+  .totais-grid,
+  .totais-grid--empty {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+.totais-cell {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.totais-nfs {
+  align-self: center;
+}
+.totais-nfs strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.totais-empty-msg {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.totais-bar-block { display: flex; flex-direction: column; gap: 4px; }
+
+.totais-bar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.78rem;
+}
+.totais-bar-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.totais-bar-pct {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.totais-bar {
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.totais-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  border-radius: 999px;
+  transition: width 0.3s ease-out;
+}
+.totais-bar-fill.is-cde {
+  background: #4a90b8;
+}
+
+.totais-bar-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* F6 — rodapé compacto do Anexo I (Upload). */
+.anexo-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.anexo-footer strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.anexo-sep {
+  color: var(--text-muted);
+}

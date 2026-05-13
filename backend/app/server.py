@@ -431,6 +431,48 @@ def create_app() -> FastAPI:
         ).all()
         return [{**serialize_contrato(c), "nfs_count": count} for c, count in rows]
 
+    @app.get("/api/contratos/{contrato_id}/totais")
+    def totais_contrato(contrato_id: str, request: Request, db: DbSession) -> dict[str, object]:
+        """F6 — totais agregados de NFs por contrato para o card do painel de upload.
+
+        Uma única query agregada filtrando direto por `nf_entries.contrato_id`
+        (sem JOIN — F2 fix populou esse FK). NFs pré-F2 (`contrato_id=NULL`) não
+        entram em nenhuma soma.
+
+        `pct_*` retorna `null` quando o denominador é 0, evitando divisão por zero.
+        Frontend usa isso para renderizar "Valor contratual não definido" em vez de
+        barras com 100%/NaN.
+        """
+        get_authenticated_user(request)
+        contrato = db.get(Contrato, contrato_id)
+        if contrato is None:
+            raise HTTPException(status_code=404, detail="Contrato não encontrado.")
+
+        row = db.execute(
+            select(
+                func.coalesce(func.sum(NfEntry.valor_total), 0),
+                func.count(func.distinct(NfEntry.numero_nf)),
+            ).where(NfEntry.contrato_id == contrato_id)
+        ).one()
+        soma, contagem = row
+
+        def _pct(num: Decimal, den: Decimal) -> float | None:
+            if den is None or Decimal(den) == 0:
+                return None
+            return float(Decimal(num)) / float(Decimal(den))
+
+        return {
+            "contrato_id": contrato.id,
+            "numero": contrato.numero,
+            "valor_contrato": str(contrato.valor_contrato),
+            "valor_cde": str(contrato.valor_cde),
+            "participacao_cde": str(contrato.participacao_cde),
+            "soma_nfs_enviadas": str(soma),
+            "pct_enviado_sobre_contrato": _pct(soma, contrato.valor_contrato),
+            "pct_enviado_sobre_cde": _pct(soma, contrato.valor_cde),
+            "total_nfs_no_banco": contagem,
+        }
+
     @app.get("/api/session/contrato")
     def get_session_contrato(request: Request, db: DbSession) -> dict[str, object]:
         """Retorna o contrato selecionado na sessão atual ou 404 se nenhum.

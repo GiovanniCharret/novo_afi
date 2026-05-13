@@ -46,7 +46,7 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 3. F2  ✅ seleção de contrato + seed validado            (concluída 2026-05-11)
 4. F3b ✅ consulta de NFs por contrato                   (concluída 2026-05-12)
 5. F4  ✅ visualizar/baixar PDF                          (concluída 2026-05-12)
-6. F3  — consulta de contratos (browser estático)        (depende só do seed)
+6. F3  ✅ browser de contratos + cache por contrato      (concluída 2026-05-13)
 7. F6  — totalizadores                                   (consome F2)
 7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
 8. F1  — auth real                                       (desbloqueia F7)
@@ -230,16 +230,18 @@ Motivação: "as letrinhas confundem" (siglas técnicas como `ECFS 327/2013` nã
 
 ---
 
-## F3 — Página de consulta de contratos
+## F3 — Página de consulta de contratos ✅ concluída em 2026-05-13
 
 **Objetivo**: tela dedicada para busca e visualização dos **contratos** da base (planilha estática vinda do seed em F2), sem vínculo com a sessão ativa. Feature irmã de F3b: F3 lê a tabela `contratos`, F3b lê `nf_entries` filtrado por contrato. Spec visual completa em `planning/F3-consulta-contratos.html`.
 
 ### Subetapas
-- [ ] Estender `GET /api/contratos` com query params opcionais `?numero=&sigla=&uf=&tranche=&tipo_contrato=&com_valor=&incluir_inativos=`. Defaults `None`/`False` preservam o comportamento atual (regressão obrigatória — endpoint é compartilhado com `ContratoSelector` em F2 e dropdown da Notas em F3b). `numero`/`sigla` usam `ILIKE %x%`. Demais filtros combinam por `AND`.
-- [ ] Tela "Contratos" no frontend (3ª aba). Componente `frontend/src/components/ContratosBrowser.jsx`. App.jsx evolui `currentView` para `{"upload","notas","contratos"}`. Topbar ganha 3º link "Contratos".
-- [ ] Tabela com colunas: Número, Fornecedor (sigla), UF, Tranche, Tipo, Valor Contrato, Valor CDE, % CDE.
-- [ ] Barra de filtros: campo texto livre (busca em `numero` + `sigla`), select de UF, select de tipo (`LPT` / `MLA`), select de tranche, toggle "apenas com valor definido", toggle "incluir inativos".
-- [ ] Tabela usa `table-layout: fixed` e ellipsis (regras de design já em `CLAUDE.md`). Debounce 300ms + `AbortController` no fetch (reusa padrão do `NfsBrowser`).
+- [x] Estender `GET /api/contratos` com query params opcionais `?q=&numero=&sigla=&uf=&tranche=&tipo_contrato=&com_valor=&incluir_inativos=`. Defaults `None`/`False` preservam o comportamento atual (regressão validada — endpoint compartilhado com `ContratoSelector` F2 e dropdown da Notas F3b). `q` faz `ILIKE` em `numero OR sigla` (busca única). `numero`/`sigla` separados continuam ILIKE individuais.
+- [x] Tela "Contratos" no frontend (3ª aba). `frontend/src/components/ContratosBrowser.jsx`. App.jsx evoluiu `currentView` para `{"upload","notas","contratos"}`. Topbar ganhou 3º link "Contratos".
+- [x] Tabela com colunas: Número, Fornecedor (sigla), UF, Tranche, Tipo, Valor Contrato (BRL), Valor CDE (BRL), % CDE.
+- [x] Barra de filtros: campo `q` (numero+sigla), select de UF (nome completo via `lib/ufNomes.js`), select de tipo, select de tranche, toggle "apenas com valor definido", toggle "incluir inativos". Opções dos selects derivam de uma resposta sem filtros no mount (evita dependência circular).
+- [x] Tabela usa `table-layout: fixed` e ellipsis. Debounce 300ms + `AbortController` no fetch (reusa padrão do `NfsBrowser`).
+- [x] **F3-c upgrade (2026-05-13)**: clique na linha dispara `POST /api/session/contrato` + leva para Upload. Linhas com `ativo=false` ficam visualmente desabilitadas (`text-muted` + cursor `not-allowed`). Tooltip explica o comportamento.
+- [x] **Cache de sessão por contrato (2026-05-13)**: trocar de contrato preserva o snapshot dos slices `entries` e `upload.results` para retomada. Logout zera tudo. Badge "Último upload {relativo}" no header do card de Processamento.
 
 ### Critérios de Sucesso
 - `?uf=SP` retorna apenas SP; `?tipo_contrato=MLA` retorna apenas MLA; `?com_valor=true` retorna apenas com valor > 0.
