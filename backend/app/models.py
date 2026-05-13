@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, false as sa_false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -41,9 +41,18 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    # F1 — username vira nullable: novos cadastros usam email; username
+    # persiste só para o seed legado em APP_ENV=development.
+    username: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # F1 — campos de auth real (migration 0004).
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    email_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa_false())
+    confirmation_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    token_expires_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reset_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reset_expires_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[str] = mapped_column(
         DateTime(timezone=True),

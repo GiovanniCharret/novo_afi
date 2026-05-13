@@ -51,4 +51,6 @@ def test_login_rejects_invalid_credentials(client) -> None:
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid credentials"
+    # F1 (2026-05-13): mensagem em PT-BR + idêntica para email inexistente E
+    # senha errada (não vaza enumeração).
+    assert response.json()["detail"] == "E-mail ou senha incorretos."

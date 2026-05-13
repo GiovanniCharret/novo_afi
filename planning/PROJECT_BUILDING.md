@@ -65,13 +65,14 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 
 ---
 
-## Estado atual do repositório (snapshot 2026-05-13)
+## Estado atual do repositório (snapshot 2026-05-13 — tarde)
 
 ### O que já existe e funciona
 
 - Backend FastAPI com upload + persistência + SSE (Partes 1–7 do MVP em `docs/PLAN.md`).
-- Frontend SPA com 3 abas comutadas no topbar: **Upload** (App.jsx, fluxo herdado), **Notas** (`components/NfsBrowser.jsx`, F3b) e **Contratos** (`components/ContratosBrowser.jsx`, F3).
+- Frontend SPA com 3 abas comutadas no topbar: **Upload** (App.jsx, fluxo herdado + rodapé de totais no Anexo I), **Notas** (`components/NfsBrowser.jsx`, F3b + strip de Totais F6) e **Contratos** (`components/ContratosBrowser.jsx`, F3).
 - Cache de sessão por contrato: trocar contrato preserva o snapshot do painel de status e da tabela (zerado no logout). Badge "Último upload {relativo}" para sinalizar dados de uma jornada anterior.
+- Totais por contrato (`GET /api/contratos/{id}/totais`) — `TotalizadoresCard` strip na Notas + rodapé inline no Anexo I da Upload.
 - Parser v10 ✅ non-interactive desde F8a (2026-05-06). Parser DEV preservado conforme regra; PROD lives ao lado com marcadores `# FASE PROD`/`# FASE DEV`.
 - Tabela `contratos` ✅ seedada (110 entradas) — F2 (2026-05-11).
 - Endpoints F3b ✅: `/api/nf-entries` com filtros (`?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`), `/api/contratos` com `nfs_count` + filtros F3 (`?q&numero&sigla&uf&tranche&tipo_contrato&com_valor&incluir_inativos`).
@@ -88,8 +89,8 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 - ~~**F3b** (consulta de NFs por contrato): concluída 2026-05-12.~~
 - ~~**F4** (visualizar/baixar PDF): concluída 2026-05-12.~~
 - ~~**F3** (browser de contratos + cache por contrato): concluída 2026-05-13.~~
+- ~~**F6** (totalizadores): concluída 2026-05-13.~~
 - ~~**F8a** (parser non-interactive): concluída 2026-05-06.~~
-- **F6** (totalizadores no painel de upload). Plano completo em `planning/F6-totalizadores.html` com decisões fechadas. Sem schema novo.
 - **F1** (auth real + e-mails de confirmação): exige migration `users` + SMTP. Gateway para F7.
 - **F7** (e-mails transacionais — depende de F1).
 - **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): refina UX de NFs com campo faltante. Hoje cai em `erro_parsing`.
@@ -116,9 +117,9 @@ Parser non-interactive entregue. Itens que cobriam:
 
 ### Próxima tarefa concreta proposta
 
-Após F2/F3/F3b/F4 entregues (2026-05-11 → 2026-05-13), resta **F6** (totalizadores no painel de upload — UI + endpoint agregador, plano em HTML pronto com decisões fechadas em `planning/F6-totalizadores.html`). ROI visível alto (gráficos no painel).
+Após F2/F3/F3b/F4/F6 entregues (2026-05-11 → 2026-05-13), o caminho crítico restante é **F1 → F7 → F8b**.
 
-Depois disso, o caminho crítico é **F1 → F7 → F8b**.
+**F1** (auth real com e-mail + bcrypt + token de confirmação) é a próxima — gateway para F7 (e-mails transacionais). Exige migration na tabela `users` (`email`, `email_confirmed`, `confirmation_token`, `token_expires_at`, `reset_token`, `reset_expires_at`), configuração SMTP (Hostinger inicial — Decisão #1), e refatoração do `ContratoSelector` para depender de `email` em vez de `username`. Decisões #1, #2, #5 já resolvidas.
 
 
 

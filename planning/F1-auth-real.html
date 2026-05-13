@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation plan — F1 Login real com confirmação por e-mail</title>
+<style>
+  :root {
+    --ivory:    #FAF9F5;
+    --slate:    #141413;
+    --clay:     #D97757;
+    --oat:      #E3DACC;
+    --olive:    #788C5D;
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --white:    #FFFFFF;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans); background: var(--ivory);
+    color: var(--gray-700); line-height: 1.55;
+    padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 48px; max-width: 820px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.15; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+  .prompt-box { background: var(--gray-150); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+  .prompt-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+  .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate); letter-spacing: -0.01em; }
+  .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 720px; margin-bottom: 28px; }
+
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 64px; }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 18px 20px; }
+  .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+
+  .milestones { display: flex; flex-direction: column; gap: 0; }
+  .milestone { display: grid; grid-template-columns: 120px 28px 1fr; gap: 0 18px; position: relative; }
+  .milestone .when { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+  .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+  .milestone .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--white); border: 3px solid var(--clay); margin-top: 4px; flex-shrink: 0; }
+  .milestone .dot.done { background: var(--olive); border-color: var(--olive); }
+  .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+  .milestone:last-child .line { display: none; }
+  .milestone .body { padding-bottom: 36px; }
+  .milestone .body h3 { font-family: var(--serif); font-weight: 500; font-size: 19px; color: var(--slate); margin-bottom: 4px; }
+  .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 620px; }
+  .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .milestone .tag { font-family: var(--mono); font-size: 11.5px; background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 3px 8px; color: var(--gray-700); }
+
+  .diagram { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 28px; overflow-x: auto; }
+  .diagram svg { display: block; min-width: 760px; }
+  .diagram text { font-family: var(--mono); }
+  .caption { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+
+  .mocks { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 900px) { .mocks { grid-template-columns: 1fr; } }
+  .mock { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; overflow: hidden; }
+  .mock .mock-label { padding: 12px 18px; border-bottom: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); background: var(--gray-150); }
+  .mock .mock-body { padding: 22px; }
+
+  /* auth screen mockups */
+  .auth-card-mock {
+    background: var(--white); border: 1px solid #e2e8f0;
+    border-radius: 6px; padding: 24px;
+    max-width: 380px; margin: 0 auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .auth-card-mock h4 {
+    font-family: var(--sans); font-size: 16px; font-weight: 700;
+    color: #0d3558; margin-bottom: 4px;
+  }
+  .auth-card-mock .sub {
+    font-size: 12.5px; color: #4a5568; margin-bottom: 18px;
+  }
+  .auth-card-mock label {
+    display: block; font-size: 11px; color: #4a5568;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 4px; margin-top: 10px;
+  }
+  .auth-card-mock input {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid #cbd5e1; border-radius: 4px;
+    font-size: 13px; background: #fff;
+  }
+  .auth-card-mock .btn {
+    display: block; width: 100%; margin-top: 16px;
+    padding: 9px; border: none; background: #1b80c4;
+    color: #fff; font-weight: 600; border-radius: 4px;
+    font-size: 13.5px;
+  }
+  .auth-card-mock .link {
+    display: block; text-align: center; margin-top: 12px;
+    font-size: 12px; color: #1b80c4; text-decoration: underline;
+    cursor: default;
+  }
+  .auth-card-mock .info-box {
+    background: #f0f9ff; border: 1px solid #bae6fd;
+    border-radius: 4px; padding: 12px;
+    font-size: 12.5px; color: #075985;
+    margin: 8px 0;
+  }
+  .auth-card-mock .info-box strong { display: block; margin-bottom: 4px; color: #0c4a6e; }
+
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 980px) { .code-grid { grid-template-columns: 1fr; } }
+  .code-block { display: flex; flex-direction: column; gap: 10px; }
+  .code-block .file-label { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+  .code { background: var(--slate); border-radius: 12px; padding: 18px 20px; overflow-x: auto; flex: 1; }
+  .code pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: #E8E6DE; white-space: pre; }
+  .code .kw  { color: var(--clay); }
+  .code .str { color: var(--olive); }
+  .code .cm  { color: var(--gray-500); }
+  .code .fn  { color: #C9B98A; }
+
+  .risks { border: 1.5px solid var(--gray-300); border-radius: 12px; overflow: hidden; background: var(--white); }
+  .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; gap: 0; }
+  @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+  .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+  .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+  .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+  @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+  .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sev { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+  .sev.high { background: #F3D9CC; color: #8A3B1E; }
+  .sev.med  { background: var(--oat); color: var(--slate); }
+  .sev.low  { background: #E4E9DC; color: #4B5C39; }
+
+  .open-q { display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+  .q { background: var(--white); border: 1.5px solid var(--gray-300); border-left: 4px solid var(--clay); border-radius: 10px; padding: 16px 20px; }
+  .q .qt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+  .q .qd { font-size: 13.5px; color: var(--gray-500); }
+  .q .qd b { color: var(--gray-700); }
+  .q .owner { font-family: var(--mono); font-size: 11.5px; color: var(--gray-500); margin-top: 8px; }
+
+  .dod { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; max-width: 820px; }
+  @media (max-width: 720px) { .dod { grid-template-columns: 1fr; } }
+  .dod-item { display: flex; gap: 10px; font-size: 14px; color: var(--gray-700); }
+  .dod-item .box { width: 16px; height: 16px; border: 1.5px solid var(--gray-300); border-radius: 4px; flex-shrink: 0; margin-top: 3px; background: var(--white); }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--gray-150); padding: 1px 5px; border-radius: 4px; }
+
+  .resolved {
+    background: var(--white); border: 1.5px solid var(--gray-300);
+    border-left: 4px solid var(--olive); border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 10px; max-width: 820px;
+  }
+  .resolved h4 { font-size: 13.5px; color: var(--slate); margin-bottom: 2px; }
+  .resolved p { font-size: 13px; color: var(--gray-500); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="page-head">
+    <div class="eyebrow">Implementation plan · GFIP — Recebimento de NFs · feature F1</div>
+    <h1>Login real com confirmação por e-mail</h1>
+    <div class="prompt-box">
+      <span class="label">Objetivo</span>
+      Substituir o login fictício <code>user</code>/<code>password</code> por
+      cadastro real com e-mail, hash bcrypt, confirmação por token de 24h e
+      reset de senha por token de 1h. Gateway para F7 (e-mails transacionais)
+      e pré-requisito de qualquer deploy fora do ambiente <code>development</code>.
+      Spec original em <code>planning/PLAN.md</code> seção F1.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Esforço</div><div class="v accent">~3 dias</div></div>
+    <div class="cell"><div class="k">Endpoints novos</div><div class="v">5</div></div>
+    <div class="cell"><div class="k">Schema</div><div class="v">1 migration</div></div>
+    <div class="cell"><div class="k">Depende de</div><div class="v">DNS SPF/DKIM/DMARC</div></div>
+  </div>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">00</span><h2>Decisões já resolvidas</h2></div>
+    <p class="sec-intro">As 3 decisões do PLAN.md relevantes para F1 já foram resolvidas. Não rediscutir.</p>
+
+    <div class="resolved">
+      <h4>✓ Decisão #1 — SMTP via Hostinger inicial</h4>
+      <p>Server <code>smtp.hostinger.com</code>, porta 587 STARTTLS, autenticação via env <code>SMTP_USER/PASSWORD/FROM</code>. <strong>Pré-requisito de produção</strong>: SPF + DKIM + DMARC configurados no DNS antes do primeiro envio. Sem isso, e-mails caem em spam.</p>
+    </div>
+    <div class="resolved">
+      <h4>✓ Decisão #2 — bcrypt cost 10, multi-scheme via passlib</h4>
+      <p>Hash com <code>passlib[bcrypt]</code> cost 10. <code>CryptContext(schemes=["argon2","bcrypt"], deprecated="auto")</code> em <code>backend/app/security.py</code> permite migração automática para argon2id no login se a instituição mudar de algoritmo. Esqueleto já existe.</p>
+    </div>
+    <div class="resolved">
+      <h4>✓ Decisão #5 — Login por e-mail (sem username)</h4>
+      <p>Cadastro <code>{email, password}</code>. Senha ≥10 caracteres, sem regras de complexidade obrigatórias (OWASP 2024 / NIST SP 800-63B). Truncamento bcrypt em 72 bytes documentado no endpoint de registro. <code>users.username</code> vira <code>nullable=True</code> só para preservar o seed legado em <code>APP_ENV=development</code>.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Milestones</h2></div>
+    <p class="sec-intro">F1 é grande. Sub-fases B1 (schema), B2 (auth endpoints), B3 (SMTP + e-mail), C (frontend), todas com checkpoint humano. SMTP precisa do DNS configurado <strong>antes</strong> da B3 para o smoke funcionar — sinalizar ao usuário com antecedência.</p>
+
+    <div class="milestones">
+      <div class="milestone">
+        <div class="when">Fase A · Spec</div>
+        <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Aprovação deste HTML</h3>
+          <p>Confirmar 3 decisões já fechadas + resolver 5 questões abertas (token format, storage do token, falha de SMTP no registro, fluxo legacy, rate limiting). Checkpoint humano antes de B1.</p>
+          <div class="tags"><span class="tag">planning/F1-auth-real.html</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B1 · Schema</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>Migration <code>0004_f1_auth_real</code></h3>
+          <p>Adiciona em <code>users</code>: <code>email VARCHAR(255) UNIQUE NULL</code>, <code>email_confirmed BOOLEAN NOT NULL DEFAULT FALSE</code>, <code>confirmation_token_hash VARCHAR(64) NULL</code>, <code>token_expires_at TIMESTAMPTZ NULL</code>, <code>reset_token_hash VARCHAR(64) NULL</code>, <code>reset_expires_at TIMESTAMPTZ NULL</code>. <code>username</code> alterada para <code>NULL</code>. Backfill: usuário legado <code>user</code> recebe <code>email='legacy@local'</code> + <code>email_confirmed=TRUE</code> só se <code>APP_ENV=development</code> (controlado no <code>seeds/seed_legacy_user.py</code>).</p>
+          <div class="tags"><span class="tag">alembic/versions/0004_f1_auth_real.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B2 · Auth</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>5 endpoints + middleware</h3>
+          <p><code>POST /api/auth/register</code> · <code>GET /api/auth/confirm?token=...</code> · <code>POST /api/auth/login</code> (refeito para usar email) · <code>POST /api/auth/forgot-password</code> · <code>POST /api/auth/reset-password</code> · <code>POST /api/auth/resend-confirmation</code>. Tokens gerados com <code>uuid.uuid4().hex</code>; gravados como <code>sha256(token)</code> no DB (cliente recebe o token raw no e-mail). Login exige <code>email_confirmed=True</code> → 403 com mensagem orientando. Rejeição do usuário legado em produção via guard <code>os.getenv("APP_ENV") != "development"</code>.</p>
+          <div class="tags"><span class="tag">backend/app/server.py</span><span class="tag">backend/app/security.py</span><span class="tag">tests/test_auth_real.py</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase B3 · SMTP</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3><code>email_service.py</code> + templates</h3>
+          <p>Módulo isolado em <code>backend/app/email_service.py</code> com <code>send_email(to, subject, body_html)</code> via <code>smtplib</code> + <code>asyncio.to_thread</code>. Dois templates iniciais: confirmação de cadastro e reset de senha. SMTP via env (Hostinger). <strong>Falha de envio NÃO faz rollback do user</strong> — usuário fica em estado "aguardando confirmação"; UI oferece "Reenviar e-mail de confirmação" (B2c, ver questão #3).</p>
+          <div class="tags"><span class="tag">backend/app/email_service.py</span><span class="tag">backend/app/templates/email/</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase C · Frontend</div>
+        <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+        <div class="body">
+          <h3>5 telas + state machine</h3>
+          <p>Login refeito (email em vez de username, mensagens de erro específicas para "email não confirmado"). Registro (<code>{email, senha}</code>). "Verifique seu e-mail" (info + botão reenviar). "Esqueci minha senha" (input email). "Redefinir senha" (token na URL + nova senha + confirmar). State machine no <code>App.jsx</code>: <code>authView ∈ {"login","register","confirm-needed","forgot","reset","authenticated"}</code>. URL leitura via <code>window.location.search</code> para confirm/reset (sem router pesado).</p>
+          <div class="tags"><span class="tag">frontend/src/App.jsx</span><span class="tag">components/auth/</span></div>
+        </div>
+      </div>
+
+      <div class="milestone">
+        <div class="when">Fase D · DoD</div>
+        <div class="dot-col"><span class="dot"></span></div>
+        <div class="body">
+          <h3>DoD + dependências de ops</h3>
+          <p>Migration up/down idempotente; suíte verde; smoke completo (registro → e-mail → confirm → login → logout → forgot → reset → login); SPF/DKIM/DMARC validados; documentação SMTP env vars em CLAUDE.md; aprovação humana. <strong>Bloqueador externo</strong>: DNS records precisam estar em produção antes de ativar F1 para usuários reais.</p>
+          <div class="tags"><span class="tag">planning/DEFINITION_OF_DONE.md</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>Fluxo de dados</h2></div>
+    <p class="sec-intro">Registro → e-mail → confirm → login. Token é gerado pelo backend, enviado no e-mail em texto claro, e armazenado como SHA256 hash no DB — interceptar o DB não permite forjar confirmações.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 860 380" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#87867F"/>
+          </marker>
+          <marker id="arrowClay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#D97757"/>
+          </marker>
+        </defs>
+        <g font-size="12" fill="#141413">
+          <rect x="20" y="20" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="110" y="42" text-anchor="middle" font-weight="600">Frontend</text>
+          <text x="110" y="58" text-anchor="middle" fill="#87867F" font-size="10.5">tela de registro</text>
+
+          <rect x="340" y="20" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="430" y="42" text-anchor="middle" font-weight="600">POST /register</text>
+          <text x="430" y="58" text-anchor="middle" fill="#87867F" font-size="10.5">bcrypt + token gen</text>
+
+          <rect x="660" y="20" width="180" height="50" rx="10" fill="#141413"/>
+          <text x="750" y="42" text-anchor="middle" font-weight="600" fill="#FAF9F5">users</text>
+          <text x="750" y="58" text-anchor="middle" fill="#C9B98A" font-size="10.5">INSERT hash(senha) + hash(token)</text>
+
+          <rect x="340" y="110" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="430" y="132" text-anchor="middle" font-weight="600">email_service</text>
+          <text x="430" y="148" text-anchor="middle" fill="#87867F" font-size="10.5">Hostinger SMTP · STARTTLS</text>
+
+          <rect x="660" y="110" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="750" y="132" text-anchor="middle" font-weight="600">user@example.com</text>
+          <text x="750" y="148" text-anchor="middle" fill="#87867F" font-size="10.5">caixa de entrada</text>
+
+          <rect x="20" y="200" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="110" y="222" text-anchor="middle" font-weight="600">click no link</text>
+          <text x="110" y="238" text-anchor="middle" fill="#87867F" font-size="10.5">?token=raw_token</text>
+
+          <rect x="340" y="200" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="430" y="222" text-anchor="middle" font-weight="600">GET /confirm</text>
+          <text x="430" y="238" text-anchor="middle" fill="#87867F" font-size="10.5">sha256(token) lookup</text>
+
+          <rect x="660" y="200" width="180" height="50" rx="10" fill="#141413"/>
+          <text x="750" y="222" text-anchor="middle" font-weight="600" fill="#FAF9F5">users</text>
+          <text x="750" y="238" text-anchor="middle" fill="#C9B98A" font-size="10.5">SET email_confirmed=TRUE</text>
+
+          <rect x="20" y="290" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="110" y="312" text-anchor="middle" font-weight="600">login</text>
+          <text x="110" y="328" text-anchor="middle" fill="#87867F" font-size="10.5">tela com email + senha</text>
+
+          <rect x="340" y="290" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="430" y="312" text-anchor="middle" font-weight="600">POST /login</text>
+          <text x="430" y="328" text-anchor="middle" fill="#87867F" font-size="10.5">verify hash + 403 if !confirmed</text>
+
+          <rect x="660" y="290" width="180" height="50" rx="10" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/>
+          <text x="750" y="312" text-anchor="middle" font-weight="600">session cookie</text>
+          <text x="750" y="328" text-anchor="middle" fill="#87867F" font-size="10.5">SessionMiddleware</text>
+        </g>
+        <g stroke="#87867F" stroke-width="1.5" fill="none">
+          <path d="M200 45 L340 45" marker-end="url(#arrow)"/>
+          <path d="M520 45 L660 45" marker-end="url(#arrow)"/>
+          <path d="M430 70 L430 110" marker-end="url(#arrow)"/>
+          <path d="M520 135 L660 135" marker-end="url(#arrow)"/>
+          <path d="M750 160 L750 200" marker-end="url(#arrow)" stroke-dasharray="4 3"/>
+          <path d="M200 225 L340 225" marker-end="url(#arrow)"/>
+          <path d="M520 225 L660 225" marker-end="url(#arrow)"/>
+          <path d="M200 315 L340 315" marker-end="url(#arrow)"/>
+          <path d="M520 315 L660 315" marker-end="url(#arrow)"/>
+        </g>
+        <g font-size="10.5" fill="#87867F">
+          <text x="225" y="38">submit</text>
+          <text x="555" y="38">INSERT</text>
+          <text x="445" y="100">enqueue email</text>
+          <text x="555" y="128">SMTP</text>
+          <text x="755" y="185" fill="#87867F">usuário abre</text>
+          <text x="225" y="218">user clica</text>
+          <text x="555" y="218">valida hash</text>
+          <text x="225" y="308">submete</text>
+          <text x="555" y="308">200 OK + sessão</text>
+        </g>
+      </svg>
+      <p class="caption">Token raw sai do servidor uma vez (no corpo do e-mail) e nunca persiste; só o sha256 fica em DB. Se o backend for comprometido, o atacante NÃO consegue forjar confirmações.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Mockups</h2></div>
+    <p class="sec-intro">5 telas. Visual segue o padrão institucional já em uso (navy header + accent azul). Mensagens de erro específicas (não genéricas) ajudam o usuário a desbloquear-se sem suporte.</p>
+
+    <div class="mocks">
+      <div class="mock">
+        <div class="mock-label">A · Login (refeito)</div>
+        <div class="mock-body">
+          <div class="auth-card-mock">
+            <h4>Entrar</h4>
+            <p class="sub">Acesso ao sistema de notas fiscais</p>
+            <label>E-mail</label>
+            <input type="email" placeholder="seu.email@empresa.gov.br" />
+            <label>Senha</label>
+            <input type="password" placeholder="" />
+            <button class="btn">Entrar</button>
+            <span class="link">Esqueci minha senha</span>
+            <span class="link">Não tem conta? Criar agora</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mock">
+        <div class="mock-label">B · Registro</div>
+        <div class="mock-body">
+          <div class="auth-card-mock">
+            <h4>Criar conta</h4>
+            <p class="sub">Cadastro com e-mail institucional</p>
+            <label>E-mail</label>
+            <input type="email" placeholder="seu.email@empresa.gov.br" />
+            <label>Senha</label>
+            <input type="password" placeholder="mínimo 10 caracteres" />
+            <label>Confirmar senha</label>
+            <input type="password" />
+            <button class="btn">Criar conta</button>
+            <span class="link">Já tem conta? Entrar</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top: 22px;">
+        <div class="mock-label">C · "Verifique seu e-mail" (pós-registro)</div>
+        <div class="mock-body">
+          <div class="auth-card-mock">
+            <h4>Quase lá!</h4>
+            <p class="sub">Enviamos um link de confirmação para o seu e-mail</p>
+            <div class="info-box">
+              <strong>seu.email@empresa.gov.br</strong>
+              Clique no link recebido em até 24 horas para ativar sua conta. O link aparece no rodapé do e-mail.
+            </div>
+            <p class="sub" style="margin-top: 12px;">Não recebeu? Cheque a pasta de spam.</p>
+            <button class="btn" style="background:#fff;color:#1b80c4;border:1px solid #1b80c4;">Reenviar e-mail</button>
+            <span class="link">Voltar ao login</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top: 22px;">
+        <div class="mock-label">D · Esqueci minha senha</div>
+        <div class="mock-body">
+          <div class="auth-card-mock">
+            <h4>Recuperar senha</h4>
+            <p class="sub">Enviaremos um link de redefinição</p>
+            <label>E-mail cadastrado</label>
+            <input type="email" placeholder="seu.email@empresa.gov.br" />
+            <button class="btn">Enviar link</button>
+            <span class="link">Voltar ao login</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top: 22px;">
+        <div class="mock-label">E · Redefinir senha (via link do e-mail)</div>
+        <div class="mock-body">
+          <div class="auth-card-mock">
+            <h4>Nova senha</h4>
+            <p class="sub">Defina uma nova senha para sua conta</p>
+            <label>Nova senha</label>
+            <input type="password" placeholder="mínimo 10 caracteres" />
+            <label>Confirmar nova senha</label>
+            <input type="password" />
+            <button class="btn">Redefinir e entrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Código-chave</h2></div>
+    <p class="sec-intro">As duas peças onde dá pra errar feio: a geração e a verificação de token (precisam usar comparação constant-time), e a política de erros de login (não vazar se um e-mail existe ou não).</p>
+
+    <div class="code-grid">
+      <div class="code-block">
+        <div class="file-label">backend/app/security.py — token util</div>
+        <div class="code"><pre><span class="kw">import</span> hashlib, secrets, uuid
+<span class="kw">from</span> datetime <span class="kw">import</span> datetime, timedelta, timezone
+
+<span class="kw">def</span> <span class="fn">generate_token</span>() -&gt; tuple[str, str]:
+    <span class="str">"""Retorna (raw, hash). Raw vai no e-mail, hash no DB."""</span>
+    raw = uuid.<span class="fn">uuid4</span>().hex  <span class="cm"># 32 chars hex, 122 bits</span>
+    h = hashlib.<span class="fn">sha256</span>(raw.<span class="fn">encode</span>()).<span class="fn">hexdigest</span>()
+    <span class="kw">return</span> raw, h
+
+<span class="kw">def</span> <span class="fn">verify_token</span>(raw: str, stored_hash: str) -&gt; bool:
+    <span class="str">"""Constant-time. Evita timing attacks que distinguem</span>
+<span class="str">    tokens parcialmente corretos."""</span>
+    h = hashlib.<span class="fn">sha256</span>(raw.<span class="fn">encode</span>()).<span class="fn">hexdigest</span>()
+    <span class="kw">return</span> secrets.<span class="fn">compare_digest</span>(h, stored_hash)
+
+<span class="kw">def</span> <span class="fn">token_expiry</span>(hours: int = 24) -&gt; datetime:
+    <span class="kw">return</span> datetime.<span class="fn">now</span>(timezone.utc) + <span class="fn">timedelta</span>(hours=hours)</pre></div>
+      </div>
+
+      <div class="code-block">
+        <div class="file-label">backend/app/server.py — login + register</div>
+        <div class="code"><pre><span class="kw">@app</span>.<span class="fn">post</span>(<span class="str">"/api/auth/register"</span>)
+<span class="kw">def</span> <span class="fn">register</span>(p: RegisterPayload, db: DbSession):
+    <span class="kw">if</span> db.<span class="fn">scalar</span>(<span class="fn">select</span>(User).<span class="fn">where</span>(User.email == p.email)):
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(409, <span class="str">"E-mail já cadastrado"</span>)
+    raw, token_hash = <span class="fn">generate_token</span>()
+    user = User(
+        email=p.email,
+        password_hash=pwd_context.<span class="fn">hash</span>(p.password),
+        confirmation_token_hash=token_hash,
+        token_expires_at=<span class="fn">token_expiry</span>(24),
+        email_confirmed=<span class="kw">False</span>,
+    )
+    db.<span class="fn">add</span>(user); db.<span class="fn">commit</span>()
+    <span class="fn">send_confirmation_email</span>(p.email, raw)  <span class="cm"># falha não rola back</span>
+    <span class="kw">return</span> {<span class="str">"ok"</span>: <span class="kw">True</span>, <span class="str">"message"</span>: <span class="str">"Verifique seu e-mail."</span>}
+
+<span class="kw">@app</span>.<span class="fn">post</span>(<span class="str">"/api/auth/login"</span>)
+<span class="kw">def</span> <span class="fn">login</span>(p: LoginPayload, request: Request, db: DbSession):
+    user = db.<span class="fn">scalar</span>(<span class="fn">select</span>(User).<span class="fn">where</span>(User.email == p.email))
+    <span class="cm"># Mesma mensagem para e-mail inexistente E senha errada:</span>
+    <span class="cm"># não vazar quais e-mails estão cadastrados.</span>
+    <span class="kw">if not</span> user <span class="kw">or not</span> pwd_context.<span class="fn">verify</span>(p.password, user.password_hash):
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(401, <span class="str">"E-mail ou senha incorretos"</span>)
+    <span class="kw">if not</span> user.email_confirmed:
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(403, <span class="str">"Confirme seu e-mail antes de entrar"</span>)
+    request.session[<span class="str">"user"</span>] = {<span class="str">"email"</span>: user.email, <span class="str">"id"</span>: user.id}
+    <span class="kw">return</span> {<span class="str">"ok"</span>: <span class="kw">True</span>}</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Riscos &amp; mitigações</h2></div>
+    <div class="risks">
+      <div class="row">
+        <div class="cell head">Risco</div>
+        <div class="cell head">Sev</div>
+        <div class="cell head">Mitigação</div>
+      </div>
+      <div class="row">
+        <div class="cell">Vazamento de e-mails cadastrados — mensagens distintas para "e-mail não existe" vs "senha errada" permitem enumerar usuários.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">Resposta idêntica nos dois casos: <code>401 "E-mail ou senha incorretos"</code>. Idem no <code>forgot-password</code>: <strong>sempre</strong> retornar 200 sem revelar se o e-mail existe.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Token interceptado no DB (SQL injection, backup vazado, dump) permite forjar confirmação.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">DB armazena <code>sha256(token)</code>, não o raw. Token raw só existe na memória do servidor durante o request e no corpo do e-mail. Atacante com acesso ao DB não consegue forjar.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Brute-force no login — atacante tenta milhares de senhas para uma conta.</div>
+        <div class="cell"><span class="sev high">HIGH</span></div>
+        <div class="cell">Bcrypt cost 10 já dá ~80ms por verificação — limita ~12 tentativas/s por core. <strong>Rate limiting</strong> (Questão #5) idealmente: 5 tentativas em 15 min por IP+email. Sem isso, atacante remoto ainda consegue ~1k tentativas/hora.</div>
+      </div>
+      <div class="row">
+        <div class="cell">Timing attack no token compare — atacante mede tempo de resposta para descobrir tokens parcialmente corretos.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell"><code>secrets.compare_digest()</code> faz comparação constant-time. Nunca usar <code>==</code> em comparações de token.</div>
+      </div>
+      <div class="row">
+        <div class="cell">SMTP cai durante o registro — usuário fica sem o e-mail, conta criada mas inutilizável.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Endpoint <code>POST /api/auth/resend-confirmation</code> permite reenviar. UI da tela "verifique seu e-mail" tem botão para isso. Falha de envio é loggada mas não faz rollback (questão #3).</div>
+      </div>
+      <div class="row">
+        <div class="cell">Truncamento bcrypt em 72 bytes — senha de 80 caracteres tem só 72 verificados; UX ruim sem documentação.</div>
+        <div class="cell"><span class="sev low">LOW</span></div>
+        <div class="cell">UI do registro avisa: "senha entre 10 e 72 caracteres". Validação client + server. Limite raro de ser atingido na prática.</div>
+      </div>
+      <div class="row">
+        <div class="cell">SPF/DKIM/DMARC ausentes no DNS → e-mails caem em spam → usuário acha que sistema está quebrado.</div>
+        <div class="cell"><span class="sev med">MED</span></div>
+        <div class="cell">Pré-requisito de produção bloqueia deploy (Decisão #1). Smoke da Fase D inclui validação via MXToolbox antes do go-live para usuários reais.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
+    <div class="open-q">
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — Política de senha: status quo (mínimo 10 chars, sem blocklist)</div>
+        <div class="qd">Senha ≥10 caracteres é a única validação. <strong>Sem blocklist de senhas comuns</strong>, sem zxcvbn, sem haveibeenpwned. Aceita "1234567890" se atender o tamanho — limitação consciente. Mais permissivo; trade-off explícito de UX vs segurança. Decisão tomada em 2026-05-13.</div>
+        <div class="owner">Decidido · 2026-05-13</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — #1 Formato do token: <code>uuid.uuid4()</code></div>
+        <div class="qd">Token gerado com <code>uuid.uuid4().hex</code> → 32 chars hex sem hyphens. 122 bits de entropia — astronomicamente forte. Frontend recebe o hex direto na URL do e-mail; backend compara via <code>secrets.compare_digest</code>. Confirmado em 2026-05-13.</div>
+        <div class="owner">Decidido · 2026-05-13</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — #2 Storage do token: <code>sha256</code> hash</div>
+        <div class="qd">DB armazena <code>sha256(token)</code> em <code>confirmation_token_hash</code> / <code>reset_token_hash</code>. Cliente recebe o token raw no corpo do e-mail; servidor compara hashes via <code>secrets.compare_digest</code>. Protege contra vazamento de DB dump. Confirmado em 2026-05-13.</div>
+        <div class="owner">Decidido · 2026-05-13</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — #3 Falha de SMTP no registro: conta órfã</div>
+        <div class="qd">Sem rollback. Se SMTP falhar durante o registro, o user record é criado com <code>email_confirmed=False</code> aguardando. Tela "verifique seu e-mail" tem botão "Reenviar e-mail" que chama <code>POST /api/auth/resend-confirmation</code>. Erros de envio são loggados. Confirmado em 2026-05-13.</div>
+        <div class="owner">Decidido · 2026-05-13</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — #4 Sem migração do usuário legado</div>
+        <div class="qd"><strong>Todos os usuários atuais criam conta nova</strong>. Seed do legado <code>user</code>/<code>password</code> permanece <strong>apenas</strong> em <code>APP_ENV=development</code> para testes locais. Em produção e staging, qualquer pessoa que queira acesso passa pelo fluxo normal de registro com e-mail. Sem caminho de auth especial. Confirmado em 2026-05-13.</div>
+        <div class="owner">Decidido · 2026-05-13</div>
+      </div>
+      <div class="q" style="border-left-color: var(--olive);">
+        <div class="qt">✓ Resolvido — #5 Rate limiting adiado</div>
+        <div class="qd">F1 entrega <strong>sem rate limit</strong>. Risco MED documentado na seção 05. Tempo de bcrypt cost 10 (~80ms) já limita parcialmente. Se aparecer abuso real em produção, reabrir como F1.1 com <code>slowapi</code> (~3h extras). Confirmado em 2026-05-13.</div>
+        <div class="owner">Decidido · 2026-05-13</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+
+  <section>
+    <div class="sec-head"><span class="num">07</span><h2>Definition of Done</h2></div>
+    <p class="sec-intro">Checklist extraído de <code>planning/DEFINITION_OF_DONE.md</code> aplicado a F1.</p>
+    <div class="dod">
+      <div class="dod-item"><span class="box"></span><span>Migration <code>0004</code> aplica e desfaz limpo; smoke em Postgres real.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Testes backend: registro com e-mail duplicado → 409; login sem confirmação → 403; token expirado → 400; reset com token válido → 200; legado em produção → 401.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Testes: <code>forgot-password</code> retorna 200 para e-mail inexistente (não vaza).</span></div>
+      <div class="dod-item"><span class="box"></span><span>Smoke completo: registro → e-mail → confirm → login → logout → forgot → reset → login novo.</span></div>
+      <div class="dod-item"><span class="box"></span><span>SPF + DKIM + DMARC validados via MXToolbox antes do go-live (não bloqueia merge do código).</span></div>
+      <div class="dod-item"><span class="box"></span><span>Build do frontend sem warnings.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Suíte completa (<code>pytest</code>) verde.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Nenhuma alteração em <code>backend/app/main.py</code> (parser intocado).</span></div>
+      <div class="dod-item"><span class="box"></span><span><code>CLAUDE.md</code> documenta os 5 endpoints novos, env vars SMTP, e o bloqueio de legado em produção.</span></div>
+      <div class="dod-item"><span class="box"></span><span>Aprovação humana no PR.</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

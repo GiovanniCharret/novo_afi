@@ -17,7 +17,18 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .db import get_db, get_session, init_db
 from .dependencies import require_contrato
+from .email_service import send_confirmation_email, send_reset_email
 from .models import Contrato, NfEntry, UploadBatch, UploadFile as UploadFileRecord, User
+from .security import (
+    MIN_PASSWORD_LENGTH,
+    generate_token,
+    hash_password,
+    is_expired,
+    needs_rehash,
+    token_expiry,
+    verify_password,
+    verify_token,
+)
 from .storage import get_pdf_path
 from .normalization import (
     build_business_key,
@@ -45,8 +56,32 @@ DEFAULT_PASSWORD_HASH = "mvp-user-password-placeholder"
 
 
 class LoginPayload(BaseModel):
-    username: str
+    # F1 (2026-05-13) — `email` é o caminho principal (novos cadastros).
+    # `username` permanece opcional para suportar o legacy seed
+    # `user/password` em APP_ENV=development (Decisão F1-e).
+    email: str | None = None
+    username: str | None = None
     password: str
+
+
+class RegisterPayload(BaseModel):
+    email: str
+    password: str
+
+
+class ConfirmTokenPayload(BaseModel):
+    token: str
+
+
+class EmailOnlyPayload(BaseModel):
+    """Para `forgot-password` e `resend-confirmation` — sempre retornam 200,
+    independente de o e-mail existir, para não vazar enumeração."""
+    email: str
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str
+    new_password: str
 
 
 class ContratoSelectPayload(BaseModel):
@@ -232,19 +267,155 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.post("/api/auth/login")
-    def login(payload: LoginPayload, request: Request) -> dict[str, object]:
-        if payload.username != AUTH_USERNAME or payload.password != AUTH_PASSWORD:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-            )
+    def login(payload: LoginPayload, request: Request, db: DbSession) -> dict[str, object]:
+        """F1 (2026-05-13) — login por e-mail + bcrypt.
 
-        user = {
-            "username": AUTH_USERNAME,
-            "display_name": "Usuario de teste",
+        Compat: em APP_ENV=development, ainda aceita `{username,password}` com
+        as credenciais legadas hardcoded (Decisão F1-e). Resposta 401 é
+        idêntica para e-mail inexistente E senha errada (não vaza enumeração).
+        """
+        # Legacy path — somente em dev, somente para o seed hardcoded.
+        if (
+            payload.username == AUTH_USERNAME
+            and payload.password == AUTH_PASSWORD
+            and os.getenv("APP_ENV", "development") == "development"
+        ):
+            user_payload = {
+                "username": AUTH_USERNAME,
+                "display_name": "Usuario de teste",
+            }
+            request.session["user"] = user_payload
+            return {"ok": True, "user": user_payload}
+
+        # Novo fluxo: e-mail + bcrypt.
+        if not payload.email:
+            raise HTTPException(401, "E-mail ou senha incorretos.")
+        user = db.scalar(select(User).where(User.email == payload.email))
+        if user is None or not verify_password(payload.password, user.password_hash):
+            raise HTTPException(401, "E-mail ou senha incorretos.")
+        if not user.email_confirmed:
+            raise HTTPException(403, "Confirme seu e-mail antes de entrar.")
+        # Re-hash transparente se passlib decidir (ex.: migração futura para argon2).
+        if needs_rehash(user.password_hash):
+            user.password_hash = hash_password(payload.password)
+            db.commit()
+        user_payload = {
+            "username": user.username or user.email,
+            "display_name": user.display_name,
+            "email": user.email,
         }
-        request.session["user"] = user
-        return {"ok": True, "user": user}
+        request.session["user"] = user_payload
+        return {"ok": True, "user": user_payload}
+
+    @app.post("/api/auth/register", status_code=201)
+    def register(payload: RegisterPayload, db: DbSession) -> dict[str, object]:
+        """F1 — cria usuário com email_confirmed=False + gera token + dispara
+        e-mail. 409 se e-mail duplicado. 422 se senha < 10 chars."""
+        if len(payload.password) < MIN_PASSWORD_LENGTH:
+            raise HTTPException(
+                422,
+                f"Senha precisa ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.",
+            )
+        existing = db.scalar(select(User).where(User.email == payload.email))
+        if existing is not None:
+            raise HTTPException(409, "E-mail já cadastrado.")
+
+        raw, token_hash = generate_token()
+        user = User(
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+            email_confirmed=False,
+            confirmation_token_hash=token_hash,
+            token_expires_at=token_expiry(24),
+        )
+        db.add(user)
+        db.commit()
+
+        # Decisão F1-d: falha de SMTP NÃO faz rollback. Conta órfã fica
+        # aguardando; usuário pode reenviar via /resend-confirmation.
+        try:
+            send_confirmation_email(payload.email, raw)
+        except Exception as exc:
+            print(f"[auth] falha ao enviar e-mail de confirmação para {payload.email}: {exc}")
+
+        return {"ok": True, "message": "Verifique seu e-mail."}
+
+    @app.get("/api/auth/confirm")
+    def confirm_email(token: str, db: DbSession) -> dict[str, object]:
+        """F1 — confirma e-mail. 400 se token inválido OU expirado (mesma
+        mensagem; não vale distinguir para o atacante).
+
+        Lookup por hash do token (cliente passa raw; backend recalcula hash
+        para encontrar o user). `verify_token` faz comparação constant-time
+        como dupla checagem.
+        """
+        import hashlib
+        token_h = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        user = db.scalar(select(User).where(User.confirmation_token_hash == token_h))
+        if user is None or not verify_token(token, user.confirmation_token_hash):
+            raise HTTPException(400, "Token inválido ou expirado.")
+        if is_expired(user.token_expires_at):
+            raise HTTPException(400, "Token inválido ou expirado.")
+
+        user.email_confirmed = True
+        user.confirmation_token_hash = None
+        user.token_expires_at = None
+        db.commit()
+        return {"ok": True, "message": "E-mail confirmado."}
+
+    @app.post("/api/auth/resend-confirmation")
+    def resend_confirmation(payload: EmailOnlyPayload, db: DbSession) -> dict[str, object]:
+        """F1 — sempre 200 (não vaza enumeração). Se usuário existe e não está
+        confirmado, gera token novo e reenvia e-mail."""
+        user = db.scalar(select(User).where(User.email == payload.email))
+        if user is not None and not user.email_confirmed:
+            raw, token_hash = generate_token()
+            user.confirmation_token_hash = token_hash
+            user.token_expires_at = token_expiry(24)
+            db.commit()
+            try:
+                send_confirmation_email(payload.email, raw)
+            except Exception as exc:
+                print(f"[auth] falha ao reenviar confirmação para {payload.email}: {exc}")
+        return {"ok": True, "message": "Se este e-mail estiver cadastrado, enviamos novo link."}
+
+    @app.post("/api/auth/forgot-password")
+    def forgot_password(payload: EmailOnlyPayload, db: DbSession) -> dict[str, object]:
+        """F1 — sempre 200. Se usuário existe, gera reset_token (1h) e envia
+        e-mail. Mensagem é idêntica para e-mail inexistente, para não vazar."""
+        user = db.scalar(select(User).where(User.email == payload.email))
+        if user is not None:
+            raw, token_hash = generate_token()
+            user.reset_token_hash = token_hash
+            user.reset_expires_at = token_expiry(1)
+            db.commit()
+            try:
+                send_reset_email(payload.email, raw)
+            except Exception as exc:
+                print(f"[auth] falha ao enviar reset para {payload.email}: {exc}")
+        return {"ok": True, "message": "Se este e-mail estiver cadastrado, enviamos um link de redefinição."}
+
+    @app.post("/api/auth/reset-password")
+    def reset_password(payload: ResetPasswordPayload, db: DbSession) -> dict[str, object]:
+        """F1 — valida reset_token + expiry, atualiza hash, limpa o token."""
+        if len(payload.new_password) < MIN_PASSWORD_LENGTH:
+            raise HTTPException(
+                422,
+                f"Senha precisa ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.",
+            )
+        import hashlib
+        token_h = hashlib.sha256(payload.token.encode("utf-8")).hexdigest()
+        user = db.scalar(select(User).where(User.reset_token_hash == token_h))
+        if user is None or not verify_token(payload.token, user.reset_token_hash):
+            raise HTTPException(400, "Token inválido ou expirado.")
+        if is_expired(user.reset_expires_at):
+            raise HTTPException(400, "Token inválido ou expirado.")
+
+        user.password_hash = hash_password(payload.new_password)
+        user.reset_token_hash = None
+        user.reset_expires_at = None
+        db.commit()
+        return {"ok": True, "message": "Senha redefinida."}
 
     @app.post("/api/auth/logout")
     def logout(request: Request) -> dict[str, bool]:

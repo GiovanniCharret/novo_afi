@@ -12,17 +12,19 @@
 - `src/App.jsx` — **SPA cujo núcleo continua monolítico**: login, upload, tabela_persistida, status badges, SSE consumer. State `currentView ∈ {"upload","notas","contratos"}` comuta entre as três telas via links no topbar. Mantém Map `contratoSlices` para cache de sessão por contrato (F3-c, 2026-05-13).
 - `src/components/`
   - `ContratoSelector.jsx` *(F2)* — tela intermediária pós-login. Dois níveis: Estado → Contrato.
-  - `NfsBrowser.jsx` *(F3b)* — aba "Notas". Dropdown de contrato + filtros + tabela + footer com soma BRL. Coluna PDF com botões 👁/⬇ (F4).
+  - `NfsBrowser.jsx` *(F3b)* — aba "Notas". Dropdown de contrato + filtros + tabela + footer com soma BRL. Coluna PDF com botões 👁/⬇ (F4). Strip `TotalizadoresCard` entre filtros e tabela.
   - `ContratosBrowser.jsx` *(F3)* — aba "Contratos". Browser da base estática com filtros (`q`, UF, tipo, tranche, toggles). Clique em linha troca o contrato ativo e leva para Upload.
+  - `TotalizadoresCard.jsx` *(F6, 2026-05-13)* — strip horizontal compacto com 3 colunas (NFs distintas | barra vs. contrato | barra vs. CDE). Usado dentro do NfsBrowser. Fetch único em `/api/contratos/{id}/totais`.
 - `src/lib/`
   - `exportExcel.js` — 2 variantes: `exportEntriesCompletas` (Upload, 11 colunas) e `exportNfsResumo` (Notas, 7 colunas).
   - `describeContrato.js` — formato canônico `SIGLA · tranche · tipo (numero)` usado em topbar, dropdown Notas, tooltip Contratos.
   - `ufNomes.js` — mapa UF → nome completo + constantes `SEM_UF_KEY`/`SEM_UF_NOME`.
+  - `parseBR.js` *(F6)* — converte string BR (`"1.234,56"`) para Number. Compartilhado entre NfsBrowser (soma footer) e App.jsx (rodapé Anexo I).
 - `src/styles.css` — estilos globais e layout (~20KB após F3/F3b/F4).
 - `vite.config.js` — build emite `assets/app.js` + `assets/index.css` em `backend/app/static/`.
 - `package.json` — `npm run build` para produção.
 
-## Estado entregue (MVP, Partes 1-7 + F2 ✅ + F3 ✅ + F3b ✅ + F4 ✅ + F5 ✅)
+## Estado entregue (MVP, Partes 1-7 + F2 ✅ + F3 ✅ + F3b ✅ + F4 ✅ + F5 ✅ + F6 ✅)
 
 - Tela de login com credenciais fictícias (será removida em F1).
 - ContratoSelector pós-login (2 níveis), com contrato ativo exibido no topbar no formato `SIGLA · tranche · tipo (numero)`.
@@ -37,7 +39,6 @@
 ## Limitações que serão resolvidas no próximo ciclo
 
 - **Autenticação fictícia** (`user`/`password`) — F1 vai substituir por cadastro com e-mail + bcrypt + confirmação. Decisões #1, #2, #5 resolvidas em `planning/PLAN.md`.
-- **Sem totalizadores gráficos** — F6 vai adicionar card no painel de upload com barras "enviado vs. contrato" e "enviado vs. CDE". Plano em `planning/F6-totalizadores.html`.
 - **Legacy NFs sem PDF clicável** (pré-F4) — limitação aceita (Decisão F4-d). Botões aparecem disabled com tooltip.
 - **Sem tratamento de campo faltando** — F8b introduz modal de preenchimento manual quando o parser não consegue extrair campo obrigatório (Decisão #8 Tipo 1). **Bloqueia o batch** até o usuário preencher.
 

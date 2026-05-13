@@ -47,7 +47,7 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 4. F3b ✅ consulta de NFs por contrato                   (concluída 2026-05-12)
 5. F4  ✅ visualizar/baixar PDF                          (concluída 2026-05-12)
 6. F3  ✅ browser de contratos + cache por contrato      (concluída 2026-05-13)
-7. F6  — totalizadores                                   (consome F2)
+7. F6  ✅ totalizadores                                  (concluída 2026-05-13)
 7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
 8. F1  — auth real                                       (desbloqueia F7)
 9. F7  — e-mails transacionais                           (consome F1)
@@ -315,60 +315,72 @@ Motivação: "as letrinhas confundem" (siglas técnicas como `ECFS 327/2013` nã
 
 ---
 
-## F6 — Totalizadores no painel de upload
+## F6 — Totalizadores ✅ concluída em 2026-05-13
 
-**Objetivo**: card no painel de upload mostrando, para o contrato ativo na sessão, o quanto já foi enviado vs. valor de contrato e CDE, com progresso visual.
+**Objetivo original**: card no painel de upload mostrando, para o contrato ativo na sessão, o quanto já foi enviado vs. valor de contrato e CDE, com progresso visual. **Spec evoluiu durante a entrega** (ver "Evolução pós-implementação" abaixo).
 
 ### Subetapas
-- [ ] `GET /api/contratos/{contrato_id}/totais` retorna:
-  ```json
-  {
-    "contrato_id": "...",
-    "numero": "ECFS 101/2005",
-    "valor_contrato": 2143980.00,
-    "valor_cde": 1715180.00,
-    "participacao_cde": 0.8,
-    "soma_nfs_enviadas": 980000.00,
-    "pct_enviado_sobre_contrato": 0.4573,
-    "pct_enviado_sobre_cde": 0.5713,
-    "total_nfs_no_banco": 48
-  }
-  ```
-  `soma_nfs_enviadas` = `SUM(nf_entries.valor_total)` filtrado por `contrato_id`. `total_nfs_no_banco` = `COUNT(DISTINCT nf_entries.numero_nf)` no mesmo filtro.
-- [ ] Card no painel de upload (antes da seleção de arquivos): duas barras horizontais (vs. contrato; vs. CDE) + contagem de NFs distintas. Valores formatados como BRL (R$ X.XXX.XXX,XX).
-- [ ] Recarrega ao montar e após cada `batch_done` no SSE.
-- [ ] Quando `valor_contrato = 0`, exibir "Valor contratual não definido" e retornar `pct_*` como `null` (sem divisão por zero).
+- [x] `GET /api/contratos/{contrato_id}/totais` retorna `{contrato_id, numero, valor_contrato, valor_cde, participacao_cde, soma_nfs_enviadas, pct_enviado_sobre_contrato, pct_enviado_sobre_cde, total_nfs_no_banco}`. Query única agregada em `nf_entries.contrato_id` (sem JOIN — F2 fix). Helper `_pct(num, den)` retorna `None` se denominador é 0.
+- [x] Strip horizontal compacto `TotalizadoresCard.jsx` na aba **Notas** (não na Upload — ver evolução). 3 colunas: contagem de NFs distintas, barra `vs. contrato`, barra `vs. CDE` com `(Z% do contrato)` na meta. Valores BRL via `Intl.NumberFormat`.
+- [x] Rodapé compacto inline `.anexo-footer` no Anexo I da Upload (substituiu o card): `N NFs distintas · Total: R$ X · Y% do contrato · Z% da CDE`. Cálculo client-side via `parseBR(row.valor_total)` — sem request extra.
+- [x] Quando `valor_contrato = 0`, backend retorna `pct_* = null`; frontend renderiza empty state inline ("Contrato sem valor definido — percentuais indisponíveis").
+- [x] 7 testes backend em `tests/test_totais_contrato.py` cobrindo: auth, 404, contrato vazio, contrato com NFs, valor zero (null pct), NFs pré-F2 ignoradas, isolamento entre contratos.
 
 ### Critérios de Sucesso
-- 401 sem sessão; 404 para contrato inexistente.
-- `valor_contrato = 0` → `pct_enviado_sobre_contrato = null` e UI exibe mensagem.
-- Card atualiza após upload sem reload da página.
-- `soma_nfs_enviadas` bate com soma manual via SQL direto no banco.
+- ✅ 401 sem sessão; 404 para contrato inexistente.
+- ✅ `valor_contrato = 0` → `pct_enviado_sobre_contrato = null` e UI exibe mensagem.
+- ✅ Notas tab atualiza ao trocar contrato (componente refetch); footer da Upload recalcula ao trocar contrato (state per-contract).
+- ✅ `soma_nfs_enviadas` bate com soma manual via SQL direto no banco.
+
+### Evolução pós-implementação (2026-05-13)
+A spec original colocava o card de totalizadores **na aba Upload**, antes da seleção de arquivos. Após smoke visual o operador relatou que:
+- Card pesado na Upload competia por atenção com o fluxo de envio.
+- A informação de totais é mais útil junto da consulta de NFs (aba Notas) — onde o operador investiga o que já entrou.
+
+Resultou em duas mudanças:
+1. `TotalizadoresCard` migrou da Upload para a Notas (entre filter bar e tabela).
+2. Versão simplificada virou rodapé inline (`.anexo-footer`) na tabela do Anexo I (Upload) — mantém a info acessível sem destaque pesado.
+
+A iteração visual também simplificou o componente: virou strip horizontal (3 colunas) em vez de card; removidos "Enviado" dos labels e o subtítulo de contrato (redundante com o dropdown da Notas); kicker virou "Totais" em vez de "Totalizadores".
 
 ---
 
 ## F1 — Login real com confirmação por e-mail
 
-**Objetivo**: substituir credenciais fixas por cadastro real com e-mail, hash de senha, confirmação por token e reset de senha.
+**Objetivo**: substituir credenciais fixas por cadastro real com e-mail, hash de senha, confirmação por token e reset de senha. Spec visual completa em `planning/F1-auth-real.html`.
 
 ### Subetapas
-- [ ] Adicionar colunas de auth em `users` (ver schema transversal).
-- [ ] `POST /api/auth/register` body `{email, password}`. Cria usuário com `email_confirmed=False`, gera `confirmation_token` (UUID seguro), `token_expires_at = now() + 24h`, envia e-mail com link `GET /api/auth/confirm?token=...`.
-- [ ] `GET /api/auth/confirm?token=...` valida token + expiração, define `email_confirmed=True`, limpa o token.
-- [ ] `POST /api/auth/login` exige `email_confirmed=True`. Caso contrário retorna 403 com mensagem orientando confirmação.
-- [ ] `POST /api/auth/forgot-password` body `{email}` gera `reset_token`, `reset_expires_at = now() + 1h`, envia e-mail.
+- [ ] Migration `0004_f1_auth_real`: adicionar em `users` → `email VARCHAR(255) UNIQUE NULL`, `email_confirmed BOOLEAN NOT NULL DEFAULT FALSE`, `confirmation_token_hash VARCHAR(64) NULL`, `token_expires_at TIMESTAMPTZ NULL`, `reset_token_hash VARCHAR(64) NULL`, `reset_expires_at TIMESTAMPTZ NULL`. Alterar `username` para `NULL`.
+- [ ] `POST /api/auth/register` body `{email, password}`. Cria usuário com `email_confirmed=False`, gera token via `uuid.uuid4().hex`, grava `sha256(token)` em `confirmation_token_hash`, `token_expires_at = now() + 24h`, envia e-mail com link `GET /api/auth/confirm?token=...`.
+- [ ] `GET /api/auth/confirm?token=...` valida token + expiração via `secrets.compare_digest`, define `email_confirmed=True`, limpa o token.
+- [ ] `POST /api/auth/login` body `{email, password}`. Mesma resposta 401 para e-mail inexistente E senha errada (não vaza enumeração). Exige `email_confirmed=True` → 403 com mensagem orientando confirmação.
+- [ ] `POST /api/auth/forgot-password` body `{email}`. **Sempre retorna 200** (não vaza se e-mail existe). Se existir, gera `reset_token_hash`, `reset_expires_at = now() + 1h`, envia e-mail.
 - [ ] `POST /api/auth/reset-password` body `{token, new_password}` valida e atualiza hash.
-- [ ] Hash com `passlib[bcrypt]`. **Decisão pendente**: bcrypt ou argon2? (Decisão #2).
-- [ ] Manter usuário `user`/`password` apenas se `DEBUG=true` (não em produção).
-- [ ] Telas no frontend: registro, "verifique seu e-mail", login (ajustar mensagem de erro), "esqueci minha senha", "redefinir senha".
+- [ ] `POST /api/auth/resend-confirmation` body `{email}` (idem `forgot-password`: sempre 200) — regenera token e reenvia e-mail. Para conta órfã pós-falha de SMTP no registro.
+- [ ] Hash com `passlib[bcrypt]` cost 10 (Decisão #2 já resolvida). `CryptContext` multi-scheme permite migração futura para argon2.
+- [ ] Senha mínimo 10 caracteres, sem regras de complexidade (Decisão #5 + F1-a).
+- [ ] Seed do usuário legado `user/password` rodando **apenas** em `APP_ENV=development` (F1-e: sem migração).
+- [ ] `email_service.py` isolado com `send_email(to, subject, body_html)` via `smtplib` + `asyncio.to_thread`. Templates em `backend/app/templates/email/`.
+- [ ] Telas no frontend (state machine `authView`): registro, "verifique seu e-mail" (com botão reenviar), login, esqueci minha senha, redefinir senha (lê token via `window.location.search`).
 
 ### Critérios de Sucesso
 - Registro com e-mail duplicado → 409.
-- Login sem confirmação de e-mail → 403.
-- `confirm?token=EXPIRADO` → 400 com mensagem de expiração.
+- Login sem confirmação de e-mail → 403 com mensagem específica.
+- Login com e-mail inexistente ou senha errada → 401 com mesma mensagem (não vaza).
+- `confirm?token=EXPIRADO` ou inválido → 400.
 - Login com confirmado e senha correta → 200 + sessão.
-- E-mail enviado para o endereço (verificável em sandbox SMTP — Decisão #1).
+- `forgot-password` com e-mail inexistente → 200 (não vaza).
 - Reset com token válido altera senha; login com a antiga → 401.
+- E-mail enviado para o endereço (verificável em sandbox SMTP — Decisão #1).
+- Em `APP_ENV != development`, login com `user/password` legado → 401.
+
+### Decisões registradas (2026-05-13)
+- **F1-a** (política de senha): mínimo **10 caracteres**, sem blocklist nem zxcvbn nem haveibeenpwned. Aceita senhas previsíveis como `1234567890` ou `aaaaaaaaaa` se atenderem o tamanho. Trade-off consciente de UX vs segurança — alinhado com OWASP 2024 / NIST SP 800-63B.
+- **F1-b** (formato do token): `uuid.uuid4().hex` (32 chars hex, 122 bits de entropia).
+- **F1-c** (storage do token): `sha256(token)` no DB. Token raw só sai do servidor uma vez no corpo do e-mail. Protege contra vazamento de DB.
+- **F1-d** (SMTP falha no registro): **conta órfã** (não rollback). Usuário fica em `email_confirmed=False` aguardando. Botão "Reenviar e-mail" na UI dispara `POST /api/auth/resend-confirmation`.
+- **F1-e** (legacy user): **sem migração**. Todos os usuários atuais criam conta nova via fluxo normal. Seed do `user/password` só roda em `APP_ENV=development`.
+- **F1-f** (rate limiting): **adiado**. F1 entrega sem rate limit; reabrir como F1.1 se aparecer abuso real. Bcrypt cost 10 (~80ms) limita parcialmente.
 
 ---
 

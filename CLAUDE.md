@@ -223,6 +223,7 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 | `POST /api/uploads` | SSE de upload em lote. F2 ✅ exige contrato. F5 ✅ limite 550. F4 ✅ retorna `stored_filename` no record. |
 | `GET /api/nf-entries` | F3b ✅: query params `?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`. Defaults `None` preservam regressão (tabela_persistida da Upload). `q` faz `ILIKE` em `numero_nf | fornecedor | cnpj | descricao` via `OR`. Payload inclui `contrato_id` e `upload_file_id` (F4 ✅). |
 | `GET /api/uploads/files/{id}/pdf?download=` | F4 ✅: serve PDF do disco. JOIN com `users` filtra por dono — outro usuário recebe 404 (não 403). `Content-Disposition: inline` default. |
+| `GET /api/contratos/{id}/totais` | F6 ✅: agregação por contrato (`SUM(valor_total)` + `COUNT(DISTINCT numero_nf)` em `nf_entries.contrato_id`). Retorna `soma_nfs_enviadas`, `total_nfs_no_banco`, `pct_enviado_sobre_contrato`, `pct_enviado_sobre_cde`. Helper `_pct` retorna `null` quando denominador é 0 (frontend renderiza empty state em vez de NaN). |
 
 ## Regras de validação de upload
 
@@ -237,12 +238,14 @@ O frontend é uma SPA cujo núcleo ainda é monolítico: login, upload, tabela_p
 - `ContratoSelector.jsx` *(F2)* — tela intermediária de seleção de contrato pós-login. Refatorado para 2 níveis (Estado → Contrato) em 2026-05-11.
 - `NfsBrowser.jsx` *(F3b)* — aba "Notas" para consulta filtrada de NFs por contrato, com dropdown, filtros (busca livre, data, valor, tipo), tabela e footer com soma BRL. Inclui coluna PDF com botões 👁/⬇ (F4) — disabled para NFs pré-F4 sem `upload_file_id`.
 - `ContratosBrowser.jsx` *(F3, 2026-05-13)* — aba "Contratos", browser da base estática. Filtros: busca livre `q`, selects de UF/Tipo/Tranche (derivados do payload no mount), toggles "apenas com valor definido" e "incluir inativos". **Clique em linha dispara `POST /api/session/contrato` + leva para Upload** (Decisão F3-c revisada em 2026-05-13). Linhas inativas têm cursor `not-allowed`.
+- `TotalizadoresCard.jsx` *(F6, 2026-05-13)* — strip compacto horizontal (não card) que aparece entre filter bar e tabela na aba Notas. Grid 3 colunas: contagem de NFs distintas + barra `vs. contrato` + barra `vs. CDE` (com `(Z% do contrato)` na meta line). Tom discreto — não compete por atenção. Empty state inline quando `valor_contrato = 0`.
 
 Funções utilitárias em `frontend/src/lib/`:
 
 - `exportExcel.js` — duas variantes: `exportEntriesCompletas` (11 colunas, usado pela tabela_persistida da Upload) e `exportNfsResumo` (7 colunas, usado pela aba Notas).
 - `describeContrato.js` *(2026-05-13)* — formato canônico `SIGLA · Xª Tranche · LPT (ECFS 123/2024)`. Usado pelo topbar (label do contrato ativo), dropdown da Notas e tooltip do ContratosBrowser.
 - `ufNomes.js` *(2026-05-13)* — mapa UF → nome completo + constantes `SEM_UF_KEY`/`SEM_UF_NOME`. Usado pelo ContratoSelector e ContratosBrowser.
+- `parseBR.js` *(2026-05-13, F6)* — converte string BR (`"1.234,56"`) para Number. Reuso entre NfsBrowser (soma do footer da tabela) e App.jsx (footer do Anexo I).
 
 App.jsx tem state `currentView ∈ {"upload","notas","contratos"}` que comuta entre as três telas via 3 links no topbar (não há menu de tabs — removido em 2026-05-12 por poluição visual). Contrato pode ser trocado **sem logout** clicando numa linha do ContratosBrowser.
 
@@ -255,6 +258,8 @@ O SSE faz **snapshot do `selectedContrato.id`** no início do `handleUploadSubmi
 Badge sutil no header do card "Status por arquivo": `Último upload {tempo relativo}` via helper `formatRelativeTime` no topo de `App.jsx`. Sinaliza ao operador que o painel mostra dados de uma jornada anterior na mesma sessão.
 
 A tabela_persistida da Upload filtra por `contrato_id` ativo na sessão (não mostra NFs de outros contratos). Antes do fix de 2026-05-12 ela mostrava todas as NFs do banco — bug visual sutil onde "trocar contrato" parecia persistir dados.
+
+Logo abaixo da tabela_persistida aparece um **rodapé compacto** (`.anexo-footer`) com: `N NFs distintas · Total: R$ X · Y% do contrato · Z% da CDE`. Cálculo client-side via `parseBR(row.valor_total)`. Equivalente discreto do `TotalizadoresCard` (que vive na aba Notas) — Upload prefere informação inline em vez de card próprio. Decisão tomada após primeira versão do TotalizadoresCard ter sido movida para a Notas em 2026-05-13.
 
 Documentação relacionada:
 

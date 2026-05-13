@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 
+import AuthScreen from "./components/AuthScreen";
 import ContratoSelector from "./components/ContratoSelector";
 import ContratosBrowser from "./components/ContratosBrowser";
 import NfsBrowser from "./components/NfsBrowser";
 import { describeContrato } from "./lib/describeContrato";
 import { exportEntriesCompletas } from "./lib/exportExcel";
 import { parseBR } from "./lib/parseBR";
-
-const defaultLoginForm = { username: "user", password: "password" };
 
 // F5 — limite hard de PDFs por batch. Mantém em sincronia com backend
 // (server.py: `if len(files) > 550: raise HTTPException(422, ...)`).
@@ -89,8 +88,6 @@ export default function App() {
     phase: "idle",
     progressMessage: "",
   });
-  const [loginForm, setLoginForm] = useState(defaultLoginForm);
-  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
   // F2 — contrato selecionado na sessão. null = ainda não selecionou (boot ou pós-logout).
   // Após login, fetch GET /api/session/contrato decide entre ContratoSelector e área de upload.
   const [selectedContrato, setSelectedContrato] = useState(null);
@@ -233,34 +230,8 @@ export default function App() {
     setSelectedFiles(files);
   }
 
-  function handleLoginChange(event) {
-    const { name, value } = event.target;
-    setLoginForm((current) => ({ ...current, [name]: value }));
-  }
-
-  async function handleLoginSubmit(event) {
-    event.preventDefault();
-    setIsSubmittingLogin(true);
-    setAuthState((current) => ({ ...current, error: "" }));
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(loginForm),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.detail ?? `HTTP ${response.status}`);
-      }
-      const data = await response.json();
-      setAuthState({ loading: false, isAuthenticated: true, user: data.user, error: "" });
-    } catch (error) {
-      setAuthState({ loading: false, isAuthenticated: false, user: null, error: `Falha no login: ${error.message}.` });
-    } finally {
-      setIsSubmittingLogin(false);
-    }
-  }
+  // F1 Fase C (2026-05-13) — login/register/forgot/reset agora vivem em
+  // `<AuthScreen>`. handleLoginChange/handleLoginSubmit removidos.
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
@@ -491,30 +462,11 @@ export default function App() {
 
   if (!authState.isAuthenticated) {
     return (
-      <div className="auth-shell">
-        <div className="auth-card">
-          <p className="eyebrow">Demonstração</p>
-          <h1 className="auth-title">Recolhimento<br />de documentos</h1>
-          <p className="auth-subtitle">MVP do novo sistema de administração de contratos.</p>
-          <form className="login-form" onSubmit={handleLoginSubmit}>
-            <label className="field">
-              <span className="field-label">Usuário</span>
-              <input name="username" type="text" value={loginForm.username} onChange={handleLoginChange} autoComplete="username" />
-            </label>
-            <label className="field">
-              <span className="field-label">Senha</span>
-              <input name="password" type="password" value={loginForm.password} onChange={handleLoginChange} autoComplete="current-password" />
-            </label>
-            <button type="submit" className="btn-primary" disabled={isSubmittingLogin}>
-              {isSubmittingLogin ? "Entrando…" : "Entrar"}
-            </button>
-          </form>
-          <div className="auth-hint">
-            usuário: <code>user</code> &nbsp;·&nbsp; senha: <code>password</code>
-          </div>
-          {authState.error && <p className="auth-error">{authState.error}</p>}
-        </div>
-      </div>
+      <AuthScreen
+        onLoggedIn={(user) => {
+          setAuthState({ loading: false, isAuthenticated: true, user, error: "" });
+        }}
+      />
     );
   }
 

@@ -2,7 +2,7 @@
 
 Este documento descreve a modelagem do PostgreSQL.
 
-**Status**: o schema do MVP (Partes 1–7 de `docs/PLAN.md`) está em produção. **F2 ✅, F3 ✅, F3b ✅, F4 ✅, F5 ✅, F8a ✅** entregues em 2026-05-06 → 2026-05-13 — schema evoluído via Alembic em `backend/alembic/versions/0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`. F3 foi sem schema (só filtros novos no endpoint e UI). Pendentes: F1 (auth real), F6 (totalizadores — sem schema), F7 (e-mails), F8b. Ver `planning/PLAN.md` → "Mudanças Transversais de Schema" para os DDLs canônicos das próximas migrations.
+**Status**: o schema do MVP (Partes 1–7 de `docs/PLAN.md`) está em produção. **F2 ✅, F3 ✅, F3b ✅, F4 ✅, F5 ✅, F6 ✅, F8a ✅** entregues em 2026-05-06 → 2026-05-13 — schema evoluído via Alembic em `backend/alembic/versions/0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`. F3 e F6 foram sem schema (só endpoints/UI novos). Pendentes: F1 (auth real), F7 (e-mails), F8b. Ver `planning/PLAN.md` → "Mudanças Transversais de Schema" para os DDLs canônicos das próximas migrations.
 
 ## Direcao Adotada
 

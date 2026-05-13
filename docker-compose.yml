@@ -9,8 +9,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      APP_ENV: development
-      DATABASE_URL: postgresql+psycopg://novo_afi:novo_afi@db:5432/novo_afi
+      # Defaults preservam o comportamento de dev local. Em produção, criar
+      # `.env` ao lado deste docker-compose.yml com os valores reais — o
+      # compose lê automaticamente. F1 (2026-05-13) adicionou as envs SMTP
+      # e PUBLIC_BASE_URL.
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://novo_afi:novo_afi@db:5432/novo_afi}
+      SESSION_SECRET: ${SESSION_SECRET:-recebedor-nfs-dev-secret}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      # F1 — SMTP (vazio em dev → cai no stub do email_service).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       POPLLER_PATH: /usr/bin
       TESSERACT_CMD: ""
     volumes:

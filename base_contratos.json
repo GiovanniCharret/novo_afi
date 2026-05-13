@@ -7,100 +7,110 @@
     "valor_contrato": 2143980,
     "valor_cde": 1715180,
     "participacao_cde": 0.8,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 108/2005": {
-    "sigla": "CPFL Jaguari",
+    "sigla": "CPFL",
     "cnpj": "00001180000207",
     "tranche": "2ª Tranche",
     "uf": "SP",
     "valor_contrato": 4658080,
     "valor_cde": 3959370,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 130/2006": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00357038000116",
     "tranche": "1ª Tranche",
     "uf": "AP",
     "valor_contrato": 13076020,
     "valor_cde": 11768420,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 135/2006": {
-    "sigla": "EQUATORIAL RIO GRANDE DO SUL",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "1ª Tranche",
     "uf": "RS",
     "valor_contrato": 3708680,
     "valor_cde": 3152380,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 202/2007": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "3ª Tranche",
     "uf": "AC",
     "valor_contrato": 98298280,
     "valor_cde": 88468460,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 261/2009": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00357038000116",
     "tranche": "2ª Tranche",
     "uf": "AP",
     "valor_contrato": 146763050,
     "valor_cde": 132086740,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 278/2009": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "05914650000166",
     "tranche": "4ª Tranche",
     "uf": "RO",
     "valor_contrato": 121327570,
     "valor_cde": 103128440,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 280/2009": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "4ª Tranche",
     "uf": "AC",
     "valor_contrato": 40897300,
     "valor_cde": 36807580,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 283/2010": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "4ª Tranche",
     "uf": "PA",
     "valor_contrato": 429344380,
     "valor_cde": 364942720,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 284/2010": {
-    "sigla": "ENERGISA TO",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "4ª Tranche",
     "uf": "TO",
     "valor_contrato": 315625180,
     "valor_cde": 268281400,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 302/2010": {
-    "sigla": "EQUATORIAL RIO GRANDE DO SUL",
+    "sigla": "EQUATORIAL",
     "cnpj": "08467115000100",
     "tranche": "5ª Tranche",
     "uf": "RS",
@@ -108,7 +118,7 @@
     "valor_cde": 16681170,
     "participacao_cde": 0.85,
     "tipo_contrato": "LPT",
-    "vigente": "encerramento" 
+    "vigente": "Encerrado"
   },
   "ECFS 306/2010": {
     "sigla": "CERCI",
@@ -118,7 +128,8 @@
     "valor_contrato": 1784360,
     "valor_cde": 1516710,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 307/2010": {
     "sigla": "NEOENERGIA",
@@ -128,7 +139,8 @@
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 310/2010": {
     "sigla": "COELCE",
@@ -138,27 +150,30 @@
     "valor_contrato": 134627920,
     "valor_cde": 114433740,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 326/2012": {
-    "sigla": "EQUATORIAL ALAGOAS",
+    "sigla": "EQUATORIAL",
     "cnpj": "12272084000100",
     "tranche": "8ª Tranche",
     "uf": "AL",
     "valor_contrato": 25719470,
     "valor_cde": 21861550,
     "participacao_cde": 0.85,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 327/2013": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "1ª Tranche",
     "uf": "PA",
     "valor_contrato": 268823340,
     "valor_cde": 201617510,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 328/2013": {
     "sigla": "AMPLA",
@@ -168,7 +183,8 @@
     "valor_contrato": 25167200,
     "valor_cde": 7550160,
     "participacao_cde": 0.3,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 329/2013": {
     "sigla": "NEOENERGIA",
@@ -178,7 +194,8 @@
     "valor_contrato": 3610060,
     "valor_cde": 1081570,
     "participacao_cde": 0.3,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 330/2013": {
     "sigla": "NEOENERGIA",
@@ -188,17 +205,19 @@
     "valor_contrato": 21469250,
     "valor_cde": 2698050,
     "participacao_cde": 0.13,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 331/2013": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "02341467000120",
     "tranche": "6ª Tranche",
     "uf": "AM",
     "valor_contrato": 178051730,
     "valor_cde": 160246550,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 333/2013": {
     "sigla": "COPEL-DIS",
@@ -208,7 +227,8 @@
     "valor_contrato": 28307450,
     "valor_cde": 5661490,
     "participacao_cde": 0.2,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 335/2013": {
     "sigla": "CEDRI",
@@ -218,17 +238,19 @@
     "valor_contrato": 1715720,
     "valor_cde": 1201010,
     "participacao_cde": 0.7,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 338/2013": {
-    "sigla": "ENERGISA MS",
+    "sigla": "ENERGISA",
     "cnpj": "15413826000150",
     "tranche": "5ª Tranche",
     "uf": "MS",
     "valor_contrato": 40535220,
     "valor_cde": 20267610,
     "participacao_cde": 0.5,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 339/2013": {
     "sigla": "NEOENERGIA",
@@ -238,7 +260,8 @@
     "valor_contrato": 60172580,
     "valor_cde": 24069030,
     "participacao_cde": 0.4,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 340/2013": {
     "sigla": "NEOENERGIA",
@@ -248,297 +271,327 @@
     "valor_contrato": 44103260,
     "valor_cde": 17641300,
     "participacao_cde": 0.4,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 341/2013": {
-    "sigla": "ENERGISA SE",
+    "sigla": "ENERGISA",
     "cnpj": "13017462000163",
     "tranche": "6ª Tranche",
     "uf": "SE",
     "valor_contrato": 13028920,
     "valor_cde": 9120250,
     "participacao_cde": 0.7,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS 343/2013": {
-    "sigla": "ENERGISA TO",
+    "sigla": "ENERGISA",
     "cnpj": "25086034000171",
     "tranche": "5ª Tranche",
     "uf": "TO",
     "valor_contrato": 117981500,
     "valor_cde": 88486120,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECFS-332/2013": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "06272793000184",
     "tranche": "7ª Tranche",
     "uf": "MA",
     "valor_contrato": 285261950,
     "valor_cde": 213946460,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECM 001/2020": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "1ª Tranche",
     "uf": "PA",
     "valor_contrato": 57480830,
     "valor_cde": 51732750,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECM 002/2021": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "00001180000207",
     "tranche": "1ª Tranche",
     "uf": "AM",
     "valor_contrato": 3727860,
     "valor_cde": 3355080,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 003/2021": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "2ª Tranche",
     "uf": "PA",
     "valor_contrato": 361693660,
     "valor_cde": 325524290,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 004/2021": {
-    "sigla": "RORAIMA ENERGIA",
+    "sigla": "RORAIMA",
     "cnpj": "00001180000207",
     "tranche": "1ª Tranche",
     "uf": "RR",
     "valor_contrato": 37177200,
     "valor_cde": 33459480,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerramento"
   },
   "ECM 005/2021": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "1ª Tranche",
     "uf": "MA",
     "valor_contrato": 59603860,
     "valor_cde": 41722700,
     "participacao_cde": 0.7,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerramento"
   },
   "ECM 006/2021": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "00001180000207",
     "tranche": "2ª Tranche",
     "uf": "AM",
     "valor_contrato": 209652380,
     "valor_cde": 188687140,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerramento"
   },
   "ECM 007/2021": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "05914650000166",
     "tranche": "1ª Tranche",
     "uf": "RO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 008/2022": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "1ª Tranche",
     "uf": "AC",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 009/2022": {
-    "sigla": "ENERGISA MT",
+    "sigla": "ENERGISA",
     "cnpj": "03467321000199",
     "tranche": "1ª Tranche",
     "uf": "MT",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerramento"
   },
   "ECM 010/2022": {
-    "sigla": "ENERGISA TO",
+    "sigla": "ENERGISA",
     "cnpj": "25086034000171",
     "tranche": "1ª Tranche",
     "uf": "TO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 011/2022": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "3ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 012/2023": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "05965546000109",
     "tranche": "1ª Tranche",
     "uf": "AP",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 013/2023": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "4ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerramento"
   },
   "ECM 014/2024": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "5ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 015/2024": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "05914650000166",
     "tranche": "2ª Tranche",
     "uf": "RO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Encerrado"
   },
   "ECM 016/2025": {
-    "sigla": "ENERGISA TO",
+    "sigla": "ENERGISA",
     "cnpj": "25086034000171",
     "tranche": "2ª Tranche",
     "uf": "TO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 017/2025": {
-    "sigla": "ENERGISA MT",
+    "sigla": "ENERGISA",
     "cnpj": "43913162000123",
     "tranche": "2ª Tranche",
     "uf": "MT",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 018/2025": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "2ª Tranche",
     "uf": "AC",
     "valor_contrato": 103216390,
     "valor_cde": 92894750,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 019/2025": {
-    "sigla": "RORAIMA ENERGIA",
+    "sigla": "RORAIMA",
     "cnpj": "02341470000144",
     "tranche": "2ª Tranche",
     "uf": "RR",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 020/2025": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "06272793000184",
     "tranche": "2ª Tranche",
     "uf": "MA",
     "valor_contrato": 63011700,
     "valor_cde": 56710530,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 021/2025": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "43913162000123",
     "tranche": "2ª Tranche",
     "uf": "AP",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 022/2025": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "05914650000166",
     "tranche": "3ª Tranche",
     "uf": "RO",
     "valor_contrato": 30124800,
     "valor_cde": 27112320,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 023/2025": {
-    "sigla": "ENERGISA TO",
+    "sigla": "ENERGISA",
     "cnpj": "25086034000171",
     "tranche": "3ª Tranche",
     "uf": "TO",
     "valor_contrato": 16543430,
     "valor_cde": 14889080,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 024/2025": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "3ª Tranche",
     "uf": "AC",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 026/2025": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "6ª Tranche",
     "uf": "PA",
     "valor_contrato": 1256268780,
     "valor_cde": 1130641900,
     "participacao_cde": 0.9,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECM 027/2025": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "43913162000123",
     "tranche": "1ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "MLA"
+    "tipo_contrato": "MLA",
+    "vigente": "Andamento"
   },
   "ECO 001/2018": {
     "sigla": "COELBA",
@@ -548,147 +601,162 @@
     "valor_contrato": 903380240,
     "valor_cde": 587197160,
     "participacao_cde": 0.65,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 002/2017": {
-    "sigla": "ENERGISA TO",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "6ª Tranche",
     "uf": "TO",
     "valor_contrato": 122134650,
     "valor_cde": 79387520,
     "participacao_cde": 0.65,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 004/2017": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "6ª Tranche",
     "uf": "RO",
     "valor_contrato": 128396140,
     "valor_cde": 106992500,
     "participacao_cde": 0.83,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 005/2017": {
-    "sigla": "ENERGISA MT",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "7ª Tranche",
     "uf": "MT",
     "valor_contrato": 350102500,
     "valor_cde": 227566630,
     "participacao_cde": 0.65,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 006/2017": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "00001180000207",
     "tranche": "1ª Tranche",
     "uf": "AM",
     "valor_contrato": 77835120,
     "valor_cde": 70051610,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 007/2017": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "6ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 008/2017": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "00001180000207",
     "tranche": "9ª Tranche",
     "uf": "AM",
     "valor_contrato": 328113360,
     "valor_cde": 295302020,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 009/2017": {
-    "sigla": "RORAIMA ENERGIA",
+    "sigla": "RORAIMA",
     "cnpj": "02341470000144",
     "tranche": "4ª Tranche",
     "uf": "RR",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 010/2018": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "3ª Tranche",
     "uf": "AP",
     "valor_contrato": 172681140,
     "valor_cde": 164392290,
     "participacao_cde": 0.95,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 011/2018": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "1ª Tranche",
     "uf": "AP",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerramento"
   },
   "ECO 012/2018": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "2ª Tranche",
     "uf": "PA",
     "valor_contrato": 35403180,
     "valor_cde": 31862860,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 013/2018": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "06272793000184",
     "tranche": "9ª Tranche",
     "uf": "MA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 015/2019": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "10ª Tranche",
     "uf": "MA",
     "valor_contrato": 260709640,
     "valor_cde": 182496740,
     "participacao_cde": 0.7,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerramento"
   },
   "ECO 016/2019": {
-    "sigla": "EQUATORIAL PIAUI",
+    "sigla": "EQUATORIAL",
     "cnpj": "06840748000189",
     "tranche": "6ª Tranche",
     "uf": "PI",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 017/2019": {
-    "sigla": "EQUATORIAL GOIÁS",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "5ª Tranche",
     "uf": "GO",
     "valor_contrato": 173904560,
     "valor_cde": 104342730,
     "participacao_cde": 0.6,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 018/2019": {
     "sigla": "COELBA",
@@ -698,67 +766,74 @@
     "valor_contrato": 1052914190,
     "valor_cde": 684394220,
     "participacao_cde": 0.65,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 019/2020": {
-    "sigla": "RORAIMA ENERGIA",
+    "sigla": "RORAIMA",
     "cnpj": "00001180000207",
     "tranche": "5ª Tranche",
     "uf": "RR",
     "valor_contrato": 104637330,
     "valor_cde": 94173600,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerramento"
   },
   "ECO 020/2020": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "7ª Tranche",
     "uf": "AC",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 021/2020": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "7ª Tranche",
     "uf": "PA",
     "valor_contrato": 564391370,
     "valor_cde": 395073960,
     "participacao_cde": 0.7,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerramento"
   },
   "ECO 022/2021": {
-    "sigla": "ENERGISA MS",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "6ª Tranche",
     "uf": "MS",
     "valor_contrato": 127178000,
     "valor_cde": 76306800,
     "participacao_cde": 0.6,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 023/2021": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "7ª Tranche",
     "uf": "RO",
     "valor_contrato": 165723400,
     "valor_cde": 149151060,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 024/2021": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "06272793000184",
     "tranche": "11ª Tranche",
     "uf": "MA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 025/2021": {
     "sigla": "COELBA",
@@ -768,57 +843,63 @@
     "valor_contrato": 931328570,
     "valor_cde": 605363570,
     "participacao_cde": 0.65,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 026/2021": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "00001180000207",
     "tranche": "10ª Tranche",
     "uf": "AM",
     "valor_contrato": 294243500,
     "valor_cde": 264819150,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECO 027/2021": {
-    "sigla": "EQUATORIAL PIAUI",
+    "sigla": "EQUATORIAL",
     "cnpj": "06840748000189",
     "tranche": "7ª Tranche",
     "uf": "PI",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 028/2024": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "00001180000207",
     "tranche": "8ª Tranche",
     "uf": "PA",
     "valor_contrato": 1562065530,
     "valor_cde": 1405858980,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 029/2024": {
-    "sigla": "EQUATORIAL PIAUI",
+    "sigla": "EQUATORIAL",
     "cnpj": "06840748000189",
     "tranche": "8ª Tranche",
     "uf": "PI",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 030/2024": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "8ª Tranche",
     "uf": "AC",
     "valor_contrato": 91088530,
     "valor_cde": 81979680,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 031/2025": {
     "sigla": "COELBA",
@@ -828,17 +909,19 @@
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 032/2025": {
-    "sigla": "RORAIMA ENERGIA",
+    "sigla": "RORAIMA",
     "cnpj": "02341470000144",
     "tranche": "6ª Tranche",
     "uf": "RR",
     "valor_contrato": 237942120,
     "valor_cde": 214147908,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 033/2025": {
     "sigla": "CERCI",
@@ -848,217 +931,239 @@
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 035/2025": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "05914650000166",
     "tranche": "8ª Tranche",
     "uf": "RO",
     "valor_contrato": 173978620,
     "valor_cde": 156580760,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 036/2025": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "43913162000123",
     "tranche": "12ª Tranche",
     "uf": "MA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 037/2025": {
-    "sigla": "ENERGISA PB",
+    "sigla": "ENERGISA",
     "cnpj": "09095183000140",
     "tranche": "7ª Tranche",
     "uf": "PB",
     "valor_contrato": 1774420,
     "valor_cde": 1419540,
     "participacao_cde": 0.8,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 038/2025": {
-    "sigla": "EQUATORIAL PIAUI",
+    "sigla": "EQUATORIAL",
     "cnpj": "43913162000123",
     "tranche": "9ª Tranche",
     "uf": "PI",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 039/2025": {
-    "sigla": "EQUATORIAL GOIÁS",
+    "sigla": "EQUATORIAL",
     "cnpj": "01543032000104",
     "tranche": "6ª Tranche",
     "uf": "GO",
     "valor_contrato": 55476990,
     "valor_cde": 44381590,
     "participacao_cde": 0.8,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 040/2025": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "43913162000123",
     "tranche": "2ª Tranche",
     "uf": "AP",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 041/2025": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "43913162000123",
     "tranche": "9ª Tranche",
     "uf": "RO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 042/2025": {
-    "sigla": "EQUATORIAL AMAPÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "05965546000109",
     "tranche": "3ª Tranche",
     "uf": "AP",
     "valor_contrato": 9029480,
     "valor_cde": 8126530,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECO 043/2025": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "43913162000123",
     "tranche": "9ª Tranche",
     "uf": "AC",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Andamento"
   },
   "ECOT 001/2018": {
-    "sigla": "EQUATORIAL PIAUI",
+    "sigla": "EQUATORIAL",
     "cnpj": "06840748000189",
     "tranche": "4ª Tranche",
     "uf": "PI",
     "valor_contrato": 280839240,
     "valor_cde": 252755320,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 002/2017": {
-    "sigla": "EQUATORIAL PIAUI",
+    "sigla": "EQUATORIAL",
     "cnpj": "06840748000189",
     "tranche": "5ª Tranche",
     "uf": "PI",
     "valor_contrato": 164367250,
     "valor_cde": 147930520,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 003/2017": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "02341467000120",
     "tranche": "7ª Tranche",
     "uf": "AM",
     "valor_contrato": 217023300,
     "valor_cde": 195320970,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 004/2017": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "5ª Tranche",
     "uf": "PA",
     "valor_contrato": 394876300,
     "valor_cde": 296157230,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 005/2017": {
-    "sigla": "EQUATORIAL ALAGOAS",
+    "sigla": "EQUATORIAL",
     "cnpj": "12272084000100",
     "tranche": "9ª Tranche",
     "uf": "AL",
     "valor_contrato": 65667670,
     "valor_cde": 54077330,
     "participacao_cde": 0.82,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 006/2017": {
-    "sigla": "ENERGISA RO",
+    "sigla": "ENERGISA",
     "cnpj": "05914650000166",
     "tranche": "5ª Tranche",
     "uf": "RO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 007/2017": {
-    "sigla": "EQUATORIAL GOIÁS",
+    "sigla": "EQUATORIAL",
     "cnpj": "01543032000104",
     "tranche": "4ª Tranche",
     "uf": "GO",
     "valor_contrato": 27960190,
     "valor_cde": 16776120,
     "participacao_cde": 0.6,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 008/2017": {
-    "sigla": "EQUATORIAL MARANHÃO",
+    "sigla": "EQUATORIAL",
     "cnpj": "06272793000184",
     "tranche": "8ª Tranche",
     "uf": "MA",
     "valor_contrato": 140423750,
     "valor_cde": 105317810,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 009/2017": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "2ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 010/2017": {
-    "sigla": "ENERGISA MT",
+    "sigla": "ENERGISA",
     "cnpj": "03467321000199",
     "tranche": "6ª Tranche",
     "uf": "MT",
     "valor_contrato": 161208160,
     "valor_cde": 120906120,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 011/2017": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "00001180000207",
     "tranche": "5ª Tranche",
     "uf": "AC",
     "valor_contrato": 39960460,
     "valor_cde": 35964410,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 012/2017": {
-    "sigla": "ENERGISA AC",
+    "sigla": "ENERGISA",
     "cnpj": "04065033000170",
     "tranche": "6ª Tranche",
     "uf": "AC",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 013/2017": {
     "sigla": "COELBA",
@@ -1068,36 +1173,40 @@
     "valor_contrato": 685321240,
     "valor_cde": 513990930,
     "participacao_cde": 0.75,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 014/2017": {
-    "sigla": "AMAZONAS ENERGIA",
+    "sigla": "AMAZONAS",
     "cnpj": "00001180000207",
     "tranche": "8ª Tranche",
     "uf": "AM",
     "valor_contrato": 203296380,
     "valor_cde": 182966740,
     "participacao_cde": 0.9,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 015/2017": {
-    "sigla": "EQUATORIAL PARÁ",
+    "sigla": "EQUATORIAL",
     "cnpj": "04895728000180",
     "tranche": "1ª Tranche",
     "uf": "PA",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   },
   "ECOT 016/2017": {
-    "sigla": "EQUATORIAL GOIÁS",
+    "sigla": "EQUATORIAL",
     "cnpj": "01543032000104",
     "tranche": "3ª Tranche",
     "uf": "GO",
     "valor_contrato": 0,
     "valor_cde": 0,
     "participacao_cde": 0.0,
-    "tipo_contrato": "LPT"
+    "tipo_contrato": "LPT",
+    "vigente": "Encerrado"
   }
 }
