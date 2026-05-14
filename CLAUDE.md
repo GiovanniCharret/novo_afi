@@ -9,7 +9,6 @@ Documentation lives in `planning/` and `docs/`:
 - `planning/DEFINITION_OF_DONE.md` — checklist transversal de conclusão (testes, schema, build, docs, critérios negativos, aprovação humana). Aplicada na Fase D de toda feature.
 - `planning/ADVERSARIAL_REVIEW.md` — revisão adversarial de `planning/` (ambiguidades, lacunas, brechas que permitem violar o espírito das regras). Consultar ao redigir/alterar regras de processo.
 - `planning/PENDING_DECISIONS.md` — itens **explicitamente deferidos** para decisão institucional futura (não decisões em aberto neste ciclo).
-- `docs/PLAN.md` — phase-by-phase plan do MVP já entregue (Partes 1–7). Histórico, não roadmap.
 - `docs/MAIN_PROD_CHANGES.md` — changelog canônico das adaptações de produção sobre `backend/app/main.py` (parser). **Toda mudança em `main.py` é registrada aqui** — ver "Regras específicas de desenvolvimento".
 - `planning/BEHAVIORAL_GUIDELINES.md` — process/behavior rules; **always apply**.
 - `AGENTS.md` (raiz) e `frontend/AGENTS.md` — guidelines gerais e específicas do frontend (estrutura, estilo, commits). Tem sobreposição com este arquivo; em caso de conflito, este `CLAUDE.md` é canônico.
@@ -136,7 +135,7 @@ Tabelas principais:
 
 | Tabela | Responsabilidade |
 |---|---|
-| `users` | Usuários autenticados. **Após F1**: ganha `email UNIQUE NOT NULL`, `email_confirmed`, `confirmation_token`, `token_expires_at`, `reset_token`, `reset_expires_at`. `username` vira `nullable=True` (mantido por compat com seed legado em `DEBUG=true`). |
+| `users` | Usuários autenticados. **F1 ✅** (2026-05-13/14, migration 0004): tem `email VARCHAR(255) UNIQUE NULL`, `email_confirmed BOOLEAN`, `confirmation_token_hash VARCHAR(64)`, `token_expires_at`, `reset_token_hash VARCHAR(64)`, `reset_expires_at`. `username` virou `nullable=True`. Tokens armazenados como `sha256(raw)` — raw só sai pelo e-mail (Decisão F1-c). |
 | `upload_batches` | Agrupamento de um envio em lote por usuário. **F2 ✅**: tem `contrato_id FK → contratos.id` (nullable — preserva batches pré-F2; novos exigem via `require_contrato`). **Após F8**: ganha `status` (`processando` \| `concluido` \| `abandonado`). |
 | `upload_files` | Resultado por arquivo dentro de um lote. Status: `processando` (transitório, F4+) \| `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (novo, após F8). **F4 ✅**: tem `stored_filename` (TEXT nullable, UUID4 em disco; backfill na migration 0003) ao lado de `original_filename`. |
 | `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **F2 ✅**: tem `contrato_id` (FK nullable; populado em uploads pós-F2). **F4 ✅**: tem `upload_file_id` (FK nullable → `upload_files.id`; populado em uploads pós-F4 — pré-F4 fica NULL, ver Decisão F4-d). **Após F8**: as 11 colunas de `default_nf_template` viram `NOT NULL` (Decisão #8). |
@@ -147,14 +146,17 @@ Tabelas principais:
 
 **Migration 0003 detalhe**: roda backfill agressivo (`os.listdir` em cada batch_dir) para popular `upload_files.stored_filename` em rows pré-F4. Em ambientes sem `UPLOAD_STORAGE_DIR` ou sem o dir físico, a migration apenas cria as colunas e segue (sem erro). Operação é idempotente — re-rodar não duplica.
 
-### Credenciais do MVP (legado — será removido em F1)
+### Autenticação F1 ✅ (concluída 2026-05-14)
 
-- Usuário: `user` / Senha: `password` — válido apenas em ambiente com `DEBUG=true` (seed condicional).
-- Removidas em produção quando F1 entrar. Novo fluxo (Decisão #2 e #5 resolvidas):
-  - `POST /api/auth/register` body `{email, password}` (sem `username`); senha hasheada via `passlib[bcrypt]` cost 10 (configuração multi-scheme em `backend/app/security.py` permite migração futura para argon2id sem mudar código).
-  - `POST /api/auth/login` body `{email, password}`. Exige `email_confirmed=True`.
-  - `POST /api/auth/forgot-password` + `POST /api/auth/reset-password` com tokens de 1h.
-  - Política de senha: ≥10 caracteres, sem regras de complexidade obrigatórias (alinhado a OWASP 2024 / NIST SP 800-63B). Truncamento bcrypt em 72 bytes documentado no endpoint de registro.
+Fluxo real com e-mail + bcrypt + token de confirmação 24h + reset 1h. Decisões #1, #2, #5 + F1-a/b/c/d/e/f.
+
+- **Login pela UI**: `{email, password}` via `POST /api/auth/login`. Exige `email_confirmed=True` → 403 com mensagem orientando. 401 idêntico para email inexistente ou senha errada (não vaza enumeração).
+- **Cadastro**: `POST /api/auth/register` cria user com `email_confirmed=False`, token UUID4 hex (32 chars) + `sha256(token)` no DB (Decisão F1-c). E-mail enviado via `email_service.py`. Falha de SMTP **não** faz rollback (Decisão F1-d — conta órfã; tela "Reenviar e-mail" no frontend).
+- **Hash de senha**: `passlib[bcrypt]` cost 10 (Decisão #2). `CryptContext` multi-scheme em `backend/app/security.py` permite migração futura para argon2 trocando o `default=`. **Dependency pin importante**: `bcrypt<4.0.0` no `requirements.txt` — passlib 1.7.4 quebra com bcrypt 5.x. Não remover o pin sem atualizar passlib.
+- **Política de senha**: ≥10 caracteres, **sem blocklist nem complexidade** (Decisão F1-a — aceita `1234567890` se atender o tamanho; alinhado a OWASP 2024 / NIST SP 800-63B). Truncamento bcrypt em 72 bytes documentado.
+- **Tokens**: `uuid.uuid4().hex` (122 bits, Decisão F1-b). Verificação via `secrets.compare_digest` constant-time. Confirmação expira em 24h; reset em 1h. Raw token só existe no e-mail.
+- **Dev seed** (`backend/app/seeds/seed_dev_user.py`, F1 follow-up 2026-05-14): em `APP_ENV=development`, cria automaticamente `dev@local` / `password` com `email_confirmed=True` no boot. Idempotente. Hint discreta na UI mostra essas credenciais quando hostname é `localhost`. **Não roda em produção** — Decisão F1-e mantida.
+- **Legado** `user`/`password` (hardcoded em `AUTH_USERNAME`/`AUTH_PASSWORD`): aceito **somente via API** em `APP_ENV=development`, para preservar a suíte legada de testes que envia `{username, password}`. UI nova manda `{email, password}` — esse caminho é inalcançável pela tela.
 
 ### Seed de dados (F2 ✅)
 
@@ -179,18 +181,20 @@ PDFs originais salvos em `backend/banco_de_nf/<batch_id>/<stored_filename>` (con
 
 | Variável | Default | Descrição |
 |---|---|---|
+| `APP_ENV` *(F1 ✅)* | `development` | `production` em deploy real. Em `production`, **bloqueia o login legado** `user`/`password` e o seed `dev@local` não roda. |
 | `DATABASE_URL` | `sqlite:///...` (testes) | URL do banco; em produção usa `postgresql+psycopg://...` |
 | `UPLOAD_STORAGE_DIR` | `backend/banco_de_nf` | Diretório onde os PDFs originais são salvos |
 | `SESSION_SECRET` | `recebedor-nfs-dev-secret` | Chave do `SessionMiddleware`. **Obrigatório trocar em produção.** |
-| `SMTP_HOST` *(F1/F7)* | `smtp.hostinger.com` | Servidor SMTP (Hostinger inicial — Decisão #1). Se ausente, envio de e-mails é silenciosamente ignorado. |
-| `SMTP_PORT` *(F1/F7)* | `587` | Porta SMTP (STARTTLS; alternativa 465 SSL). |
-| `SMTP_USER` *(F1/F7)* | — | Usuário SMTP (caixa criada no painel Hostinger). |
-| `SMTP_PASSWORD` *(F1/F7)* | — | Senha da caixa SMTP. |
-| `SMTP_FROM` *(F1/F7)* | — | Endereço remetente. Hostinger pode exigir = `SMTP_USER`. |
+| `PUBLIC_BASE_URL` *(F1 ✅)* | `http://localhost:8000` | Base dos links em e-mails (`?confirm=` e `?reset=`). Em produção, **obrigatório** apontar para o domínio real (`https://seu-dominio.com`), senão os links chegam quebrados ao usuário. |
+| `SMTP_HOST` *(F1 ✅, F7)* | — | Servidor SMTP (Hostinger inicial — Decisão #1). Se vazio, `email_service` cai no stub (loga + buffer in-memory). |
+| `SMTP_PORT` *(F1 ✅, F7)* | `587` | Porta SMTP (STARTTLS; alternativa 465 SSL). |
+| `SMTP_USER` *(F1 ✅, F7)* | — | Usuário SMTP (caixa criada no painel Hostinger). |
+| `SMTP_PASSWORD` *(F1 ✅, F7)* | — | Senha da caixa SMTP. |
+| `SMTP_FROM` *(F1 ✅, F7)* | — | Endereço remetente. Hostinger pode exigir = `SMTP_USER`. |
 | `ADMIN_EMAIL` *(F7)* | — | Destinatário dos alertas de erro tipo 2 do parser (Decisão #8). |
 | `OPENROUTER_API_KEY` *(parser_IA — DESATIVADO)* | — | Chave OpenRouter para `description_cleaner`. Chamada está comentada em `backend/app/main.py:2000` — variável não é lida hoje. |
 | `OPENROUTER_MODEL` *(parser_IA — DESATIVADO)* | `openai/gpt-oss-120b` | Modelo via OpenRouter. Idem acima. |
-| `DEBUG` | `false` | Se `true`, habilita seed do usuário legado `user`/`password` (proibido em produção). |
+| `DEBUG` | `false` | Legado pré-F1 — foi substituído por `APP_ENV` para distinguir dev/prod. Mantido por compat com scripts antigos, mas não usado pelo backend hoje. |
 
 **Pré-requisito de produção** (Decisão #1): SPF + DKIM + DMARC configurados no DNS Hostinger antes do primeiro envio. Sem isso, e-mails de confirmação caem em spam.
 
@@ -224,6 +228,12 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 | `GET /api/nf-entries` | F3b ✅: query params `?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`. Defaults `None` preservam regressão (tabela_persistida da Upload). `q` faz `ILIKE` em `numero_nf | fornecedor | cnpj | descricao` via `OR`. Payload inclui `contrato_id` e `upload_file_id` (F4 ✅). |
 | `GET /api/uploads/files/{id}/pdf?download=` | F4 ✅: serve PDF do disco. JOIN com `users` filtra por dono — outro usuário recebe 404 (não 403). `Content-Disposition: inline` default. |
 | `GET /api/contratos/{id}/totais` | F6 ✅: agregação por contrato (`SUM(valor_total)` + `COUNT(DISTINCT numero_nf)` em `nf_entries.contrato_id`). Retorna `soma_nfs_enviadas`, `total_nfs_no_banco`, `pct_enviado_sobre_contrato`, `pct_enviado_sobre_cde`. Helper `_pct` retorna `null` quando denominador é 0 (frontend renderiza empty state em vez de NaN). |
+| `POST /api/auth/register` | F1 ✅: cria user com `email_confirmed=False` + token UUID4 hex + e-mail. 409 se email duplicado, 422 se senha < 10 chars. |
+| `GET /api/auth/confirm?token=...` | F1 ✅: confirma e-mail via `sha256(token)` + check de expiry (24h). 400 inválido/expirado (mesma mensagem — não vaza). |
+| `POST /api/auth/login` | F1 ✅ refeito: `{email, password}`. 401 idêntico para email inexistente e senha errada. 403 se `email_confirmed=False`. Compat: `{username:"user",password:"password"}` continua em `APP_ENV=development` (Decisão F1-e). |
+| `POST /api/auth/forgot-password` | F1 ✅: sempre 200 (não vaza enumeração). Se email existe, gera reset_token (1h) e envia e-mail. |
+| `POST /api/auth/reset-password` | F1 ✅: `{token, new_password}`. Valida hash + expiry, atualiza senha, limpa token. |
+| `POST /api/auth/resend-confirmation` | F1 ✅: sempre 200; regenera token e reenvia e-mail. Usado pela tela "Verifique seu e-mail" pós-registro (Decisão F1-d — falha SMTP não rola back o user). |
 
 ## Regras de validação de upload
 
@@ -233,8 +243,9 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 
 ## Frontend
 
-O frontend é uma SPA cujo núcleo ainda é monolítico: login, upload, tabela_persistida, status badges e SSE consumer vivem em `frontend/src/App.jsx`. Componentes extraídos ficam em `frontend/src/components/`:
+O frontend é uma SPA cujo núcleo ainda é monolítico: upload, tabela_persistida, status badges e SSE consumer vivem em `frontend/src/App.jsx`. Componentes extraídos ficam em `frontend/src/components/`:
 
+- `AuthScreen.jsx` *(F1, 2026-05-13/14)* — state machine com 7 views: `login`, `register`, `confirm-needed`, `confirm-result`, `forgot`, `forgot-sent`, `reset`. Detecta `?confirm=X` e `?reset=X` na URL no mount e roteia. `history.replaceState` limpa params após uso. Hint discreta em localhost mostra credenciais do dev seed (`dev@local`/`password`).
 - `ContratoSelector.jsx` *(F2)* — tela intermediária de seleção de contrato pós-login. Refatorado para 2 níveis (Estado → Contrato) em 2026-05-11.
 - `NfsBrowser.jsx` *(F3b)* — aba "Notas" para consulta filtrada de NFs por contrato, com dropdown, filtros (busca livre, data, valor, tipo), tabela e footer com soma BRL. Inclui coluna PDF com botões 👁/⬇ (F4) — disabled para NFs pré-F4 sem `upload_file_id`.
 - `ContratosBrowser.jsx` *(F3, 2026-05-13)* — aba "Contratos", browser da base estática. Filtros: busca livre `q`, selects de UF/Tipo/Tranche (derivados do payload no mount), toggles "apenas com valor definido" e "incluir inativos". **Clique em linha dispara `POST /api/session/contrato` + leva para Upload** (Decisão F3-c revisada em 2026-05-13). Linhas inativas têm cursor `not-allowed`.
@@ -290,6 +301,6 @@ A interface segue a identidade visual institucional do governo federal brasileir
 
 ## Hook de revisão automática (atualmente inerte)
 
-`.claude/settings.json` registra um hook `Stop` que executa `.claude/hooks/code-reviewer.sh` ao final de cada turno (timeout 600s, statusMessage: "code-reviewer: revisando aderência ao PLAN.md..."). O script chama o CLI externo `codex exec` (LLM da OpenAI) em sandbox read-only para gerar `CODE-REVIEW.md` comparando o código contra `docs/PLAN.md`.
+`.claude/settings.json` registra um hook `Stop` que executa `.claude/hooks/code-reviewer.sh` ao final de cada turno (timeout 600s, statusMessage: "code-reviewer: revisando aderência ao PLAN.md..."). O script chama o CLI externo `codex exec` (LLM da OpenAI) em sandbox read-only para gerar `CODE-REVIEW.md` comparando o código contra `planning/PLAN.md`.
 
 **Status atual**: o hook continua registrado mas é tratado como inerte — não confiar nele. Razões: (a) `codex` pode não estar instalado no host (PowerShell/Windows; o `.sh` depende do shell encontrar `bash`), (b) custo de uma LLM externa rodando a cada turno é proibitivo para uso contínuo. O script sempre retorna `exit 0` para não bloquear o ciclo do Claude, então a única consequência de estar quebrado é não gerar o `CODE-REVIEW.md` — nada falha visivelmente. Se quiser reativar, validar instalação do `codex`, ajustar shebang para shell disponível no host e considerar o custo.

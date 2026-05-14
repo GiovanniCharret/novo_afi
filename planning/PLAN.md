@@ -48,6 +48,7 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 5. F4  ✅ visualizar/baixar PDF                          (concluída 2026-05-12)
 6. F3  ✅ browser de contratos + cache por contrato      (concluída 2026-05-13)
 7. F6  ✅ totalizadores                                  (concluída 2026-05-13)
+8. F1  ✅ login real + e-mail + reset + dev seed         (concluída 2026-05-14)
 7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
 8. F1  — auth real                                       (desbloqueia F7)
 9. F7  — e-mails transacionais                           (consome F1)
@@ -345,23 +346,43 @@ A iteração visual também simplificou o componente: virou strip horizontal (3 
 
 ---
 
-## F1 — Login real com confirmação por e-mail
+## F1 — Login real com confirmação por e-mail ✅ concluída em 2026-05-14
 
 **Objetivo**: substituir credenciais fixas por cadastro real com e-mail, hash de senha, confirmação por token e reset de senha. Spec visual completa em `planning/F1-auth-real.html`.
 
 ### Subetapas
-- [ ] Migration `0004_f1_auth_real`: adicionar em `users` → `email VARCHAR(255) UNIQUE NULL`, `email_confirmed BOOLEAN NOT NULL DEFAULT FALSE`, `confirmation_token_hash VARCHAR(64) NULL`, `token_expires_at TIMESTAMPTZ NULL`, `reset_token_hash VARCHAR(64) NULL`, `reset_expires_at TIMESTAMPTZ NULL`. Alterar `username` para `NULL`.
-- [ ] `POST /api/auth/register` body `{email, password}`. Cria usuário com `email_confirmed=False`, gera token via `uuid.uuid4().hex`, grava `sha256(token)` em `confirmation_token_hash`, `token_expires_at = now() + 24h`, envia e-mail com link `GET /api/auth/confirm?token=...`.
-- [ ] `GET /api/auth/confirm?token=...` valida token + expiração via `secrets.compare_digest`, define `email_confirmed=True`, limpa o token.
-- [ ] `POST /api/auth/login` body `{email, password}`. Mesma resposta 401 para e-mail inexistente E senha errada (não vaza enumeração). Exige `email_confirmed=True` → 403 com mensagem orientando confirmação.
-- [ ] `POST /api/auth/forgot-password` body `{email}`. **Sempre retorna 200** (não vaza se e-mail existe). Se existir, gera `reset_token_hash`, `reset_expires_at = now() + 1h`, envia e-mail.
-- [ ] `POST /api/auth/reset-password` body `{token, new_password}` valida e atualiza hash.
-- [ ] `POST /api/auth/resend-confirmation` body `{email}` (idem `forgot-password`: sempre 200) — regenera token e reenvia e-mail. Para conta órfã pós-falha de SMTP no registro.
-- [ ] Hash com `passlib[bcrypt]` cost 10 (Decisão #2 já resolvida). `CryptContext` multi-scheme permite migração futura para argon2.
-- [ ] Senha mínimo 10 caracteres, sem regras de complexidade (Decisão #5 + F1-a).
-- [ ] Seed do usuário legado `user/password` rodando **apenas** em `APP_ENV=development` (F1-e: sem migração).
-- [ ] `email_service.py` isolado com `send_email(to, subject, body_html)` via `smtplib` + `asyncio.to_thread`. Templates em `backend/app/templates/email/`.
-- [ ] Telas no frontend (state machine `authView`): registro, "verifique seu e-mail" (com botão reenviar), login, esqueci minha senha, redefinir senha (lê token via `window.location.search`).
+- [x] Migration `0004_f1_auth_real`: adicionou em `users` → `email VARCHAR(255) UNIQUE NULL`, `email_confirmed BOOLEAN NOT NULL DEFAULT FALSE`, `confirmation_token_hash VARCHAR(64) NULL`, `token_expires_at TIMESTAMPTZ NULL`, `reset_token_hash VARCHAR(64) NULL`, `reset_expires_at TIMESTAMPTZ NULL`. Alterou `username` para `NULL`.
+- [x] `POST /api/auth/register` cria user, gera `uuid.uuid4().hex`, grava `sha256(token)`, dispara e-mail. 409 se duplicado, 422 se senha < 10 chars.
+- [x] `GET /api/auth/confirm?token=...` valida via `secrets.compare_digest`, define `email_confirmed=True`, limpa o token. 400 inválido/expirado (mesma mensagem).
+- [x] `POST /api/auth/login` refeito: `{email, password}`. 401 idêntico (não vaza). 403 se não confirmado. Compat: `{username,password}` legado em `APP_ENV=development`.
+- [x] `POST /api/auth/forgot-password` sempre 200 (não vaza). Se user existe, gera reset_token e envia e-mail.
+- [x] `POST /api/auth/reset-password` `{token, new_password}` atualiza hash + limpa token.
+- [x] `POST /api/auth/resend-confirmation` sempre 200 (não vaza); regenera token e reenvia.
+- [x] `passlib[bcrypt]` cost 10. **`bcrypt<4.0.0` pinado** no requirements (passlib 1.7.4 quebra com bcrypt 5.x).
+- [x] Política F1-a: ≥10 caracteres, sem blocklist/complexidade.
+- [x] `email_service.py` com SMTP real via `smtplib`+STARTTLS quando envs setadas; cai no stub (loga + buffer) se faltar qualquer env. Timeout 10s.
+- [x] Telas no frontend: `AuthScreen.jsx` com state machine de 7 views. URL `?confirm=X` / `?reset=X` roteiam automaticamente (sem catch-all no backend). `history.replaceState` limpa params após uso.
+- [x] **Dev seed** (`seed_dev_user.py`, follow-up 2026-05-14): cria `dev@local`/`password` automaticamente em `APP_ENV=development`. Hint na UI em localhost. Idempotente. Não roda em produção.
+- [x] `docker-compose.yml` agora usa `${VAR:-default}` para `APP_ENV`, `SMTP_*`, `PUBLIC_BASE_URL`, `SESSION_SECRET` — produção lê de `.env` no servidor.
+
+### Critérios de Sucesso
+- ✅ Registro com e-mail duplicado → 409.
+- ✅ Login sem confirmação de e-mail → 403.
+- ✅ Login com e-mail inexistente ou senha errada → 401 idêntico.
+- ✅ `confirm?token=EXPIRADO` ou inválido → 400.
+- ✅ `forgot-password` com e-mail inexistente → 200 (não vaza).
+- ✅ Reset com token válido altera senha; login com a antiga → 401.
+- ✅ Em `APP_ENV=development`, login com `user/password` legado continua funcionando via API.
+- ✅ Suíte de testes: 105 passed (22 novos em test_auth_real.py + test_email_service.py).
+- ⏳ Em produção (`APP_ENV != development`), validação de SMTP real + SPF/DKIM/DMARC: pendente de deploy Hostinger (Fase D será fechada após smoke real).
+
+### Decisões registradas (2026-05-13/14)
+- **F1-a** (política de senha): mínimo **10 caracteres**, sem blocklist nem zxcvbn nem haveibeenpwned. Aceita senhas previsíveis como `1234567890` se atenderem o tamanho.
+- **F1-b** (formato do token): `uuid.uuid4().hex` (32 chars hex, 122 bits).
+- **F1-c** (storage do token): `sha256(token)` no DB. Token raw só sai pelo e-mail.
+- **F1-d** (SMTP falha no registro): **conta órfã** (não rollback). Botão "Reenviar e-mail" na UI.
+- **F1-e** (legacy user): **sem migração**. Todos criam conta nova. `user/password` permanece somente como API-compat em `APP_ENV=development`. Adicionalmente (2026-05-14): seed automático de `dev@local`/`password` em dev para agilizar smoke após reset.
+- **F1-f** (rate limiting): **adiado** para F1.1. Bcrypt cost 10 (~80ms) limita parcialmente.
 
 ### Critérios de Sucesso
 - Registro com e-mail duplicado → 409.

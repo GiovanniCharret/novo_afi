@@ -243,6 +243,17 @@ async def lifespan(_: FastAPI):
             print(f"[seed] {total} contratos seedados")
     except FileNotFoundError as exc:
         print(f"[seed] base_contratos.json ausente, seed pulado: {exc}")
+
+    # F1 — seed do usuário de desenvolvimento (só em APP_ENV=development).
+    # Permite login direto pela UI com dev@local / password sem fluxo de
+    # cadastro, agilizando smoke tests após reset do banco.
+    try:
+        from .seeds.seed_dev_user import seed_dev_user, DEV_USER_EMAIL, DEV_USER_PASSWORD
+        with get_session() as db:
+            if seed_dev_user(db):
+                print(f"[seed] dev user criado: {DEV_USER_EMAIL} / {DEV_USER_PASSWORD} (APP_ENV=development)")
+    except Exception as exc:
+        print(f"[seed] dev user seed falhou: {exc}")
     yield
 
 

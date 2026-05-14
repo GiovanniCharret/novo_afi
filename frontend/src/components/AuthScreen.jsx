@@ -18,6 +18,13 @@ import { useEffect, useState } from "react";
 
 const MIN_PASSWORD_LENGTH = 10;
 
+// F1 — hint mostrado só quando a SPA está rodando em localhost (dev local).
+// O backend cria automaticamente o usuário dev@local / password em APP_ENV=development
+// (ver backend/app/seeds/seed_dev_user.py).
+const IS_LOCAL_DEV =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
 function getInitialView() {
   if (typeof window === "undefined") return { name: "login", token: null };
   const params = new URLSearchParams(window.location.search);
@@ -186,6 +193,11 @@ function LoginPanel({ initialEmail, onSubmitEmail, onLoggedIn, onForgot, onRegis
           Não tem conta? Criar agora
         </button>
       </div>
+      {IS_LOCAL_DEV && (
+        <div className="auth-hint">
+          Dev local: <code>dev@local</code> &nbsp;·&nbsp; <code>password</code>
+        </div>
+      )}
     </>
   );
 }

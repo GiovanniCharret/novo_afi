@@ -2,7 +2,7 @@
 
 Este documento descreve a modelagem do PostgreSQL.
 
-**Status**: o schema do MVP (Partes 1–7 de `docs/PLAN.md`) está em produção. **F2 ✅, F3 ✅, F3b ✅, F4 ✅, F5 ✅, F6 ✅, F8a ✅** entregues em 2026-05-06 → 2026-05-13 — schema evoluído via Alembic em `backend/alembic/versions/0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`. F3 e F6 foram sem schema (só endpoints/UI novos). Pendentes: F1 (auth real), F7 (e-mails), F8b. Ver `planning/PLAN.md` → "Mudanças Transversais de Schema" para os DDLs canônicos das próximas migrations.
+**Status**: o schema do MVP (Partes 1–7 do plano original; `docs/PLAN.md` removido em 2026-05-14 — histórico em commits) está em produção. **F1 ✅, F2 ✅, F3 ✅, F3b ✅, F4 ✅, F5 ✅, F6 ✅, F8a ✅** entregues em 2026-05-06 → 2026-05-14 — schema evoluído via Alembic em `backend/alembic/versions/0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`, `0004_f1_auth_real.py`. F3 e F6 foram sem schema (só endpoints/UI novos). Pendentes: F7 (e-mails), F8b. Ver `planning/PLAN.md` para os DDLs canônicos das próximas migrations.
 
 ## Direcao Adotada
 
@@ -337,20 +337,25 @@ A recomendacao e aprovar esta modelagem simplificada como base da Parte 6, com t
 
 Esta secao resume as mudancas de schema do roadmap em `planning/PLAN.md`. Os DDLs canonicos vivem la; aqui apenas o overview para nao duplicar fonte de verdade.
 
-### Tabela `users` — F1 + Decisao #5
+### Tabela `users` ✅ F1 (2026-05-14, migration 0004) + Decisão #5
 
-Colunas novas (todas necessarias para auth real):
+Colunas adicionadas:
 
-- `email VARCHAR(255) UNIQUE NOT NULL` — identificador unico de login (substitui `username` no fluxo novo)
-- `email_confirmed BOOLEAN NOT NULL DEFAULT FALSE`
-- `confirmation_token VARCHAR(128)` + `token_expires_at TIMESTAMPTZ`
-- `reset_token VARCHAR(128)` + `reset_expires_at TIMESTAMPTZ`
+- `email VARCHAR(255) UNIQUE NULL` — identificador de login. Nullable para preservar legacy seed `user` (dev only); novos cadastros sempre têm email.
+- `email_confirmed BOOLEAN NOT NULL DEFAULT FALSE` — gate de login pós-F1.
+- `confirmation_token_hash VARCHAR(64) NULL` — `sha256(raw)` do token de confirmação. Raw vive só no e-mail (Decisão F1-c).
+- `token_expires_at TIMESTAMPTZ NULL` — validade do confirmation_token (24h).
+- `reset_token_hash VARCHAR(64) NULL` + `reset_expires_at TIMESTAMPTZ NULL` — análogo para reset (1h).
 
 Coluna existente alterada:
 
-- `username` passa a `nullable=True`. Mantida apenas por compat com seed legado (`DEBUG=true`); ninguem novo cadastra com username.
+- `username` passa a `nullable=True`. Não há mais cadastro por username; só persiste para compat de testes legados (`{username:"user",password:"password"}` em `APP_ENV=development`).
 
-Hash de senha (Decisao #2): `passlib[bcrypt]` cost 10. `CryptContext` configurado com `schemes=["argon2", "bcrypt"]` para permitir migracao automatica para argon2id quando a instituicao definir o algoritmo institucional. Esqueleto em `backend/app/security.py`.
+Hash de senha (Decisão #2): `passlib[bcrypt]` cost 10. `CryptContext` configurado com `schemes=["argon2", "bcrypt"]` em `backend/app/security.py` — trocar `default="argon2"` + `deprecated=["bcrypt"]` migra hashes automaticamente no próximo login (`needs_update()` re-hash). **Importante**: `bcrypt<4.0.0` pinado no requirements — passlib 1.7.4 quebra com bcrypt 5.x.
+
+Tokens (Decisão F1-b): `uuid.uuid4().hex` (32 chars hex, 122 bits). Verificação via `secrets.compare_digest` constant-time.
+
+Dev seed (`backend/app/seeds/seed_dev_user.py`, 2026-05-14): em `APP_ENV=development`, cria automaticamente `dev@local`/`password` com `email_confirmed=True` no boot. Idempotente. Em produção, no-op.
 
 ### Tabela `contratos` ✅ F2 (2026-05-11)
 

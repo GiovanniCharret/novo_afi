@@ -277,11 +277,11 @@ Este documento revisa `planning/` como um adversario maximamente competente: pro
 
 ## 35. Documentos historicos podem ser usados para contradizer roadmap
 
-**Brecha:** a hierarquia diz `docs/PLAN.md` e historico, mas ele ainda existe com plano do MVP e pode conter comandos/decisoes antigas.
+**Brecha original:** `docs/PLAN.md` (plano do MVP histórico) coexistia com `planning/PLAN.md` (roadmap atual) e podia ser citado para justificar comportamento legado.
 
-**Caminho de exploracao:** citar `docs/PLAN.md` para justificar comportamento legado contra `planning/PLAN.md`.
+**Status (2026-05-14):** `docs/PLAN.md` **foi deletado** explicitamente pelo dono ("estava atrapalhando"). Histórico do MVP fica apenas em commits do git. Brecha mitigada por remoção.
 
-**Endurecimento:** adicionar cabecalho em docs historicos: "Nao usar para escopo futuro; ver planning/PLAN.md".
+**Endurecimento residual:** se algum outro doc histórico for adicionado em `docs/`, ele deve ter cabeçalho explícito "Não usar para escopo futuro; ver `planning/PLAN.md`".
 
 ## 36. Ortogonalidade de `BEHAVIORAL_GUIDELINES.md` gera conflito sem desempate
 

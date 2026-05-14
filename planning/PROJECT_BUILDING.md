@@ -65,12 +65,14 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 
 ---
 
-## Estado atual do repositório (snapshot 2026-05-13 — tarde)
+## Estado atual do repositório (snapshot 2026-05-14)
 
 ### O que já existe e funciona
 
-- Backend FastAPI com upload + persistência + SSE (Partes 1–7 do MVP em `docs/PLAN.md`).
+- Backend FastAPI com upload + persistência + SSE (Partes 1–7 do MVP — `docs/PLAN.md` foi removido em 2026-05-14; histórico em commits).
 - Frontend SPA com 3 abas comutadas no topbar: **Upload** (App.jsx, fluxo herdado + rodapé de totais no Anexo I), **Notas** (`components/NfsBrowser.jsx`, F3b + strip de Totais F6) e **Contratos** (`components/ContratosBrowser.jsx`, F3).
+- Auth real: cadastro com e-mail, bcrypt, confirmação por token 24h, reset por token 1h (F1). UI via `components/AuthScreen.jsx` com 7 sub-telas.
+- Dev seed automático: `dev@local`/`password` criado no boot em `APP_ENV=development` (idempotente). Hint visual em localhost.
 - Cache de sessão por contrato: trocar contrato preserva o snapshot do painel de status e da tabela (zerado no logout). Badge "Último upload {relativo}" para sinalizar dados de uma jornada anterior.
 - Totais por contrato (`GET /api/contratos/{id}/totais`) — `TotalizadoresCard` strip na Notas + rodapé inline no Anexo I da Upload.
 - Parser v10 ✅ non-interactive desde F8a (2026-05-06). Parser DEV preservado conforme regra; PROD lives ao lado com marcadores `# FASE PROD`/`# FASE DEV`.
@@ -90,9 +92,9 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 - ~~**F4** (visualizar/baixar PDF): concluída 2026-05-12.~~
 - ~~**F3** (browser de contratos + cache por contrato): concluída 2026-05-13.~~
 - ~~**F6** (totalizadores): concluída 2026-05-13.~~
+- ~~**F1** (auth real + e-mails de confirmação): concluída 2026-05-14.~~ Pendente apenas smoke real em produção com SMTP Hostinger + SPF/DKIM/DMARC.
 - ~~**F8a** (parser non-interactive): concluída 2026-05-06.~~
-- **F1** (auth real + e-mails de confirmação): exige migration `users` + SMTP. Gateway para F7.
-- **F7** (e-mails transacionais — depende de F1).
+- **F7** (e-mails transacionais — depende da infra SMTP de F1, já existente). Adiciona templates de "upload concluído com sucesso" para o usuário + alerta de `erro_parsing` para `ADMIN_EMAIL`.
 - **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): refina UX de NFs com campo faltante. Hoje cai em `erro_parsing`.
 
 ### F8a — concluída em 2026-05-06
@@ -117,9 +119,11 @@ Parser non-interactive entregue. Itens que cobriam:
 
 ### Próxima tarefa concreta proposta
 
-Após F2/F3/F3b/F4/F6 entregues (2026-05-11 → 2026-05-13), o caminho crítico restante é **F1 → F7 → F8b**.
+Após F1 entregue (2026-05-14), o caminho crítico restante é **F7 → F8b**.
 
-**F1** (auth real com e-mail + bcrypt + token de confirmação) é a próxima — gateway para F7 (e-mails transacionais). Exige migration na tabela `users` (`email`, `email_confirmed`, `confirmation_token`, `token_expires_at`, `reset_token`, `reset_expires_at`), configuração SMTP (Hostinger inicial — Decisão #1), e refatoração do `ContratoSelector` para depender de `email` em vez de `username`. Decisões #1, #2, #5 já resolvidas.
+**F7** (e-mails transacionais) é a próxima — reusa a infra SMTP que F1 já estabeleceu (`email_service.py` com fallback stub). Adiciona dois templates: (a) confirmação de upload bem-sucedido para o usuário (após `batch_done` do SSE); (b) alerta de erro de parser para `ADMIN_EMAIL` quando `status = erro_parsing`. Envio em background para não bloquear o stream. Decisão #1 e #8 já resolvidas.
+
+Antes de F7, vale completar a **Fase D do F1** com o smoke real no Hostinger (registrar conta com e-mail institucional, validar DNS, confirmar via link real, login). Depende de credenciais SMTP reais da Hostinger.
 
 
 
