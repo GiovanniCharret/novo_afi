@@ -49,9 +49,8 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 6. F3  ✅ browser de contratos + cache por contrato      (concluída 2026-05-13)
 7. F6  ✅ totalizadores                                  (concluída 2026-05-13)
 8. F1  ✅ login real + e-mail + reset + dev seed         (concluída 2026-05-14)
-7. F8b — nf_pending + modal + schema NOT NULL            (refina UX de F8a)
-8. F1  — auth real                                       (desbloqueia F7)
-9. F7  — e-mails transacionais                           (consome F1)
+9. F8b — nf_pending + modal + schema NOT NULL            (em curso — Fase A aprovada 2026-05-14)
+10. F7  — e-mails transacionais                          (deferido — F7 não é crítico segundo dono)
 ```
 
 A ordem acima é a do ciclo. Trocar dentro de blocos independentes (ex.: F4 antes de F3) é permitido; **violar uma aresta da seção "Dependências obrigatórias" exige justificativa documentada e nova decisão registrada em `PENDING_DECISIONS.md`**.
@@ -402,6 +401,47 @@ A iteração visual também simplificou o componente: virou strip horizontal (3 
 - **F1-d** (SMTP falha no registro): **conta órfã** (não rollback). Usuário fica em `email_confirmed=False` aguardando. Botão "Reenviar e-mail" na UI dispara `POST /api/auth/resend-confirmation`.
 - **F1-e** (legacy user): **sem migração**. Todos os usuários atuais criam conta nova via fluxo normal. Seed do `user/password` só roda em `APP_ENV=development`.
 - **F1-f** (rate limiting): **adiado**. F1 entrega sem rate limit; reabrir como F1.1 se aparecer abuso real. Bcrypt cost 10 (~80ms) limita parcialmente.
+
+---
+
+## F8b — Pendência interativa de preenchimento de NF (em curso)
+
+**Objetivo**: substituir o comportamento atual (`ParserCampoFaltante` → `erro_parsing`) por um modal interativo onde o operador vê o PDF inline e preenche os campos que o parser não conseguiu extrair. Sem preenchimento em 30min, a NF é descartada e a fila restante do batch é cancelada. Spec visual completa em `planning/F8b-pending-nf.html`.
+
+### Fases
+- **Fase A** ✅ concluída em 2026-05-14 — 8 decisões fechadas (F8b-a até F8b-h).
+- **Fase B1** — parser escreve `pending_rows.json` antes de `sys.exit(2)`. (em curso)
+- **Fase B2** — migration 0005: tabela `nf_pending`, DELETE de rows com NULL, `SET NOT NULL` nas 11 colunas obrigatórias, novos status do `upload_files`.
+- **Fase B3a** ✅ concluída em 2026-05-14 — `pending_registry.py` (asyncio.Event in-memory), `parser_adapter` lê `pending_rows.json` no exit 2 e devolve `ParserOutcome(status="pending_input")`, endpoints `POST /api/uploads/pending/{id}/resolve` e `/cancel` com auth por ownership e validação de race (409). 20 testes em `tests/test_pending_registry.py` + `tests/test_pending_endpoints.py`.
+- **Fase B3b** ✅ concluída em 2026-05-14 — SSE generator integra ao registry: `await asyncio.wait_for(event.wait(), timeout=1800)`, lê desfecho, refresh do DB, marca `record.status` final (processado/cancelado/rejeitado_pendencia_expirada), cancela fila restante com `cancelado_pelo_lote` se desfecho não-resolvido. `expire_orphan_pendings` no `lifespan` recupera pendings órfãos cross-reboot (filtra por `status='aguardando' AND expires_at < now()`). 7 testes em `tests/test_pending_recovery.py`.
+- **Fase C1** ✅ concluída em 2026-05-14 — `frontend/src/components/PendingInputModal.jsx` (split iframe + form), import + state `pendingModal` em App.jsx, handler de `file_pending_input` no SSE consumer, render condicional do modal acima do topbar. C2 absorvido (badges novos `aguardando_preenchimento`, `cancelado`, `cancelado_pelo_lote`, `rejeitado_pendencia_expirada` adicionados ao STATUS_LABELS + CSS) pois necessários pro modal e linhas da tabela aparecerem coerentes. `npm run build` limpo, 40 módulos. Falta visual smoke real (Fase D).
+- **Fase C2** ✅ absorvida em C1 — labels + cores de badge para os 4 status novos.
+- **Fase D** — DoD + smoke real.
+
+### Subetapas (rastreio amplo)
+- [x] B1: `main.py` em modo non-interactive escreve `pending_rows.json` no `--output-dir` antes do `sys.exit(2)` com `{original_filename, contexto, missing, prefilled}`. Acumulador `_PENDING_PREFILLED` + helpers `_pending_track`/`_reset_pending_prefilled`. 4 chamadas estratégicas (cnpj, fornecedor, data, numero_nf) no main loop. DEV preservado (no-op). 8 testes em `tests/test_parser_pending.py` passando. Entrada em `docs/MAIN_PROD_CHANGES.md` (2026-05-14). Concluída 2026-05-14.
+- [x] B2: migration `0005_f8b_nf_pending` cria tabela `nf_pending` (com `expires_at`, status enum, índices em status/upload_batch_id/expires_at), DELETE de rows pré-F8 com NULL/`''` nas 5 colunas que viram NOT NULL (`ncm`, `quantidade`, `preco_unitario`, `fornecedor`, `contrato` — as outras 6 colunas do default_nf_template já eram NOT NULL desde o baseline), `SET NOT NULL` nas 5. Contagem deletada printada no log da migration. Modelo `NfPending` adicionado em `models.py`; enum de `UploadFileRecord.status` documentado em docstring (sem CHECK constraint — invariante de fluxo no código). 8 testes em `tests/test_nf_pending_schema.py` passando. Seed helpers atualizados em 4 testes existentes (test_nf_entries_filters, test_totais_contrato, test_duplicate_reason, test_contratos_endpoints) para satisfazer o novo schema. Concluída 2026-05-14.
+- [ ] B3: `backend/app/pending_registry.py` (asyncio.Event keyed by `nf_pending_id`). `POST /api/uploads/pending/{id}/resolve` + `POST /api/uploads/pending/{id}/cancel`. SSE generator: cria `nf_pending`, emite `file_pending_input`, `await event.wait(timeout=1800)`, lê desfecho do DB, segue ou cancela. Job de startup marca pendings órfãos cross-reboot como expirados.
+- [ ] C1: novo `PendingInputModal.jsx` (split PDF iframe + form), `App.jsx` consumer SSE trata `file_pending_input`.
+- [ ] C2: status badges `aguardando_preenchimento`, `cancelado`, `cancelado_pelo_lote`, `rejeitado_pendencia_expirada`.
+
+### Critérios de Sucesso
+- Migration 0005 aplica em SQLite + Postgres; contagem de rows deletadas registrada no log.
+- Smoke positivo: PDF com CNPJ ausente → modal → preenche → NF persistida.
+- Smoke negativo: cancel → fila restante marca `cancelado_pelo_lote`.
+- Smoke timeout: pending > 30min → marca `expirado`, modal mostra "Tempo esgotado".
+- Race resolve+timeout → segundo a chegar recebe 409.
+- Job de startup recovery cobre orfãos cross-reboot.
+
+### Decisões registradas (2026-05-14, Fase A)
+- **F8b-a** (mecânica): **bloqueia o batch via asyncio.Event**. Generator SSE faz `await event.wait(timeout=1800)` num registry `dict[nf_pending_id, asyncio.Event]`. POST `/resolve` ou `/cancel` setam o event. Timeout 30min = mesmo efeito do cancel. **Revisa a Decisão #8 do PLAN.md original** (que previa só "bloqueia batch" sem detalhar o mecanismo).
+- **F8b-b** (múltiplos pendings): **sequencial bloqueante**. Cada pending = pausa do batch. Resolveu o pending atual → próximo PDF processa. Se virar pending também → modal reabre.
+- **F8b-c** (timeout): **30 minutos**, por pending, não por batch. `nf_pending.expires_at = created_at + 30min`. Expirar antes do resolve = mesmo efeito do cancel.
+- **F8b-d** (escopo do cancel): **PDF problemático + fila restante**. Cancel marca `upload_files.status = 'cancelado'` para o PDF problemático e `cancelado_pelo_lote` para arquivos ainda na fila. Arquivos já processados antes do pending permanecem em `nf_entries`. Sem rollback total.
+- **F8b-e** (layout do modal): **PDF iframe à esquerda + form à direita**. `<iframe src="/api/uploads/files/{id}/pdf">` reusa o endpoint F4 com sessão autenticada. Form: prefilled (read-only) + missing fields (inputs required) + botões Salvar/Cancelar batch. Sem timer countdown visível (timeout é interno).
+- **F8b-f** (backfill NOT NULL): **DELETE direto** das rows pré-F8 com NULL/`''` em qualquer das 11 colunas obrigatórias. Contagem registrada no log da migration para auditoria.
+- **F8b-g** (granularidade — herdada Decisão #8): NF inteira vai pra pending. Outros produtos da mesma NF não entram parcialmente em `nf_entries`.
+- **F8b-h** (11 colunas NOT NULL — herdada Decisão #8): `descricao, ncm, quant, preco_unitario, numero_nf, tipo_nota, data_emissao, cnpj, fornecedor, valor, contrato`.
 
 ---
 

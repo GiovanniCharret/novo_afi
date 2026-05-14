@@ -43,6 +43,74 @@ Formato sugerido por entrada:
 
 <!-- Adicionar entradas mais recentes no topo. -->
 
+### 2026-05-14 — F8b B1 fix — Bug do CONDUMAX (data invalida no /resolve)
+
+Smoke visual de C1 revelou: PDF onde NCM falha primeiro (extração de produto roda ANTES de cnpj/data/numero) → modal abre só com NCM como missing, prefilled vazio, /resolve falha com `Data invalida:` (data_emissao=None em create_nf_entry). 3 bugs combinados:
+
+- **Versão de origem**: B1 inicial (mesmo dia, 2026-05-14).
+- **Tipo**: nova função, chamadas adicionadas, payload estruturado expandido.
+
+#### Mudanças aplicadas
+
+1. **Nova função `_canonical_field(campo)`** após `_reset_pending_prefilled`. Extrai chave canônica do `default_nf_template` a partir do label humano do parser. `'ncm (produto 1 de 1)' → 'ncm'`. Sem essa normalização, `filled = {"ncm (produto 1 de 1)": "85444900"}` no /resolve não bateria com `row.get("ncm")` em `create_nf_entry`.
+
+2. **Block `except ParserCampoFaltante` expandido**: `missing` no `pending_rows.json` agora carrega o campo canônico + TODOS os campos de `default_nf_template` (exceto `contrato`, que vem da sessão) que NÃO estão em `prefilled`. Razão: parser pode falhar cedo (ex.: NCM) sem ter extraído cnpj/data/fornecedor/numero — todos NOT NULL. Antes o modal só pedia 1 campo e /resolve quebrava por NULL nos outros.
+
+3. **5 chamadas best-effort de `_pending_track` ANTES da `new_concatenar`** (linha ~2026), aproveitando `df_product_service_desciption['primeiro_terco']` já refinado: `tipo_nota`, `cnpj` (+ `fornecedor` derivado via `consulta_nome_fornecedor`), `data_emissao`, `numero_nf`. Falhas individuais silenciadas — bloco principal (linha 2068+) tem try/except próprio que re-extrai/re-prompta. Garante que pendência por campo de produto (NCM/quant/preço) já tem metadados básicos no prefilled.
+
+#### Impacto no DEV
+
+Zero. `_pending_track` continua no-op em DEV (`NON_INTERACTIVE_MODE = False`). As 5 chamadas best-effort early são try/except-protegidas — nem em DEV nem em PROD podem quebrar o fluxo principal.
+
+#### Testes
+
+2 testes novos em `test_parser_pending.py`: `_canonical_field` extrai chave do label humano com parênteses; preserva chave exótica inteira (sem espaço). 10 testes B1 totais passando.
+
+---
+
+### 2026-05-14 — F8b B1 — Parser escreve `pending_rows.json` antes do exit 2
+
+Camada de captura do prefilled que vai virar payload do modal de pendência no frontend (Fase B3 + C1). O parser DEV continua intocado — todo o trabalho é no bloco non-interactive.
+
+- **Versão de origem**: `backend/app/main.py` pós-F8a (2026-05-07).
+- **Tipo**: nova constante module-level, nova função, função alterada, chamadas adicionadas, bloco `except` expandido.
+
+#### Mudanças aplicadas
+
+1. **Novas constantes module-level** (logo após `NON_INTERACTIVE_MODE`):
+   - `_PENDING_PREFILLED: dict = {}` — acumulador do que foi extraído com sucesso na NF em curso.
+   - `_PENDING_CURRENT_FILE: str = ""` — nome do arquivo atual, capturado fora do scope local para sobreviver até o `except`.
+
+2. **Novas funções** logo antes de `_solicitar_campo_humano`:
+   - `_pending_track(campo, valor)` — registra extração bem-sucedida no acumulador. **No-op em modo DEV** (não gasta memória no terminal). Desencapsula o formato canônico do parser `{"cnpj": "..."}` para escalar. Filtra `None` e `""`.
+   - `_reset_pending_prefilled()` — zera o acumulador no início de cada iteração do main loop.
+
+3. **`_solicitar_campo_humano` alterada**: em modo non-interactive, agora passa `prefilled=dict(_PENDING_PREFILLED)` (cópia rasa) ao construir `ParserCampoFaltante`. DEV path inalterado.
+
+4. **4 chamadas estratégicas de `_pending_track`** dentro do main loop (linhas ~2060-2080), logo após cada extração bem-sucedida de campo obrigatório: `cnpj`, `fornecedor`, `data_emissao`, `numero_nf`. Posicionamento depois das try/excepts garante captura tanto do valor extraído pelo parser quanto do digitado por humano em DEV.
+
+5. **Reset + capture do current file** no topo de cada iteração do loop, antes de `extract_pdf_words`:
+   ```python
+   _reset_pending_prefilled()
+   _PENDING_CURRENT_FILE = nome_saida
+   ```
+
+6. **Bloco `except ParserCampoFaltante` expandido** (~linhas 2126+). Antes do `sys.exit(2)`, escreve `pending_rows.json` no `--output-dir` com payload `{original_filename, contexto, missing: [campo], prefilled: {...}}`. Falha de IO no temp dir loga em stderr mas não mascara o exit 2 — adapter ainda classifica corretamente. **Não há nova exceção, novo exit code ou nova flag** — interface com adapter inalterada.
+
+#### Por que não houve refactor mais profundo
+
+A captura de `prefilled` está limitada aos 4 campos extraídos no main loop. Campos extraídos antes (descrição, valor, ncm, quant, preço unitário das linhas de produto) não entram no `prefilled` desta versão por exigirem `_pending_track` em pontos distribuídos pelas funções auxiliares (`new_concatenar_por_ponteiro_filtra_tabela_produtos`, `_campo_ou_humano`, etc.). Como o caso de uso real do modal é fornecedor/cnpj/data/numero (campos por NF, não por linha de produto), B1 fica focado nos quatro críticos. Expansão para campos de linha de produto fica como follow-up se aparecer demanda.
+
+#### Impacto no DEV
+
+Zero. `_pending_track` é no-op em modo interativo (`NON_INTERACTIVE_MODE = False`). Inputs no terminal seguem idênticos. `_reset_pending_prefilled` apenas zera um dict global — sem efeito colateral observável fora do modo PROD.
+
+#### Testes
+
+`backend/tests/test_parser_pending.py` (novo, 8 testes): tracker armazena escalar, desencapsula dict canônico, filtra None/'', é no-op em DEV, reset limpa, snapshot na exceção é cópia independente, prefilled vazio quando falha no primeiro campo. Não cobre o write em disco — isso vem na Fase B3 com teste e2e via subprocess.
+
+---
+
 ### 2026-05-07 — F8a follow-up — Fix de NaN + fallback humano + trava de campos vazios
 
 DEV trouxe três melhorias na função `new_concatenar_por_ponteiro_filtra_tabela_produtos` e em `consolidate_data_to_dict` para resolver o erro de `Decimal('NaN')` chegando ao PostgreSQL JSONB e endurecer invariantes do parser.

@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
@@ -18,7 +18,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from .db import get_db, get_session, init_db
 from .dependencies import require_contrato
 from .email_service import send_confirmation_email, send_reset_email
-from .models import Contrato, NfEntry, UploadBatch, UploadFile as UploadFileRecord, User
+from .models import Contrato, NfEntry, NfPending, UploadBatch, UploadFile as UploadFileRecord, User
+from . import pending_registry
 from .security import (
     MIN_PASSWORD_LENGTH,
     generate_token,
@@ -86,6 +87,16 @@ class ResetPasswordPayload(BaseModel):
 
 class ContratoSelectPayload(BaseModel):
     contrato_id: str
+
+
+class PendingResolvePayload(BaseModel):
+    """F8b — body do POST /api/uploads/pending/{id}/resolve.
+
+    `filled` carrega os campos que o operador preencheu no modal. Keys
+    devem ser um subconjunto de `nf_pending.missing_fields_json`. Validação
+    é leve no Pydantic (só estrutura); semântica vai no endpoint.
+    """
+    filled: dict[str, str]
 
 
 def serialize_contrato(c: Contrato) -> dict[str, object]:
@@ -254,6 +265,19 @@ async def lifespan(_: FastAPI):
                 print(f"[seed] dev user criado: {DEV_USER_EMAIL} / {DEV_USER_PASSWORD} (APP_ENV=development)")
     except Exception as exc:
         print(f"[seed] dev user seed falhou: {exc}")
+
+    # F8b — recovery de pendings órfãos cross-reboot. Pendência com
+    # `status='aguardando' AND expires_at < now()` é invariavelmente órfã
+    # (generator que aguardava já morreu). Marca como expirado e libera
+    # `upload_files.status` correspondente. Idempotente — re-run não faz nada.
+    try:
+        with get_session() as db:
+            expired = pending_registry.expire_orphan_pendings(db)
+            if expired:
+                print(f"[startup] {expired} nf_pending(s) expirado(s) (recovery cross-reboot)")
+    except Exception as exc:
+        print(f"[startup] recovery de pendings órfãos falhou: {exc}")
+
     yield
 
 
@@ -748,7 +772,7 @@ def create_app() -> FastAPI:
 
                     parser = LegacyParserAdapter()
 
-                    for filename, file_bytes in file_payloads:
+                    for current_idx, (filename, file_bytes) in enumerate(file_payloads):
                         sha256 = compute_sha256(file_bytes)
 
                         yield _sse({"event": "file_queued", "filename": filename})
@@ -802,6 +826,120 @@ def create_app() -> FastAPI:
                             outcome = await asyncio.to_thread(
                                 parser.parse_pdf_bytes, filename, file_bytes, debug_dir, contrato_numero
                             )
+
+                            # F8b: parser detectou campo faltante. Cria nf_pending,
+                            # emite file_pending_input e suspende o generator no
+                            # event do registry (timeout 30min). Resolve no /resolve
+                            # acorda o generator e continua o batch; cancel ou
+                            # timeout marca este PDF como cancelado/expirado e
+                            # marca os arquivos restantes como cancelado_pelo_lote.
+                            if outcome.status == "pending_input":
+                                pending = NfPending(
+                                    upload_file_id=record.id,
+                                    upload_batch_id=batch.id,
+                                    contrato_id=contrato_id,
+                                    prefilled_json=json.dumps(outcome.prefilled or {}, ensure_ascii=False),
+                                    missing_fields_json=json.dumps(outcome.missing or [], ensure_ascii=False),
+                                    expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+                                )
+                                db.add(pending)
+                                record.status = "aguardando_preenchimento"
+                                # commit imprescindível — /resolve em outra request
+                                # precisa ler a row recém-criada.
+                                db.commit()
+
+                                event = pending_registry.register(pending.id)
+                                yield _sse({
+                                    "event": "file_pending_input",
+                                    "filename": filename,
+                                    "nf_pending_id": pending.id,
+                                    "upload_file_id": record.id,
+                                    "prefilled": outcome.prefilled or {},
+                                    "missing": outcome.missing or [],
+                                })
+
+                                try:
+                                    await asyncio.wait_for(event.wait(), timeout=1800)
+                                except asyncio.TimeoutError:
+                                    # Generator é o único que pode marcar 'expirado'
+                                    # quando o timeout interno dispara. Race com
+                                    # /resolve simultâneo é não-destrutivo (nf_entry
+                                    # criada permanece, só status do upload_file
+                                    # fica como expirado em vez de processado —
+                                    # documentado em pending_registry.py).
+                                    pending.status = "expirado"
+                                    pending.resolved_at = datetime.now(timezone.utc)
+                                    db.commit()
+
+                                pending_registry.consume_desfecho(pending.id)
+
+                                # Re-lê o estado autoritativo do DB — /resolve pode
+                                # ter atualizado pending/record numa outra session.
+                                db.refresh(pending)
+                                db.refresh(record)
+
+                                if pending.status == "resolvido":
+                                    # /resolve já fez o trabalho — pode ter inserido
+                                    # (record.status='processado') ou detectado dup
+                                    # (record.status='duplicado'). Generator só emite
+                                    # o status final, sem sobrescrever a decisão de
+                                    # /resolve.
+                                    yield _sse({
+                                        "event": "file_done",
+                                        "filename": filename,
+                                        "status": record.status,
+                                        "status_reason": record.status_reason,
+                                        "parser_error": None,
+                                        "inserted_count": record.inserted_count,
+                                        "duplicate_count": record.duplicate_count,
+                                    })
+                                    continue
+
+                                # Não resolvido — cancelado ou expirado.
+                                if pending.status == "expirado":
+                                    final_status = "rejeitado_pendencia_expirada"
+                                    final_reason = "Não preenchido em 30min — reenvie o PDF se necessário."
+                                else:
+                                    final_status = "cancelado"
+                                    final_reason = "Cancelado pelo operador."
+
+                                record.status = final_status
+                                record.status_reason = final_reason
+                                db.commit()
+                                yield _sse({
+                                    "event": "file_done",
+                                    "filename": filename,
+                                    "status": final_status,
+                                    "status_reason": final_reason,
+                                    "parser_error": None,
+                                    "inserted_count": 0,
+                                    "duplicate_count": 0,
+                                })
+
+                                # Cancela arquivos restantes da fila (Decisão F8b-d).
+                                # Não salva PDFs em disco — só cria upload_files row
+                                # pra rastreabilidade no painel.
+                                for rem_filename, _ in file_payloads[current_idx + 1:]:
+                                    rem_record = UploadFileRecord(
+                                        upload_batch_id=batch.id,
+                                        original_filename=rem_filename,
+                                        status="cancelado_pelo_lote",
+                                        status_reason="Batch interrompido por pendência não resolvida.",
+                                        inserted_count=0,
+                                        duplicate_count=0,
+                                    )
+                                    db.add(rem_record)
+                                    yield _sse({
+                                        "event": "file_done",
+                                        "filename": rem_filename,
+                                        "status": "cancelado_pelo_lote",
+                                        "status_reason": "Batch interrompido por pendência não resolvida.",
+                                        "parser_error": None,
+                                        "inserted_count": 0,
+                                        "duplicate_count": 0,
+                                    })
+                                db.commit()
+                                break  # sai do for loop, vai pro batch_done
 
                             if outcome.status != "processado":
                                 record.status = outcome.status
@@ -903,6 +1041,192 @@ def create_app() -> FastAPI:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    def _load_owned_pending(
+        db: Session,
+        nf_pending_id: str,
+        username: str,
+    ) -> NfPending | None:
+        """F8b — busca NfPending validando ownership pelo username da sessão.
+
+        Retorna None (não 403/404 separados) se a pendência não existe OU
+        pertence a outro usuário — convenção do projeto: não vazar
+        existência via códigos diferentes. Caller transforma None em 404.
+        """
+        pending = db.scalar(
+            select(NfPending)
+            .join(UploadBatch, UploadBatch.id == NfPending.upload_batch_id)
+            .join(User, User.id == UploadBatch.user_id)
+            .where(NfPending.id == nf_pending_id, User.username == username)
+        )
+        return pending
+
+    @app.post("/api/uploads/pending/{nf_pending_id}/resolve")
+    def resolve_pending(
+        nf_pending_id: str,
+        payload: PendingResolvePayload,
+        request: Request,
+        db: Annotated[Session, Depends(get_db)],
+    ) -> dict[str, object]:
+        """F8b — operador preencheu o modal: monta a row completa com
+        prefilled + filled, insere em nf_entries, marca pendência resolvida
+        e acorda o generator SSE via pending_registry.signal_resolve.
+
+        409 se a pendência já está resolvida, cancelada ou expirada (race
+        entre múltiplas abas, ou /resolve chegou após o timeout interno).
+        404 se a pendência não existe ou não pertence ao usuário.
+        """
+        user_data = get_authenticated_user(request)
+        pending = _load_owned_pending(db, nf_pending_id, user_data["username"])
+        if pending is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Pendência não encontrada.")
+
+        if pending.status != "aguardando":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Pendência já está em status '{pending.status}'.",
+            )
+
+        # Merge: prefilled (extraído pelo parser) + filled (digitado pelo operador).
+        # filled tem prioridade — operador pode corrigir um campo que o parser
+        # extraiu errado se decidir digitar de novo, mas a UI default só pede
+        # os missing.
+        prefilled = json.loads(pending.prefilled_json) if pending.prefilled_json else {}
+        missing = json.loads(pending.missing_fields_json) if pending.missing_fields_json else []
+
+        # Sanity check: payload.filled deve cobrir todos os missing. Não fazemos
+        # validação rígida (parser pode mudar e o frontend pode estar defasado);
+        # só checa que não veio vazio se tem coisa pra preencher.
+        if missing and not payload.filled:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "É preciso preencher pelo menos um campo.",
+            )
+
+        # Carrega contrato pra montar o campo `contrato` legado (texto livre)
+        # e o número canônico — mantém invariante de NfEntry (contrato_id + contrato).
+        contrato = db.get(Contrato, pending.contrato_id)
+        if contrato is None:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "Contrato da pendência não está mais no banco.",
+            )
+
+        # Constrói a row no formato esperado por create_nf_entry. Mapeamento
+        # entre os nomes do parser (`quant`, `valor`) e nomes em NfEntry é
+        # responsabilidade do create_nf_entry — aqui só passamos o que o
+        # parser produziria.
+        row = {**prefilled, **payload.filled}
+        # Garantir campos do contrato — parser populava via consolidate_data_to_dict.
+        row.setdefault("contrato", contrato.numero)
+
+        # F8b fix 2026-05-14: dedup ANTES do INSERT — mesma lógica do generator
+        # no caminho happy (linha ~840). Sem isso, manual input para NF que já
+        # existe no banco (ex.: reupload do mesmo PDF) explode com UniqueViolation
+        # em business_key e o operador vê SQL traceback no modal.
+        business_key = build_business_key(row)
+        existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
+
+        upload_file = db.get(UploadFileRecord, pending.upload_file_id)
+
+        if existing is not None:
+            # Duplicado — não insere. Mensagem espelha a do generator happy-path,
+            # simplificada porque aqui só temos 1 NF candidata.
+            if existing.contrato_id:
+                c_existing = db.get(Contrato, existing.contrato_id)
+                if c_existing is not None:
+                    dup_reason = f"Já foi arquivado no contrato {c_existing.numero}."
+                else:
+                    dup_reason = "Já existe na base."
+            else:
+                dup_reason = "Já existe na base (sem contrato registrado, anterior à F2)."
+
+            if upload_file is not None:
+                upload_file.status = "duplicado"
+                upload_file.status_reason = dup_reason
+                upload_file.duplicate_count = 1
+                upload_file.inserted_count = 0
+
+            pending.status = "resolvido"
+            pending.resolved_at = datetime.now(timezone.utc)
+            db.commit()
+            pending_registry.signal_resolve(nf_pending_id)
+
+            return {
+                "nf_pending_id": nf_pending_id,
+                "nf_entry_id": existing.id,
+                "status": "resolvido",
+                "outcome": "duplicado",
+            }
+
+        try:
+            entry = create_nf_entry(
+                db,
+                row,
+                contrato_id=pending.contrato_id,
+                upload_file_id=pending.upload_file_id,
+            )
+        except Exception as e:
+            # NOT NULL violation, data parse error, etc. — diferente de dedup
+            # (já tratado acima). Mantém pendência em 'aguardando' para retry.
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Não foi possível salvar a NF: {e}",
+            )
+
+        # Caminho happy — NF inserida. Atualiza upload_file e pending.
+        if upload_file is not None:
+            upload_file.status = "processado"
+            upload_file.status_reason = "Preenchimento manual aceito."
+            upload_file.inserted_count = 1
+            upload_file.duplicate_count = 0
+
+        pending.status = "resolvido"
+        pending.resolved_at = datetime.now(timezone.utc)
+        db.commit()
+
+        # Sinaliza o generator que pode prosseguir com o próximo arquivo.
+        # Se o generator já fechou (race com timeout), signal_resolve retorna
+        # False — não é erro, mas a NF foi inserida e a pendência marcada
+        # resolvida no DB.
+        pending_registry.signal_resolve(nf_pending_id)
+
+        return {
+            "nf_pending_id": nf_pending_id,
+            "nf_entry_id": entry.id,
+            "status": "resolvido",
+            "outcome": "processado",
+        }
+
+    @app.post("/api/uploads/pending/{nf_pending_id}/cancel")
+    def cancel_pending(
+        nf_pending_id: str,
+        request: Request,
+        db: Annotated[Session, Depends(get_db)],
+    ) -> dict[str, object]:
+        """F8b — operador clicou 'Cancelar batch' no modal. Marca a pendência
+        cancelada e sinaliza o generator, que vai cancelar a fila restante.
+
+        409 se já está em estado terminal (resolvido/cancelado/expirado).
+        """
+        user_data = get_authenticated_user(request)
+        pending = _load_owned_pending(db, nf_pending_id, user_data["username"])
+        if pending is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Pendência não encontrada.")
+
+        if pending.status != "aguardando":
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Pendência já está em status '{pending.status}'.",
+            )
+
+        pending.status = "cancelado"
+        pending.resolved_at = datetime.now(timezone.utc)
+        db.commit()
+
+        pending_registry.signal_cancel(nf_pending_id)
+
+        return {"nf_pending_id": nf_pending_id, "status": "cancelado"}
 
     @app.get("/")
     def root() -> FileResponse:

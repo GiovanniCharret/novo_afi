@@ -1420,3 +1420,278 @@ tr:hover td { background: #f8fbff; }
 .anexo-sep {
   color: var(--text-muted);
 }
+
+/* ── F8b: PendingInputModal ──────────────────────────────────────── */
+
+.pending-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 53, 88, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.pending-modal {
+  background: var(--bg-panel, #fff);
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  width: 100%;
+  max-width: 1100px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pending-modal-header {
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--border-light, #e2e8f0);
+  background: #f8fafc;
+}
+
+.pending-modal-eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 4px;
+}
+
+.pending-modal-title {
+  font-size: 1.15rem;
+  color: var(--text-strong, #0d3558);
+  margin: 0 0 6px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.pending-modal-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+  margin: 0;
+}
+
+.pending-modal-body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.pending-modal-pdf {
+  background: #f1f5f9;
+  border-right: 1px solid var(--border-light, #e2e8f0);
+  display: flex;
+  flex-direction: column;
+  min-height: 480px;
+}
+
+.pending-modal-iframe {
+  flex: 1;
+  border: 0;
+  width: 100%;
+  background: #fff;
+}
+
+.pending-modal-pdf-link {
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  color: var(--blue-dark, #1b80c4);
+  text-decoration: none;
+  text-align: center;
+  border-top: 1px solid var(--border-light, #e2e8f0);
+  background: #fff;
+}
+
+.pending-modal-pdf-link:hover {
+  text-decoration: underline;
+}
+
+.pending-modal-form {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pending-modal-prefilled {
+  background: #f8fafc;
+  border: 1px solid var(--border-light, #e2e8f0);
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+
+.pending-modal-prefilled-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 8px;
+}
+
+.pending-modal-prefilled-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  padding: 3px 0;
+  border-bottom: 1px dashed transparent;
+}
+
+.pending-modal-prefilled-row + .pending-modal-prefilled-row {
+  border-top: 1px dashed #e2e8f0;
+}
+
+.pending-modal-prefilled-k {
+  color: var(--text-muted, #64748b);
+}
+
+.pending-modal-prefilled-v {
+  color: var(--text-strong, #0d3558);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-align: right;
+  word-break: break-word;
+  max-width: 60%;
+}
+
+.pending-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pending-modal-field-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-strong, #0d3558);
+  margin-bottom: 4px;
+}
+
+.pending-modal-required {
+  color: #c2410c;
+}
+
+.pending-modal-input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: #fff;
+}
+
+.pending-modal-input:focus {
+  outline: none;
+  border-color: var(--blue-dark, #1b80c4);
+  box-shadow: 0 0 0 2px rgba(27, 128, 196, 0.15);
+}
+
+.pending-modal-input:disabled {
+  background: #f1f5f9;
+  cursor: not-allowed;
+}
+
+.pending-modal-error {
+  font-size: 0.82rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.pending-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.pending-modal-btn-primary,
+.pending-modal-btn-ghost {
+  padding: 9px 14px;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+
+.pending-modal-btn-primary {
+  background: var(--navy, #0d3558);
+  color: #fff;
+  flex: 1;
+}
+
+.pending-modal-btn-primary:hover:not(:disabled) {
+  background: #0a2843;
+}
+
+.pending-modal-btn-primary:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.pending-modal-btn-ghost {
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  border-color: #cbd5e1;
+}
+
+.pending-modal-btn-ghost:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.pending-modal-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pending-modal-foot {
+  font-size: 0.72rem;
+  color: var(--text-muted, #64748b);
+  margin: 0;
+  line-height: 1.45;
+}
+
+@media (max-width: 820px) {
+  .pending-modal-body {
+    grid-template-columns: 1fr;
+  }
+  .pending-modal-pdf {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-light, #e2e8f0);
+    min-height: 320px;
+  }
+}
+
+/* ── F8b: badges novos de status ─────────────────────────────────── */
+
+.status-aguardando-preenchimento {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+  animation: badge-pulse 1.4s ease-in-out infinite;
+}
+
+.status-cancelado,
+.status-cancelado-pelo-lote {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.status-rejeitado-pendencia-expirada {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}

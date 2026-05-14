@@ -212,8 +212,8 @@ export default function ContratosBrowser({ onPick }) {
             </colgroup>
             <thead>
               <tr>
-                <th>Número</th>
-                <th>Fornecedor</th>
+                <th>Contrato</th>
+                <th>Distribuidora</th>
                 <th>UF</th>
                 <th>Tranche</th>
                 <th>Tipo</th>

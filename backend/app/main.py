@@ -45,6 +45,17 @@ class ParserEstruturaQuebrada(ValueError):
 # em vez de chamar input(). Default False preserva comportamento DEV.
 NON_INTERACTIVE_MODE = False
 
+# FASE PROD — F8b: acumulador de campos extraídos com sucesso durante a leitura
+# de UMA única NF. Quando `_solicitar_campo_humano` falha (modo non-interactive),
+# snapshot vai para o `prefilled` da exceção e depois para `pending_rows.json`,
+# permitindo que o modal do frontend mostre o que já foi extraído. Reset em
+# cada iteração do main loop (uma NF por iteração).
+_PENDING_PREFILLED: dict = {}
+# F8b: nome do arquivo PDF em curso — capturado no início de cada iteração para
+# que o bloco `except ParserCampoFaltante` saiba qual arquivo gerou a pendência
+# sem depender de scope local que pode ter sido perdido.
+_PENDING_CURRENT_FILE: str = ""
+
 # DEPURADOR
 arquivo_investigado = '29105'
 
@@ -120,10 +131,61 @@ tabela_anexo1_modelo = pd.DataFrame(columns=default_nf_template.keys())
 df_anexo1_consolidado = tabela_anexo1_modelo
 
 
+def _pending_track(campo: str, valor) -> None:
+    """FASE PROD — F8b: registra que um campo foi extraído com sucesso.
+
+    No-op em modo DEV (interativo). Em modo non-interactive, alimenta o
+    acumulador que vai virar `prefilled` na ParserCampoFaltante seguinte —
+    permitindo que o operador veja, no modal, os campos já preenchidos
+    automaticamente lado a lado com os que faltam.
+
+    Aceita valores escalares ou dicts no formato `{"cnpj": "..."}` (que é
+    como a maioria dos campos vem do parser). Strings vazias e None são
+    descartados — pré-condição para entrar no `prefilled`.
+    """
+    if not NON_INTERACTIVE_MODE:
+        return
+    # Desencapsula dict comum no parser: {'cnpj': '...'} → '...'
+    if isinstance(valor, dict) and campo in valor:
+        valor = valor[campo]
+    if valor in (None, ""):
+        return
+    _PENDING_PREFILLED[campo] = valor
+
+
+def _reset_pending_prefilled() -> None:
+    """FASE PROD — F8b: zera acumulador no início de cada iteração do main loop."""
+    _PENDING_PREFILLED.clear()
+
+
+def _canonical_field(campo: str) -> str:
+    """FASE PROD — F8b: extrai chave canônica do default_nf_template a partir
+    do label humano que `_solicitar_campo_humano` recebe.
+
+    Exemplos:
+        'ncm (produto 1 de 1)' → 'ncm'
+        'cnpj'                 → 'cnpj'
+        'numero_de_produtos_nesta_nf' → 'numero_de_produtos_nesta_nf' (não é
+            campo do template — caller filtra; modal vai mostrar o label cru)
+
+    Necessário porque o frontend envia `filled = {chave: valor}` no /resolve;
+    a chave precisa bater com `default_nf_template` para `create_nf_entry` ler
+    via `row.get("ncm")`. Sem essa normalização, NCM digitado pelo operador
+    nunca chegaria na NfEntry.
+    """
+    return campo.split(" ", 1)[0].strip()
+
+
 def _solicitar_campo_humano(campo, contexto):
     # FASE PROD — em modo non-interactive levanta exceção tipada em vez de input()
     if NON_INTERACTIVE_MODE:
-        raise ParserCampoFaltante(campo=campo, contexto=contexto)
+        # F8b: snapshot do que já foi extraído nesta NF (cópia rasa — operador vê
+        # no modal os campos já preenchidos e foca só nos faltantes).
+        raise ParserCampoFaltante(
+            campo=campo,
+            contexto=contexto,
+            prefilled=dict(_PENDING_PREFILLED),
+        )
     # FASE DEV (terminal) — comportamento original preservado:
     print(f"\n[REVISÃO HUMANA] Arquivo: {contexto}")
     print(f"  Campo '{campo}' não pôde ser extraído automaticamente.")
@@ -1840,7 +1902,13 @@ if __name__ == "__main__":
 
             # arquivo.stem pega apenas o nome "NF - 4999" sem o ".pdf"
             nome_saida = f'{arquivo.stem}.pdf'
-    
+
+            # FASE PROD — F8b: reset do acumulador de prefilled + tracking do arquivo
+            # em curso para o bloco `except ParserCampoFaltante` saber qual NF deu
+            # pendência (scope local pode ser perdido se a exceção sobe muitos níveis).
+            _reset_pending_prefilled()
+            _PENDING_CURRENT_FILE = nome_saida
+
             df_nota = extract_pdf_words(arquivo)
             # CHECK-----------------------------------------------
             #if arquivo_investigado in nome_saida:
@@ -1977,6 +2045,32 @@ if __name__ == "__main__":
                         df_product_service_desciption['primeiro_terco']
                     )
 
+                    # FASE PROD — F8b: best-effort tracking de cnpj/fornecedor/data/numero/tipo
+                    # ANTES da extração da tabela de produtos. Se ncm ou outro campo de produto
+                    # falhar no new_concatenar (linha ~2057), o prefilled já carrega os metadados
+                    # da NF — operador não precisa redigitar tudo. Falhas aqui são silenciadas
+                    # (cada bloco abaixo na linha 2068+ tem try/except próprio que vai re-extrair
+                    # ou pedir input humano de novo se necessário).
+                    _pending_track("tipo_nota", {"tipo_nota": invoice_type})
+                    try:
+                        _cnpj_early = cnpj_invoice(df_product_service_desciption['primeiro_terco'])
+                        if _cnpj_early is not None:
+                            _pending_track("cnpj", _cnpj_early)
+                            try:
+                                _pending_track("fornecedor", consulta_nome_fornecedor(_cnpj_early['cnpj']))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    try:
+                        _pending_track("data_emissao", date_invoice(df_product_service_desciption['primeiro_terco']))
+                    except Exception:
+                        pass
+                    try:
+                        _pending_track("numero_nf", num_nf(df_product_service_desciption['primeiro_terco']))
+                    except Exception:
+                        pass
+
                     list_product_service_transation = None
                     erro_pipeline = None
 
@@ -2059,24 +2153,28 @@ if __name__ == "__main__":
                 if cnpj_fornecedor is None:
                     cnpj_digitado = _solicitar_campo_humano("cnpj", contexto=nome_saida)
                     cnpj_fornecedor = {'cnpj': cnpj_digitado}
+                _pending_track("cnpj", cnpj_fornecedor)  # FASE PROD — F8b
                 # 3.2.2 - nome do fornecedor
                 try:
                     nome_fornecedor = consulta_nome_fornecedor(cnpj_fornecedor['cnpj'])
                 except Exception:
                     fornecedor_digitado = _solicitar_campo_humano("fornecedor", contexto=nome_saida)
                     nome_fornecedor = {'fornecedor': fornecedor_digitado}
+                _pending_track("fornecedor", nome_fornecedor)  # FASE PROD — F8b
                 # 3.2.3 - data da nf
                 try:
                     data_nota_fiscal = date_invoice(df_product_service_desciption['primeiro_terco'])
                 except (ValueError, IndexError):
                     data_digitada = _solicitar_campo_humano("data_emissao", contexto=nome_saida)
                     data_nota_fiscal = {'data_emissao': data_digitada}
+                _pending_track("data_emissao", data_nota_fiscal)  # FASE PROD — F8b
                 # 3.2.4 - número da nf
                 try:
                     numero_nota_fiscal = num_nf(df_product_service_desciption['primeiro_terco'])
                 except ValueError:
                     numero_digitado = _solicitar_campo_humano("numero_nf", contexto=nome_saida)
                     numero_nota_fiscal = {'numero_nf': numero_digitado}
+                _pending_track("numero_nf", numero_nota_fiscal)  # FASE PROD — F8b
                 # 3.2.5 - produtos
                 tipo_nota_fical = {'tipo_nota': invoice_type}
                 # Check -------------------
@@ -2124,6 +2222,50 @@ if __name__ == "__main__":
         _nome_safe_contrato = CONTRATO['numero_contrato'].replace('/', '-').replace(' ', '_')
         df_anexo1_consolidado.to_excel(f'{SAIDA_RAIZ_LOCAL}/tabela_de_lancamentos_consolidado_{_nome_safe_contrato}.xlsx', index=False)
     except ParserCampoFaltante as _exc_campo:
+        # FASE PROD — F8b: escreve payload estruturado em pending_rows.json no
+        # --output-dir antes do sys.exit(2). O adapter lê esse arquivo e devolve
+        # `prefilled` + `missing` para o server, que cria a row em nf_pending e
+        # emite SSE `file_pending_input` para o frontend abrir o modal.
+        #
+        # `missing` carrega:
+        # 1. O campo canônico que disparou (ex.: 'ncm' em vez de 'ncm (produto 1 de 1)'
+        #    — sem essa normalização, /resolve receberia chave que não bate com
+        #    default_nf_template e create_nf_entry não acharia o valor).
+        # 2. TODOS os campos do default_nf_template não capturados em prefilled.
+        #    Necessário porque o parser pode falhar cedo (ex.: NCM) e nunca ter
+        #    extraído cnpj/data/fornecedor/numero_nf — todos NOT NULL. Sem isso
+        #    o modal só pediria 1 campo e /resolve quebraria por NULL em outros.
+        # Exceção: 'contrato' é populado pelo backend no /resolve (vem da sessão).
+        _known_prefilled = _exc_campo.prefilled or {}
+        _field_canonical = _canonical_field(_exc_campo.campo)
+        _required_keys = [k for k in default_nf_template.keys() if k != "contrato"]
+        _missing_list = []
+        if _field_canonical in _required_keys:
+            _missing_list.append(_field_canonical)
+        else:
+            # Campo exótico (ex.: 'numero_de_produtos_nesta_nf') — passa cru;
+            # frontend mostra com label genérico, /resolve aceita mas o valor
+            # não vai pra NfEntry (não bate com default_nf_template).
+            _missing_list.append(_exc_campo.campo)
+        for _f in _required_keys:
+            if _f not in _known_prefilled and _f not in _missing_list:
+                _missing_list.append(_f)
+
+        _pending_payload = {
+            "original_filename": _PENDING_CURRENT_FILE or _exc_campo.contexto,
+            "contexto": _exc_campo.contexto,
+            "missing": _missing_list,
+            "prefilled": _known_prefilled,
+        }
+        try:
+            _pending_path = Path(SAIDA_RAIZ_LOCAL) / "pending_rows.json"
+            _pending_path.write_text(
+                json.dumps(_pending_payload, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+        except OSError as _io_err:
+            # Falha de IO no temp dir não deve mascarar o erro original — segue exit 2.
+            print(f"[FASE PROD] Falha ao escrever pending_rows.json: {_io_err}", file=sys.stderr)
         print(f"[FASE PROD] ParserCampoFaltante: campo='{_exc_campo.campo}' contexto='{_exc_campo.contexto}'", file=sys.stderr)
         sys.exit(2)
     except ParserEstruturaQuebrada as _exc_estrut:

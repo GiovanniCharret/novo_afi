@@ -4,6 +4,7 @@ import AuthScreen from "./components/AuthScreen";
 import ContratoSelector from "./components/ContratoSelector";
 import ContratosBrowser from "./components/ContratosBrowser";
 import NfsBrowser from "./components/NfsBrowser";
+import PendingInputModal from "./components/PendingInputModal";
 import { describeContrato } from "./lib/describeContrato";
 import { exportEntriesCompletas } from "./lib/exportExcel";
 import { parseBR } from "./lib/parseBR";
@@ -38,12 +39,18 @@ const STATUS_LABELS = {
   na_fila:     "Na fila",
   salvo:       "Salvo",
   processando: "Processando…",
+  // F8b — status transitório enquanto o modal de pendência está aberto.
+  aguardando_preenchimento: "Aguardando preenchimento…",
   // status finais do backend
   processado:  "Processado",
   duplicado:   "Duplicado",
   rejeitado:   "Rejeitado",
   erro_parsing: "Erro de parsing",
   erro_upload:  "Erro de upload",
+  // F8b — desfechos da pendência interativa
+  cancelado:              "Cancelado",
+  cancelado_pelo_lote:    "Cancelado pelo lote",
+  rejeitado_pendencia_expirada: "Tempo esgotado",
 };
 
 // Mapeamento evento SSE → status intermediário no painel
@@ -94,6 +101,12 @@ export default function App() {
   const [contratoBootChecked, setContratoBootChecked] = useState(false);
   // F3b/F3 — aba ativa na área logada: "upload" | "notas" | "contratos".
   const [currentView, setCurrentView] = useState("upload");
+  // F8b — pendência interativa em foco. null = nenhum modal. Quando o SSE
+  // emite `file_pending_input`, popula com { nfPendingId, uploadFileId,
+  // filename, prefilled, missing } e o modal abre. O backend bloqueia o
+  // generator SSE até /resolve ou /cancel ser chamado — não há outros
+  // eventos chegando enquanto o modal está aberto.
+  const [pendingModal, setPendingModal] = useState(null);
 
   // ── Slice helpers (F3-c per-contract state cache) ────────────────
   const EMPTY_SLICE = { entries: { rows: [] }, upload: { results: [], batchId: null, updatedAt: null } };
@@ -385,7 +398,42 @@ export default function App() {
           return;
         }
 
+        // F8b — parser detectou campo faltante. Abre modal e marca a row
+        // como aguardando_preenchimento. Generator SSE no backend está em
+        // `await event.wait()` — não chega mais nada até o operador
+        // resolver ou cancelar via os botões do modal.
+        if (event.event === "file_pending_input") {
+          setUploadProgress((current) => ({
+            ...current,
+            phase: "processing",
+            progressMessage: "Aguardando preenchimento manual…",
+          }));
+          patchUpload(uploadContratoId, (cur) => ({
+            ...cur,
+            results: cur.results.map((r) =>
+              r.filename === event.filename
+                ? { ...r, status: "aguardando_preenchimento" }
+                : r
+            ),
+          }));
+          setPendingModal({
+            nfPendingId: event.nf_pending_id,
+            uploadFileId: event.upload_file_id,
+            filename: event.filename,
+            prefilled: event.prefilled || {},
+            missing: event.missing || [],
+          });
+          return;
+        }
+
         if (event.event === "file_done") {
+          // F8b — se chegou file_done para o arquivo que estava com modal aberto,
+          // o backend já resolveu/cancelou (provavelmente via timeout interno ou
+          // race com /resolve sem ter passado pelo handler do botão Salvar).
+          // Fecha o modal pra não ficar travado.
+          setPendingModal((cur) =>
+            cur && cur.filename === event.filename ? null : cur
+          );
           doneCount++;
           const processingProgress = Math.min(83, 62 + Math.round((doneCount / totalFiles) * 20));
           setUploadProgress((current) => ({
@@ -497,6 +545,13 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {pendingModal && (
+        <PendingInputModal
+          pending={pendingModal}
+          onResolved={() => setPendingModal(null)}
+          onCancelled={() => setPendingModal(null)}
+        />
+      )}
       <header className="topbar">
         <span className="topbar-brand">GFIP - Recebimento de Notas Fiscais</span>
         <nav className="topbar-nav">

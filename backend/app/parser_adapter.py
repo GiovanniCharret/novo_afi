@@ -26,6 +26,13 @@ class ParserOutcome:
     error: str | None = None
     timeline: list[str] | None = None
     debug_dir: str | None = None
+    # F8b — payload da pendência quando status == "pending_input".
+    # Lido de pending_rows.json escrito pelo main.py em modo non-interactive
+    # antes do sys.exit(2). `prefilled` é o que o parser conseguiu extrair
+    # até falhar; `missing` lista os campos que faltam (hoje sempre 1, mas
+    # spec permite N).
+    prefilled: dict | None = None
+    missing: list[str] | None = None
 
 
 class LegacyParserAdapter:
@@ -98,10 +105,29 @@ class LegacyParserAdapter:
                     )
 
             if process.returncode == EXIT_CODE_CAMPO_FALTANTE:
-                # Tipo 1 (F8a): em F8b vira nf_pending + modal. Por enquanto, erro_parsing.
+                # F8b: parser escreveu pending_rows.json em output_dir antes do
+                # exit 2 (Fase B1). Lê o payload e devolve status="pending_input"
+                # para o generator criar nf_pending + abrir modal.
+                pending_payload = self._read_pending_rows(output_dir)
                 timeline.append("Parser encerrou com campo faltante (Tipo 1).")
                 if persisted_debug_dir:
                     timeline.append(f"Saída temporária salva em {persisted_debug_dir}.")
+
+                if pending_payload is not None:
+                    # Caminho F8b: payload válido, devolve pending_input.
+                    return ParserOutcome(
+                        status="pending_input",
+                        rows=[],
+                        reason="campo_faltante",
+                        prefilled=pending_payload.get("prefilled") or {},
+                        missing=pending_payload.get("missing") or [],
+                        timeline=timeline,
+                        debug_dir=persisted_debug_dir,
+                    )
+
+                # Fallback: parser exit 2 mas sem pending_rows.json (parser
+                # antigo, IO falhou ao escrever). Cai em erro_parsing como
+                # antes do F8b — operador não fica sem feedback.
                 return ParserOutcome(
                     status="erro_parsing",
                     rows=[],
@@ -167,6 +193,24 @@ class LegacyParserAdapter:
     def _find_output_spreadsheet(self, output_dir: Path) -> Path | None:
         spreadsheets = sorted(output_dir.glob("*.xlsx"))
         return spreadsheets[0] if spreadsheets else None
+
+    def _read_pending_rows(self, output_dir: Path) -> dict | None:
+        """F8b: lê pending_rows.json escrito pelo main.py antes do exit 2.
+
+        Retorna o payload `{original_filename, contexto, missing, prefilled}`
+        ou None se o arquivo não existe / está corrompido. None disparar o
+        fallback erro_parsing no caller.
+        """
+        pending_path = output_dir / "pending_rows.json"
+        if not pending_path.exists():
+            return None
+        try:
+            payload = json.loads(pending_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload
 
     def _map_status(self, logs: list[dict]) -> str:
         statuses = [entry.get("status") for entry in logs if entry.get("status")]

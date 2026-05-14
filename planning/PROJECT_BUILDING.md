@@ -94,8 +94,8 @@ Em caso de conflito explícito: `PLAN.md` > `CLAUDE.md` > demais. `BEHAVIORAL_GU
 - ~~**F6** (totalizadores): concluída 2026-05-13.~~
 - ~~**F1** (auth real + e-mails de confirmação): concluída 2026-05-14.~~ Pendente apenas smoke real em produção com SMTP Hostinger + SPF/DKIM/DMARC.
 - ~~**F8a** (parser non-interactive): concluída 2026-05-06.~~
-- **F7** (e-mails transacionais — depende da infra SMTP de F1, já existente). Adiciona templates de "upload concluído com sucesso" para o usuário + alerta de `erro_parsing` para `ADMIN_EMAIL`.
-- **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): refina UX de NFs com campo faltante. Hoje cai em `erro_parsing`.
+- **F8b** (tabela `nf_pending` + modal + schema NOT NULL com backfill): Fase A aprovada 2026-05-14 (`planning/F8b-pending-nf.html`). Em curso na **Fase B1** (parser escreve `pending_rows.json`).
+- **F7** (e-mails transacionais — depende da infra SMTP de F1, já existente). **Deferida** pelo dono: "F7 não é crítico" (2026-05-14).
 
 ### F8a — concluída em 2026-05-06
 
@@ -119,11 +119,11 @@ Parser non-interactive entregue. Itens que cobriam:
 
 ### Próxima tarefa concreta proposta
 
-Após F1 entregue (2026-05-14), o caminho crítico restante é **F7 → F8b**.
+Em curso: **F8b — Fase B1** (parser escreve `pending_rows.json`).
 
-**F7** (e-mails transacionais) é a próxima — reusa a infra SMTP que F1 já estabeleceu (`email_service.py` com fallback stub). Adiciona dois templates: (a) confirmação de upload bem-sucedido para o usuário (após `batch_done` do SSE); (b) alerta de erro de parser para `ADMIN_EMAIL` quando `status = erro_parsing`. Envio em background para não bloquear o stream. Decisão #1 e #8 já resolvidas.
+Spec aprovada em 2026-05-14, registrada em `planning/F8b-pending-nf.html`. F7 deferida (não crítica). F8b é a última feature do roadmap original — entrega o modal interativo de preenchimento manual para NFs com campo obrigatório faltando, substituindo o atual `erro_parsing` que descarta dados parcialmente extraídos.
 
-Antes de F7, vale completar a **Fase D do F1** com o smoke real no Hostinger (registrar conta com e-mail institucional, validar DNS, confirmar via link real, login). Depende de credenciais SMTP reais da Hostinger.
+A Fase D do F1 (smoke real no Hostinger com SMTP + SPF/DKIM/DMARC) continua como TODO de ops, ortogonal à F8b — pode ser executada em paralelo.
 
 
 

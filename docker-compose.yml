@@ -18,11 +18,11 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-recebedor-nfs-dev-secret}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       # F1 — SMTP (vazio em dev → cai no stub do email_service).
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_HOST: smtp.hostinger.com
+      SMTP_PORT: 587
+      SMTP_USER: atendimento@gerenciadornfs.com
+      SMTP_PASSWORD: Enbpar1234!
+      SMTP_FROM: atendimento@gerenciadornfs.com
       POPLLER_PATH: /usr/bin
       TESSERACT_CMD: ""
     volumes:

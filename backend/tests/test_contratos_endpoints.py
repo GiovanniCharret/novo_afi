@@ -228,8 +228,13 @@ def test_list_contratos_includes_nfs_count(client) -> None:
                 cnpj="00000000000001",
                 data_emissao=date(2024, 6, 15),
                 tipo_nota="service",
+                fornecedor="Fornecedor Default",  # F8b NOT NULL
                 descricao=f"desc {numero_nf}",
+                ncm="00.00",
+                quantidade=Decimal("1"),
+                preco_unitario=Decimal("100"),
                 valor_total=Decimal("100"),
+                contrato="ECFS TEST/2026",  # F8b NOT NULL
                 contrato_id=cid,
                 raw_payload={},
             ))

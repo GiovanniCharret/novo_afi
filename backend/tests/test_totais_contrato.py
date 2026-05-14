@@ -53,6 +53,7 @@ def _seed_nf(
     contrato_id: str | None,
     cnpj: str = "00000000000001",
 ) -> None:
+    # F8b: 5 colunas (ncm/quantidade/preco_unitario/fornecedor/contrato) NOT NULL.
     bk = f"{numero_nf}|{cnpj}|{date(2024, 1, 1)}|{valor_total}|{numero_nf}"
     with get_session() as db:
         db.add(NfEntry(
@@ -61,8 +62,13 @@ def _seed_nf(
             cnpj=cnpj,
             data_emissao=date(2024, 1, 1),
             tipo_nota="service",
+            fornecedor="Fornecedor Default",
             descricao=f"desc {numero_nf}",
+            ncm="00.00",
+            quantidade=Decimal("1"),
+            preco_unitario=valor_total,
             valor_total=valor_total,
+            contrato="ECFS TEST/2026",
             contrato_id=contrato_id,
             raw_payload={},
         ))

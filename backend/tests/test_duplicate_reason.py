@@ -73,7 +73,10 @@ def _make_row(**overrides) -> dict:
 
 def _preinsert_nf(row: dict, *, contrato_id: str | None) -> None:
     """Pré-insere uma NfEntry no banco com business_key derivado de `row`.
-    Garante colisão quando a FakeAdapter retornar a mesma row em upload."""
+    Garante colisão quando a FakeAdapter retornar a mesma row em upload.
+
+    F8b: 5 colunas viraram NOT NULL — defaults sintéticos para campos que o
+    teste não usa explicitamente."""
     with get_session() as db:
         nf = NfEntry(
             business_key=build_business_key(row),
@@ -81,10 +84,13 @@ def _preinsert_nf(row: dict, *, contrato_id: str | None) -> None:
             cnpj=normalize_cnpj(row["cnpj"]),
             data_emissao=parse_brazilian_date(row["data_emissao"]),
             tipo_nota=normalize_text(row["tipo_nota"]),
-            fornecedor=row.get("fornecedor"),
+            fornecedor=row.get("fornecedor") or "Fornecedor Default",
             descricao=normalize_text(row["descricao"]),
+            ncm=row.get("ncm") or "00.00",
+            quantidade=parse_brazilian_decimal(row.get("quant")) or Decimal("1"),
+            preco_unitario=parse_brazilian_decimal(row.get("preco_unitario")) or Decimal("0"),
             valor_total=parse_brazilian_decimal(row.get("valor")) or Decimal("0"),
-            contrato=row.get("contrato"),
+            contrato=row.get("contrato") or "ECFS TEST/2026",
             contrato_id=contrato_id,
             raw_payload=row,
         )

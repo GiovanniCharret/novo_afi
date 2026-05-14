@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementation plan — F8b Pendência interativa de preenchimento de NF</title>
+<style>
+  :root {
+    --ivory:    #FAF9F5;
+    --slate:    #141413;
+    --clay:     #D97757;
+    --oat:      #E3DACC;
+    --olive:    #788C5D;
+    --gray-150: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --white:    #FFFFFF;
+    --serif: ui-serif, Georgia, 'Times New Roman', serif;
+    --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--sans); background: var(--ivory);
+    color: var(--gray-700); line-height: 1.55;
+    padding: 56px 32px 120px; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  header.page-head { margin-bottom: 48px; max-width: 820px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.15; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+  .prompt-box { background: var(--gray-150); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 16px 20px; font-size: 14.5px; color: var(--gray-700); }
+  .prompt-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate); padding: 3px 9px; border-radius: 8px; }
+  .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate); letter-spacing: -0.01em; }
+  .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 720px; margin-bottom: 28px; }
+
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 64px; }
+  @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  .summary .cell { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 18px 20px; }
+  .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+  .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+  .summary .v.accent { color: var(--clay); }
+
+  .decisions { display: flex; flex-direction: column; gap: 14px; }
+  .decision { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 18px 22px; }
+  .decision .head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+  .decision .tag { font-family: var(--mono); font-size: 11px; background: var(--olive); color: var(--white); padding: 2px 8px; border-radius: 6px; letter-spacing: 0.04em; }
+  .decision .title { font-size: 15px; font-weight: 600; color: var(--slate); }
+  .decision p { font-size: 14px; color: var(--gray-500); }
+
+  .milestones { display: flex; flex-direction: column; gap: 0; margin-top: 24px; }
+  .milestone { display: grid; grid-template-columns: 120px 28px 1fr; gap: 0 18px; position: relative; }
+  .milestone .when { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--gray-500); padding-top: 4px; }
+  .milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+  .milestone .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--white); border: 3px solid var(--clay); margin-top: 4px; flex-shrink: 0; }
+  .milestone .line { width: 2px; flex: 1; background: var(--gray-300); margin: 4px 0; }
+  .milestone:last-child .line { display: none; }
+  .milestone .body { padding-bottom: 36px; }
+  .milestone .body h3 { font-family: var(--serif); font-weight: 500; font-size: 19px; color: var(--slate); margin-bottom: 4px; }
+  .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 620px; }
+  .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .milestone .tag { font-family: var(--mono); font-size: 11.5px; background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 6px; padding: 3px 8px; color: var(--gray-700); }
+
+  .diagram { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 28px; overflow-x: auto; }
+  .diagram svg { display: block; min-width: 760px; }
+  .diagram text { font-family: var(--mono); }
+  .caption { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+
+  .mock { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; overflow: hidden; }
+  .mock .mock-label { padding: 12px 18px; border-bottom: 1.5px solid var(--gray-300); font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); background: var(--gray-150); }
+  .mock .mock-body { padding: 22px; }
+
+  /* Modal mockup */
+  .modal-mock { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+  .modal-mock .pdf-pane { background: #f8f9fb; border-right: 1px solid #e2e8f0; padding: 18px; min-height: 360px; position: relative; }
+  .modal-mock .pdf-pane::before { content: "PDF inline (iframe)"; font-family: var(--mono); font-size: 11px; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.06em; }
+  .modal-mock .pdf-frame { margin-top: 12px; background: var(--white); border: 1px solid var(--gray-300); border-radius: 4px; height: 320px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+  .modal-mock .form-pane { padding: 22px; }
+  .modal-mock .form-pane h4 { font-family: var(--serif); font-size: 17px; color: var(--slate); margin-bottom: 4px; font-weight: 500; }
+  .modal-mock .form-pane .subtitle { font-size: 12.5px; color: var(--gray-500); margin-bottom: 18px; }
+  .modal-mock .prefilled-grp { background: var(--gray-150); border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+  .modal-mock .prefilled-grp .lbl { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 4px; }
+  .modal-mock .prefilled-grp .row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .modal-mock .prefilled-grp .row .k { color: var(--gray-500); }
+  .modal-mock .prefilled-grp .row .v { color: var(--slate); font-family: var(--mono); }
+  .modal-mock .field { margin-bottom: 12px; }
+  .modal-mock .field label { display: block; font-size: 12px; font-weight: 600; color: var(--slate); margin-bottom: 4px; }
+  .modal-mock .field input { width: 100%; border: 1px solid var(--gray-300); border-radius: 4px; padding: 8px 10px; font-size: 13.5px; font-family: var(--mono); background: var(--white); }
+  .modal-mock .field input.required { border-color: var(--clay); }
+  .modal-mock .actions { display: flex; gap: 10px; margin-top: 12px; }
+  .modal-mock .btn { padding: 9px 14px; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid transparent; }
+  .modal-mock .btn-primary { background: var(--slate); color: var(--white); flex: 1; }
+  .modal-mock .btn-ghost { background: transparent; color: var(--gray-500); border-color: var(--gray-300); }
+
+  /* Status badges mockup */
+  .badges-mock { display: flex; flex-wrap: wrap; gap: 10px; }
+  .badge { font-family: var(--mono); font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid; }
+  .badge.aguardando { background: #fff7e0; border-color: #d4a017; color: #7a5c00; }
+  .badge.cancelado { background: #ececec; border-color: var(--gray-300); color: var(--gray-500); }
+  .badge.cancelado-lote { background: #ececec; border-color: var(--gray-300); color: var(--gray-500); }
+  .badge.expirada { background: #fcecec; border-color: #c44e4e; color: #8a2c2c; }
+  .badge.processado { background: #e5f3e7; border-color: var(--olive); color: #41562a; }
+
+  /* Code snippets */
+  pre { background: var(--slate); color: #e8e6dd; border-radius: 8px; padding: 16px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; overflow-x: auto; }
+  pre .com { color: #8b9484; }
+  pre .key { color: #d6a456; }
+  pre .str { color: #b39bb1; }
+
+  .snippet { margin-bottom: 18px; }
+  .snippet .lbl { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+
+  .risks { display: flex; flex-direction: column; gap: 14px; }
+  .risk { background: var(--white); border: 1.5px solid var(--gray-300); border-radius: 12px; padding: 16px 20px; }
+  .risk .head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+  .risk .sev { font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.04em; }
+  .risk .sev.med { background: #fff3da; color: #7a5c00; }
+  .risk .sev.high { background: #fcecec; color: #8a2c2c; }
+  .risk .sev.low { background: var(--gray-150); color: var(--gray-700); }
+  .risk .title { font-size: 14.5px; font-weight: 600; color: var(--slate); }
+  .risk p { font-size: 13.5px; color: var(--gray-500); margin-top: 4px; }
+  .risk p strong { color: var(--gray-700); }
+
+  .dod { list-style: none; padding: 0; }
+  .dod li { padding: 10px 0; border-bottom: 1px solid var(--gray-300); font-size: 14px; color: var(--gray-700); display: flex; align-items: flex-start; gap: 12px; }
+  .dod li:last-child { border-bottom: none; }
+  .dod li::before { content: "□"; font-family: var(--mono); color: var(--gray-500); font-size: 16px; line-height: 1; padding-top: 1px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="page-head">
+  <div class="eyebrow">Feature F8b · Spec da Fase A · 2026-05-14</div>
+  <h1>Pendência interativa de preenchimento de NF</h1>
+  <div class="prompt-box">
+    <span class="label">Objetivo</span>
+    Substituir o comportamento atual (<code>ParserCampoFaltante</code> → <code>erro_parsing</code>) por um fluxo
+    onde o operador vê o PDF inline e preenche, no momento, os campos que o parser não conseguiu extrair.
+    Sem preenchimento em 30min, a NF é descartada e a fila restante do batch é cancelada.
+  </div>
+</header>
+
+<div class="summary">
+  <div class="cell"><div class="k">Schema</div><div class="v">nf_pending + status novos</div></div>
+  <div class="cell"><div class="k">Backend</div><div class="v">asyncio.Event + /resolve + /cancel</div></div>
+  <div class="cell"><div class="k">Parser</div><div class="v">pending_rows.json no temp dir</div></div>
+  <div class="cell"><div class="k">Frontend</div><div class="v accent">PendingInputModal.jsx</div></div>
+</div>
+
+<section>
+  <div class="sec-head"><span class="num">00</span><h2>Decisões resolvidas</h2></div>
+  <p class="sec-intro">Fechadas em 2026-05-14 antes da Fase B. As três últimas são herdadas da Decisão #8 do PLAN.md (escopo de F8 desde sempre).</p>
+  <div class="decisions">
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-a</span><span class="title">Mecânica: bloqueia o batch via asyncio.Event</span></div>
+      <p>Modal abre <strong>durante</strong> o upload. O generator SSE faz <code>await event.wait(timeout=1800)</code> num registry <code>dict[nf_pending_id, asyncio.Event]</code>. <code>POST /resolve</code> ou <code>POST /cancel</code> setam o event. Sem isso, timeout 30min trata como cancel.</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-b</span><span class="title">Múltiplos pendings: sequencial bloqueante</span></div>
+      <p>Cada pending = pausa do batch. Resolveu o pending atual → próximo PDF processa. Se virar pending também → modal reabre. Operador atravessa intercalando modais. UX previsível.</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-c</span><span class="title">Timeout 30 minutos</span></div>
+      <p>Por <strong>pending</strong>, não por batch. <code>nf_pending.expires_at = created_at + 30min</code>. Se expirar antes do resolve, mesmo efeito do cancel: NF descartada, fila restante cancelada.</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-d</span><span class="title">Escopo do cancel: PDF problemático + fila restante</span></div>
+      <p>Cancel mata o PDF problemático (<code>upload_files.status = 'cancelado'</code>) e marca todos os arquivos ainda na fila como <code>cancelado_pelo_lote</code>. Arquivos já processados antes do pending permanecem em <code>nf_entries</code>. Sem rollback total.</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-e</span><span class="title">Layout do modal: PDF iframe + form ao lado</span></div>
+      <p>Split 2 colunas. Esquerda: <code>&lt;iframe src="/api/uploads/files/{id}/pdf"&gt;</code> reusa o endpoint F4 com sessão autenticada. Direita: prefilled (read-only) + missing fields (inputs required) + timer countdown + botões Salvar/Cancelar.</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-f</span><span class="title">Backfill NOT NULL: DELETE direto</span></div>
+      <p>Migration <code>DELETE FROM nf_entries WHERE col_obrigatoria IS NULL OR col_obrigatoria = ''</code> em cada uma das 11 colunas, antes do <code>SET NOT NULL</code>. Sem soft delete. Contagem registrada no log da migration para auditoria.</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-g</span><span class="title">Granularidade: NF inteira (herda Decisão #8)</span></div>
+      <p>Se <strong>qualquer</strong> produto da NF tem campo faltando, a NF inteira vai pra pending. Outros produtos da mesma NF não entram parcialmente em <code>nf_entries</code>. Mantém invariante "linha em nf_entries = NF completa".</p>
+    </div>
+
+    <div class="decision">
+      <div class="head"><span class="tag">F8b-h</span><span class="title">11 colunas viram NOT NULL (herda Decisão #8)</span></div>
+      <p><code>descricao, ncm, quant, preco_unitario, numero_nf, tipo_nota, data_emissao, cnpj, fornecedor, valor, contrato</code>. Linha com qualquer um delas vazio é falha grave do parser e não pode entrar no banco — vira pending ou erro.</p>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">01</span><h2>Milestones</h2></div>
+  <p class="sec-intro">Diff alvo de ~400 linhas por fase. Cada milestone tem checkpoint do dono antes do próximo. B1+B2+B3 são Fase B; C1+C2 são Fase C; D é Fase D.</p>
+
+  <div class="milestones">
+    <div class="milestone">
+      <div class="when">B1</div>
+      <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+      <div class="body">
+        <h3>Parser: escrever <code>pending_rows.json</code></h3>
+        <p>Em modo <code>--non-interactive</code>, antes de <code>sys.exit(2)</code>, <code>_solicitar_campo_humano</code> agrega <code>prefilled</code> + <code>missing_fields</code> e escreve <code>pending_rows.json</code> no <code>--output-dir</code>. Regra de refactor: versão DEV preservada comentada acima da PROD; entrada nova em <code>docs/MAIN_PROD_CHANGES.md</code>.</p>
+        <div class="tags"><span class="tag">main.py</span><span class="tag">test_parser_pending.py</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="when">B2</div>
+      <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+      <div class="body">
+        <h3>Migration 0005: schema + DELETE de NULLs</h3>
+        <p>Cria <code>nf_pending</code> (id, upload_file_id, upload_batch_id, contrato_id, prefilled_json, missing_fields_json, status, expires_at, created_at, resolved_at) + índices. DELETE de rows em <code>nf_entries</code> com NULL/<code>''</code> nas 11 colunas. <code>ALTER COLUMN ... SET NOT NULL</code> nas 11. Backfill <code>upload_batches.status</code> default <code>'concluido'</code> para batches antigos.</p>
+        <div class="tags"><span class="tag">alembic/versions/0005_f8b.py</span><span class="tag">models.py</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="when">B3</div>
+      <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+      <div class="body">
+        <h3>Endpoints + asyncio.Event registry</h3>
+        <p><code>POST /api/uploads/pending/{id}/resolve</code> + <code>POST /api/uploads/pending/{id}/cancel</code>. <code>parser_adapter</code> ganha <code>ParserOutcome(status="pending_input", prefilled, missing)</code>. Generator SSE: cria <code>nf_pending</code>, emite <code>file_pending_input</code>, <code>await event.wait()</code>, lê desfecho do DB, segue/cancela. Registry global em <code>backend/app/pending_registry.py</code>.</p>
+        <div class="tags"><span class="tag">server.py</span><span class="tag">parser_adapter.py</span><span class="tag">test_pending_*.py</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="when">C1</div>
+      <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+      <div class="body">
+        <h3>PendingInputModal.jsx + integração SSE</h3>
+        <p>Componente novo em <code>frontend/src/components/PendingInputModal.jsx</code>: split com iframe à esquerda e form à direita. App.jsx consumer do SSE trata <code>file_pending_input</code> → abre modal, congela progress UI. POST /resolve fecha modal e SSE retoma. POST /cancel fecha modal e bate em batch_done com fila restante cancelada.</p>
+        <div class="tags"><span class="tag">PendingInputModal.jsx</span><span class="tag">App.jsx</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="when">C2</div>
+      <div class="dot-col"><div class="dot"></div><div class="line"></div></div>
+      <div class="body">
+        <h3>Status badges no painel "Status por arquivo"</h3>
+        <p>Novos badges: <span class="badge aguardando">aguardando_preenchimento</span> <span class="badge cancelado">cancelado</span> <span class="badge cancelado-lote">cancelado_pelo_lote</span> <span class="badge expirada">rejeitado_pendencia_expirada</span>. Mensagens claras em <code>status_reason</code>.</p>
+        <div class="tags"><span class="tag">App.jsx</span><span class="tag">styles.css</span></div>
+      </div>
+    </div>
+
+    <div class="milestone">
+      <div class="when">D</div>
+      <div class="dot-col"><div class="dot"></div></div>
+      <div class="body">
+        <h3>DoD + smoke real</h3>
+        <p>Suite passa (incluindo 6 novos testes). Smoke positivo: PDF com campo faltando → modal → preenche → batch_done com NF inserida. Smoke negativo: cancel → fila restante marcada. Smoke timeout (manual ou via env override): 30min sem ação → expira. Docs atualizados.</p>
+        <div class="tags"><span class="tag">CLAUDE.md</span><span class="tag">MAIN_PROD_CHANGES.md</span><span class="tag">DEFINITION_OF_DONE.md</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">02</span><h2>Fluxo de dados</h2></div>
+  <p class="sec-intro">Sequência de um batch com 3 PDFs, sendo o segundo um pending.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1080 460" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#3D3D3A"/>
+        </marker>
+      </defs>
+
+      <!-- swim lanes -->
+      <text x="20" y="30" font-size="11" fill="#87867F">FRONTEND</text>
+      <text x="20" y="150" font-size="11" fill="#87867F">SERVER (SSE generator)</text>
+      <text x="20" y="290" font-size="11" fill="#87867F">PARSER (subprocess)</text>
+      <text x="20" y="410" font-size="11" fill="#87867F">DB</text>
+
+      <line x1="120" y1="20" x2="1060" y2="20" stroke="#D1CFC5" stroke-dasharray="2,4"/>
+      <line x1="120" y1="140" x2="1060" y2="140" stroke="#D1CFC5" stroke-dasharray="2,4"/>
+      <line x1="120" y1="280" x2="1060" y2="280" stroke="#D1CFC5" stroke-dasharray="2,4"/>
+      <line x1="120" y1="400" x2="1060" y2="400" stroke="#D1CFC5" stroke-dasharray="2,4"/>
+
+      <!-- columns: PDF1, PDF2 (pending), modal, PDF3 -->
+      <text x="180" y="80" font-size="11" fill="#3D3D3A">POST /api/uploads</text>
+      <text x="180" y="95" font-size="10" fill="#87867F">3 PDFs</text>
+
+      <rect x="170" y="175" width="120" height="40" fill="#E3DACC" stroke="#D1CFC5"/>
+      <text x="230" y="200" text-anchor="middle" font-size="11" fill="#141413">PDF #1: OK</text>
+
+      <rect x="170" y="305" width="120" height="40" fill="#FAF9F5" stroke="#D1CFC5"/>
+      <text x="230" y="330" text-anchor="middle" font-size="11" fill="#141413">parse_pdf_bytes</text>
+
+      <rect x="170" y="420" width="120" height="20" fill="#788C5D" stroke="#788C5D"/>
+      <text x="230" y="434" text-anchor="middle" font-size="10" fill="#FAF9F5">INSERT nf_entries</text>
+
+      <!-- PDF2 - pending -->
+      <rect x="340" y="305" width="120" height="40" fill="#FAF9F5" stroke="#D97757"/>
+      <text x="400" y="325" text-anchor="middle" font-size="11" fill="#141413">PDF #2</text>
+      <text x="400" y="338" text-anchor="middle" font-size="10" fill="#D97757">exit code 2</text>
+
+      <text x="400" y="270" text-anchor="middle" font-size="10" fill="#87867F">pending_rows.json</text>
+      <line x1="400" y1="305" x2="400" y2="280" stroke="#D97757" marker-end="url(#arr)"/>
+
+      <rect x="340" y="175" width="120" height="40" fill="#fff3da" stroke="#D97757"/>
+      <text x="400" y="195" text-anchor="middle" font-size="11" fill="#141413">SSE: file_pending_input</text>
+      <text x="400" y="208" text-anchor="middle" font-size="10" fill="#87867F">await event.wait()</text>
+
+      <rect x="340" y="420" width="120" height="20" fill="#FAF9F5" stroke="#D97757"/>
+      <text x="400" y="434" text-anchor="middle" font-size="10" fill="#141413">INSERT nf_pending</text>
+
+      <!-- Modal -->
+      <rect x="500" y="55" width="180" height="50" fill="#fff3da" stroke="#D97757" rx="6"/>
+      <text x="590" y="75" text-anchor="middle" font-size="11" fill="#141413">PendingInputModal</text>
+      <text x="590" y="90" text-anchor="middle" font-size="10" fill="#87867F">PDF iframe + form</text>
+
+      <line x1="400" y1="175" x2="590" y2="105" stroke="#3D3D3A" stroke-width="1" marker-end="url(#arr)"/>
+
+      <text x="590" y="135" text-anchor="middle" font-size="10" fill="#3D3D3A">POST /resolve</text>
+      <line x1="590" y1="135" x2="400" y2="175" stroke="#3D3D3A" stroke-width="1" marker-end="url(#arr)"/>
+
+      <rect x="500" y="175" width="180" height="40" fill="#788C5D" stroke="#788C5D"/>
+      <text x="590" y="200" text-anchor="middle" font-size="11" fill="#FAF9F5">event.set() + INSERT</text>
+
+      <rect x="500" y="420" width="180" height="20" fill="#788C5D" stroke="#788C5D"/>
+      <text x="590" y="434" text-anchor="middle" font-size="10" fill="#FAF9F5">UPDATE nf_pending=resolvido</text>
+
+      <!-- PDF3 -->
+      <rect x="730" y="305" width="120" height="40" fill="#FAF9F5" stroke="#D1CFC5"/>
+      <text x="790" y="325" text-anchor="middle" font-size="11" fill="#141413">PDF #3</text>
+      <text x="790" y="338" text-anchor="middle" font-size="10" fill="#87867F">parse_pdf_bytes</text>
+
+      <rect x="730" y="175" width="120" height="40" fill="#E3DACC" stroke="#D1CFC5"/>
+      <text x="790" y="200" text-anchor="middle" font-size="11" fill="#141413">PDF #3: OK</text>
+
+      <rect x="730" y="420" width="120" height="20" fill="#788C5D" stroke="#788C5D"/>
+      <text x="790" y="434" text-anchor="middle" font-size="10" fill="#FAF9F5">INSERT nf_entries</text>
+
+      <!-- batch_done -->
+      <rect x="890" y="175" width="150" height="40" fill="#141413" stroke="#141413"/>
+      <text x="965" y="195" text-anchor="middle" font-size="11" fill="#FAF9F5">SSE: batch_done</text>
+      <text x="965" y="208" text-anchor="middle" font-size="10" fill="#E3DACC">3/3 OK</text>
+    </svg>
+  </div>
+  <p class="caption">Caminho cancel: cancel → event.set(cancelled=True) → generator marca arquivos ainda na fila como <code>cancelado_pelo_lote</code> → emite <code>batch_done</code> com sumário.</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">03</span><h2>Modal mockup</h2></div>
+  <p class="sec-intro">Layout final aprovado: PDF inline à esquerda (iframe da rota F4), form à direita.</p>
+
+  <div class="mock">
+    <div class="mock-label">PendingInputModal · arquivo NF-12345.pdf</div>
+    <div class="mock-body">
+      <div class="modal-mock">
+        <div class="pdf-pane">
+          <div class="pdf-frame">
+            &lt;iframe src="/api/uploads/files/&lbrace;id&rbrace;/pdf"&gt;
+          </div>
+        </div>
+        <div class="form-pane">
+          <h4>Preencher campos faltantes</h4>
+          <p class="subtitle">O parser identificou esta NF mas não conseguiu extrair 2 campos obrigatórios.</p>
+
+          <div class="prefilled-grp">
+            <div class="lbl">Já extraído pelo parser</div>
+            <div class="row"><span class="k">Número NF</span><span class="v">000.123.456</span></div>
+            <div class="row"><span class="k">Data emissão</span><span class="v">2026-04-12</span></div>
+            <div class="row"><span class="k">Descrição</span><span class="v">Instalação BT…</span></div>
+            <div class="row"><span class="k">Valor</span><span class="v">R$ 12.450,00</span></div>
+          </div>
+
+          <div class="field">
+            <label>CNPJ <span style="color:var(--clay)">*</span></label>
+            <input type="text" class="required" placeholder="XX.XXX.XXX/0001-XX">
+          </div>
+          <div class="field">
+            <label>Fornecedor <span style="color:var(--clay)">*</span></label>
+            <input type="text" class="required" placeholder="Razão social">
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-primary">Salvar e continuar</button>
+            <button class="btn btn-ghost">Cancelar batch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">04</span><h2>Código-chave</h2></div>
+
+  <div class="snippet">
+    <div class="lbl">backend/app/pending_registry.py — novo módulo</div>
+<pre><span class="com"># Registry global de events por nf_pending_id. Vida útil: do file_pending_input
+# até resolve/cancel/timeout. Não persiste — se servidor reinicia, pendings ficam
+# órfãos e job de startup marca como expirados.</span>
+<span class="key">import</span> asyncio
+<span class="key">from</span> dataclasses <span class="key">import</span> dataclass
+
+<span class="key">@dataclass</span>
+<span class="key">class</span> PendingDesfecho:
+    resolved: bool = False
+    cancelled: bool = False
+
+_events: dict[str, asyncio.Event] = {}
+_desfechos: dict[str, PendingDesfecho] = {}
+
+<span class="key">def</span> register(nf_pending_id: str) -> asyncio.Event:
+    event = asyncio.Event()
+    _events[nf_pending_id] = event
+    _desfechos[nf_pending_id] = PendingDesfecho()
+    <span class="key">return</span> event
+
+<span class="key">def</span> signal_resolve(nf_pending_id: str) -> None:
+    _desfechos[nf_pending_id].resolved = True
+    _events[nf_pending_id].set()
+
+<span class="key">def</span> signal_cancel(nf_pending_id: str) -> None:
+    _desfechos[nf_pending_id].cancelled = True
+    _events[nf_pending_id].set()
+
+<span class="key">def</span> consume_desfecho(nf_pending_id: str) -> PendingDesfecho:
+    <span class="key">return</span> _desfechos.pop(nf_pending_id, PendingDesfecho())
+</pre>
+  </div>
+
+  <div class="snippet">
+    <div class="lbl">backend/app/server.py — dentro do generator SSE</div>
+<pre><span class="key">if</span> outcome.status == <span class="str">"pending_input"</span>:
+    pending = NfPending(
+        upload_file_id=record.id,
+        upload_batch_id=batch.id,
+        contrato_id=contrato_id,
+        prefilled_json=json.dumps(outcome.prefilled),
+        missing_fields_json=json.dumps(outcome.missing),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+    )
+    db.add(pending); db.flush()
+    record.status = <span class="str">"aguardando_preenchimento"</span>
+
+    event = pending_registry.register(pending.id)
+    <span class="key">yield</span> _sse({<span class="str">"event"</span>: <span class="str">"file_pending_input"</span>, <span class="str">"nf_pending_id"</span>: pending.id, ...})
+
+    <span class="key">try</span>:
+        <span class="key">await</span> asyncio.wait_for(event.wait(), timeout=1800)
+    <span class="key">except</span> asyncio.TimeoutError:
+        pending_registry.signal_cancel(pending.id)  <span class="com"># trata como cancel</span>
+
+    desfecho = pending_registry.consume_desfecho(pending.id)
+    <span class="key">if</span> desfecho.cancelled:
+        record.status = <span class="str">"cancelado"</span>
+        <span class="com"># marca arquivos ainda na fila como cancelado_pelo_lote</span>
+        <span class="key">for</span> remaining <span class="key">in</span> remaining_files:
+            mark_cancelado_pelo_lote(db, batch.id, remaining)
+        <span class="key">break</span>  <span class="com"># sai do loop, vai pro batch_done</span>
+    <span class="com"># desfecho.resolved == True → /resolve já inseriu em nf_entries; segue para o próximo</span>
+</pre>
+  </div>
+
+  <div class="snippet">
+    <div class="lbl">backend/alembic/versions/0005_f8b_nf_pending.py — trecho do upgrade</div>
+<pre><span class="key">def</span> upgrade() -> <span class="key">None</span>:
+    op.create_table(<span class="str">"nf_pending"</span>, ...)
+    op.create_index(<span class="str">"idx_nf_pending_status"</span>, <span class="str">"nf_pending"</span>, [<span class="str">"status"</span>])
+
+    <span class="com"># DELETE rows pré-F8 com NULL/'' em colunas obrigatórias.</span>
+    cols = [<span class="str">"descricao"</span>, <span class="str">"ncm"</span>, <span class="str">"quant"</span>, <span class="str">"preco_unitario"</span>,
+            <span class="str">"numero_nf"</span>, <span class="str">"tipo_nota"</span>, <span class="str">"data_emissao"</span>, <span class="str">"cnpj"</span>,
+            <span class="str">"fornecedor"</span>, <span class="str">"valor"</span>, <span class="str">"contrato"</span>]
+    where_clause = <span class="str">" OR "</span>.join(<span class="key">f</span><span class="str">"{c} IS NULL OR {c} = ''"</span> <span class="key">for</span> c <span class="key">in</span> cols)
+    result = op.get_bind().execute(sa.text(<span class="key">f</span><span class="str">"DELETE FROM nf_entries WHERE {where_clause}"</span>))
+    print(<span class="key">f</span><span class="str">"[migration 0005] Deletadas {result.rowcount} rows pré-F8 com NULL."</span>)
+
+    <span class="key">for</span> col <span class="key">in</span> cols:
+        op.alter_column(<span class="str">"nf_entries"</span>, col, nullable=<span class="key">False</span>)
+</pre>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">05</span><h2>Riscos &amp; mitigações</h2></div>
+  <div class="risks">
+
+    <div class="risk">
+      <div class="head"><span class="sev high">ALTO</span><span class="title">SSE cai com modal aberto → Event órfão no registry</span></div>
+      <p><strong>Cenário:</strong> usuário fecha aba, perde rede. Event no registry nunca é setado, generator nunca termina o request (mas o cliente já foi embora).<br><strong>Mitigação:</strong> <code>asyncio.wait_for</code> com timeout 30min garante que o generator sempre termina. Job de startup do FastAPI varre <code>nf_pending</code> com <code>status='aguardando' AND expires_at &lt; now()</code> e marca como expirados (recovery de orfãos cross-reboot).</p>
+    </div>
+
+    <div class="risk">
+      <div class="head"><span class="sev med">MÉDIO</span><span class="title">DELETE pré-F8 apaga histórico legítimo</span></div>
+      <p><strong>Cenário:</strong> rows antigas com NULL eram dados úteis para o operador, e a migration as descarta sem possibilidade de recuperar.<br><strong>Mitigação:</strong> migration imprime contagem deletada e SELECT pré-DELETE para o log do Alembic. Antes de rodar em produção, snapshot manual do banco. Se a contagem for surpreendente, dono pode rollback antes do <code>SET NOT NULL</code>.</p>
+    </div>
+
+    <div class="risk">
+      <div class="head"><span class="sev med">MÉDIO</span><span class="title">Race entre /resolve e timeout</span></div>
+      <p><strong>Cenário:</strong> usuário clica Salvar exatamente quando o timeout dispara — dois sinais para o mesmo Event, dois UPDATEs no <code>nf_pending</code>.<br><strong>Mitigação:</strong> endpoint <code>/resolve</code> valida <code>status='aguardando'</code> antes de processar (linha única, idempotente). Se já é <code>'expirado'</code>, retorna 409 e frontend mostra "Tempo esgotado, NF descartada".</p>
+    </div>
+
+    <div class="risk">
+      <div class="head"><span class="sev low">BAIXO</span><span class="title">PDF iframe não renderiza no navegador (caching, CORS)</span></div>
+      <p><strong>Cenário:</strong> alguns navegadores bloqueiam PDF inline em iframe. <code>/api/uploads/files/{id}/pdf</code> da F4 já manda <code>Content-Disposition: inline</code>, mas usuário pode ter PDF viewer desabilitado.<br><strong>Mitigação:</strong> fallback button "Abrir PDF em nova aba" ao lado do iframe — se o iframe renderiza vazio, usuário ainda consegue ver o documento.</p>
+    </div>
+
+    <div class="risk">
+      <div class="head"><span class="sev low">BAIXO</span><span class="title">Múltiplas abas do mesmo usuário tentando resolver o mesmo pending</span></div>
+      <p><strong>Cenário:</strong> operador abre 2 abas com o batch, modal aparece em ambas.<br><strong>Mitigação:</strong> idempotência do endpoint (mesma checagem <code>status='aguardando'</code>). Segunda aba recebe 409 e modal fecha com "Já resolvido em outra sessão".</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">06</span><h2>Perguntas abertas</h2></div>
+  <p class="sec-intro">Nenhuma. Todas as decisões foram fechadas em 2026-05-14 — F8b-a até F8b-h.</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">07</span><h2>Definition of Done</h2></div>
+  <ul class="dod">
+    <li>Migration 0005 aplica limpo em SQLite (testes) e Postgres (dev/prod) — contagem de rows deletadas registrada no log.</li>
+    <li>Suíte <code>pytest</code> passa, incluindo 6 testes novos: parser escreve pending_rows.json, endpoint /resolve insere em nf_entries, endpoint /cancel marca fila restante, timeout 30min expira, race resolve+timeout retorna 409, registry cleanup após batch_done.</li>
+    <li>Smoke positivo: PDF com CNPJ ausente → modal abre com PDF inline → operador preenche CNPJ → modal fecha → batch_done com NF persistida em <code>nf_entries</code> e <code>nf_pending.status='resolvido'</code>.</li>
+    <li>Smoke negativo: operador clica "Cancelar batch" → arquivos restantes na fila ficam com <code>upload_files.status='cancelado_pelo_lote'</code>; arquivos já processados antes permanecem em <code>nf_entries</code>; <code>nf_pending.status='cancelado'</code>.</li>
+    <li>Smoke timeout: pending aberto sem ação por &gt; 30min (testável via override de constante em dev) → marca <code>expirado</code>, modal mostra "Tempo esgotado".</li>
+    <li>Job de startup marca pendings órfãos cross-reboot como expirados (verificável reiniciando o container com pending aberto).</li>
+    <li>Badges novos visíveis no painel "Status por arquivo": aguardando_preenchimento, cancelado, cancelado_pelo_lote, rejeitado_pendencia_expirada.</li>
+    <li><code>CLAUDE.md</code> atualizado: nova tabela <code>nf_pending</code>, novos endpoints, novos status do <code>upload_files</code>, regra do timeout 30min.</li>
+    <li><code>docs/MAIN_PROD_CHANGES.md</code> tem entrada nova para a escrita do <code>pending_rows.json</code> em <code>main.py</code> (com bloco DEV preservado).</li>
+    <li><code>planning/PLAN.md</code> marca F8b ✅ com 8 decisões registradas (F8b-a até F8b-h).</li>
+    <li>Checkpoint final do dono: revisar diff completo, aprovar merge.</li>
+  </ul>
+</section>
+
+</div>
+</body>
+</html>

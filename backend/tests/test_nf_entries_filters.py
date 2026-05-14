@@ -53,7 +53,12 @@ def _seed_nf(
     contrato_id: str | None = None,
 ) -> str:
     """Cria uma NfEntry mínima. business_key derivada dos campos para
-    permitir múltiplas NFs no mesmo teste sem colisão UNIQUE."""
+    permitir múltiplas NFs no mesmo teste sem colisão UNIQUE.
+
+    F8b: 5 colunas (`ncm`, `quantidade`, `preco_unitario`, `fornecedor`,
+    `contrato`) viraram NOT NULL. Defaults sintéticos abaixo não importam
+    para os testes de filtro — só satisfazem o schema.
+    """
     bk = f"{numero_nf}|{cnpj}|{data_emissao}|{valor_total}|{descricao}"
     with get_session() as db:
         nf = NfEntry(
@@ -64,7 +69,11 @@ def _seed_nf(
             tipo_nota=tipo_nota,
             fornecedor=fornecedor,
             descricao=descricao,
+            ncm="00.00",
+            quantidade=Decimal("1"),
+            preco_unitario=valor_total,
             valor_total=valor_total,
+            contrato="ECFS TEST/2026",
             contrato_id=contrato_id,
             raw_payload={},
         )

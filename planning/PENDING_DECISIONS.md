@@ -40,6 +40,7 @@ A diferença entre **decisão resolvida** (em `planning/PLAN.md` → "Decisões 
   - Manter Opção A: tela sempre.
 - **Migração futura**: mudança na coluna `users` + ajuste no frontend pós-login. Coluna nullable + lógica condicional. Reversível.
 
+
 ---
 
 ## Como esta lista é mantida
