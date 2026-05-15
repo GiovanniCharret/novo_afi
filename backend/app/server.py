@@ -799,6 +799,45 @@ def create_app() -> FastAPI:
                             })
                             continue
 
+                        # F8b camada 1 — dedup por SHA256. Se este usuário já
+                        # enviou um arquivo byte-idêntico com desfecho bem-sucedido
+                        # (processado ou duplicado), pula parser e modal — o
+                        # conteúdo já foi tratado. Barato: roda antes de salvar em
+                        # disco e antes do subprocess do parser. A camada 2
+                        # (business_key) cobre o caso de mesma NF em PDF regerado
+                        # com bytes diferentes, que o SHA256 não pega.
+                        sha_ja_enviado = db.scalar(
+                            select(UploadFileRecord)
+                            .join(UploadBatch, UploadBatch.id == UploadFileRecord.upload_batch_id)
+                            .where(
+                                UploadFileRecord.file_sha256 == sha256,
+                                UploadBatch.user_id == user.id,
+                                UploadFileRecord.status.in_(["processado", "duplicado"]),
+                            )
+                            .limit(1)
+                        )
+                        if sha_ja_enviado is not None:
+                            record = UploadFileRecord(
+                                upload_batch_id=batch.id,
+                                original_filename=filename,
+                                file_sha256=sha256,
+                                status="duplicado",
+                                status_reason="Mesmo arquivo PDF já foi enviado anteriormente.",
+                                inserted_count=0,
+                                duplicate_count=1,
+                            )
+                            db.add(record)
+                            yield _sse({
+                                "event": "file_done",
+                                "filename": filename,
+                                "status": "duplicado",
+                                "status_reason": "Mesmo arquivo PDF já foi enviado anteriormente.",
+                                "parser_error": None,
+                                "inserted_count": 0,
+                                "duplicate_count": 1,
+                            })
+                            continue
+
                         saved_path, stored_filename = save_uploaded_pdf(batch.id, filename, file_bytes)
                         debug_dir = build_parser_debug_dir(saved_path)
 
@@ -1116,7 +1155,16 @@ def create_app() -> FastAPI:
         # entre os nomes do parser (`quant`, `valor`) e nomes em NfEntry é
         # responsabilidade do create_nf_entry — aqui só passamos o que o
         # parser produziria.
-        row = {**prefilled, **payload.filled}
+        # F8b: filtra strings vazias do filled — modal agora envia o valor
+        # de TODOS os campos (não só os missing), então campos não-editados
+        # podem vir com `prefilled[k]` literal repetido. Strings vazias
+        # significam "operador apagou" — descartamos para não sobrescrever
+        # o prefilled válido com '' (que quebraria NOT NULL).
+        filled_nonempty = {
+            k: v for k, v in payload.filled.items()
+            if isinstance(v, str) and v.strip() != ""
+        }
+        row = {**prefilled, **filled_nonempty}
         # Garantir campos do contrato — parser populava via consolidate_data_to_dict.
         row.setdefault("contrato", contrato.numero)
 

@@ -3,27 +3,44 @@ import { useState } from "react";
 // F8b — labels humanos para os 11 campos do default_nf_template. Backend manda
 // missing como lista de chaves; UI traduz pra português antes de renderizar.
 const FIELD_LABELS = {
+  numero_nf: "Número da NF",
+  data_emissao: "Data de emissão",
   cnpj: "CNPJ",
   fornecedor: "Fornecedor",
-  data_emissao: "Data de emissão",
-  numero_nf: "Número da NF",
+  tipo_nota: "Tipo de nota",
   descricao: "Descrição",
-  valor: "Valor total",
   ncm: "NCM",
   quant: "Quantidade",
   preco_unitario: "Preço unitário",
-  tipo_nota: "Tipo de nota",
+  valor: "Valor total",
   contrato: "Contrato",
 };
+
+// Ordem canônica de renderização no form — identificadores no topo, depois
+// metadados, depois detalhes do produto. Operador lê de cima pra baixo no
+// mesmo fluxo que aparece no DANFE.
+const ORDERED_FIELDS = [
+  "numero_nf",
+  "data_emissao",
+  "cnpj",
+  "fornecedor",
+  "tipo_nota",
+  "descricao",
+  "ncm",
+  "quant",
+  "preco_unitario",
+  "valor",
+];
 
 function fieldLabel(key) {
   return FIELD_LABELS[key] ?? key;
 }
 
-function formatPrefilledValue(value) {
+function formatInitialValue(value) {
   // O parser entrega valores às vezes como dicts canônicos {"cnpj": "..."}
-  // já desencapsulados pela B1, mas defensive aqui — se vier objeto, achatamos.
-  if (value == null) return "—";
+  // já desencapsulados pelo backend, mas defensive aqui — se vier objeto,
+  // achatamos.
+  if (value == null) return "";
   if (typeof value === "object") {
     const keys = Object.keys(value);
     if (keys.length === 1) return String(value[keys[0]]);
@@ -41,27 +58,48 @@ function formatPrefilledValue(value) {
  * chamadas — o modal não fecha por ESC ou clique fora, intencionalmente.
  *
  * Layout: split 2 colunas. Esquerda: PDF inline via iframe da rota F4.
- * Direita: bloco prefilled (read-only) + inputs para campos faltantes +
- * ações.
+ * Direita: form com TODOS os campos como inputs editáveis. Campos que o
+ * parser conseguiu extrair vêm pré-populados; campos em `missing` vêm
+ * vazios e com marcador required. Operador pode corrigir qualquer um.
+ * Strings vazias deixadas em campos não-required são descartadas no
+ * backend (não sobrescrevem o prefilled).
  */
 export default function PendingInputModal({ pending, onResolved, onCancelled }) {
   const { nfPendingId, uploadFileId, filename, prefilled = {}, missing = [] } = pending;
 
-  const [filled, setFilled] = useState(() =>
-    Object.fromEntries(missing.map((field) => [field, ""]))
-  );
+  // Set de campos required (operador precisa preencher) — derivado do missing
+  // que o backend mandou.
+  const missingSet = new Set(missing);
+
+  // Campos exóticos enviados pelo backend (ex.: 'numero_de_produtos_nesta_nf')
+  // que não estão na ordem canônica. Mostram no fim.
+  const exoticMissing = missing.filter((f) => !ORDERED_FIELDS.includes(f));
+  const allFields = [...ORDERED_FIELDS, ...exoticMissing];
+
+  // Estado: valor de cada input. Inicializa com prefilled[field] (ou vazio
+  // se em missing ou se parser não tinha).
+  const [values, setValues] = useState(() => {
+    const init = {};
+    for (const f of allFields) {
+      init[f] = formatInitialValue(prefilled[f]);
+    }
+    return init;
+  });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const allFilled = missing.every((field) => (filled[field] ?? "").trim().length > 0);
+  // Salvar habilitado quando todos os campos required têm valor não-vazio.
+  const allRequiredFilled = missing.every(
+    (field) => (values[field] ?? "").trim().length > 0
+  );
 
   function handleChange(field, value) {
-    setFilled((prev) => ({ ...prev, [field]: value }));
+    setValues((prev) => ({ ...prev, [field]: value }));
     if (error) setError("");
   }
 
   async function handleResolve() {
-    if (!allFilled || submitting) return;
+    if (!allRequiredFilled || submitting) return;
     setSubmitting(true);
     setError("");
     try {
@@ -69,7 +107,7 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ filled }),
+        body: JSON.stringify({ filled: values }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
@@ -102,8 +140,6 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
     }
   }
 
-  const prefilledEntries = Object.entries(prefilled).filter(([, v]) => v != null && v !== "");
-
   return (
     <div className="pending-modal-overlay" role="dialog" aria-modal="true">
       <div className="pending-modal">
@@ -115,7 +151,7 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
             {missing.length === 1
               ? `o campo "${fieldLabel(missing[0])}"`
               : `${missing.length} campos obrigatórios`}
-            .
+            . Confira os demais campos extraídos e corrija se necessário.
           </p>
         </div>
 
@@ -137,35 +173,27 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
           </div>
 
           <div className="pending-modal-form">
-            {prefilledEntries.length > 0 && (
-              <div className="pending-modal-prefilled">
-                <div className="pending-modal-prefilled-label">Já extraído pelo parser</div>
-                {prefilledEntries.map(([key, value]) => (
-                  <div key={key} className="pending-modal-prefilled-row">
-                    <span className="pending-modal-prefilled-k">{fieldLabel(key)}</span>
-                    <span className="pending-modal-prefilled-v">{formatPrefilledValue(value)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="pending-modal-fields">
-              {missing.map((field) => (
-                <div key={field} className="pending-modal-field">
-                  <label htmlFor={`pending-${field}`} className="pending-modal-field-label">
-                    {fieldLabel(field)} <span className="pending-modal-required">*</span>
-                  </label>
-                  <input
-                    id={`pending-${field}`}
-                    type="text"
-                    value={filled[field] ?? ""}
-                    onChange={(e) => handleChange(field, e.target.value)}
-                    className="pending-modal-input"
-                    disabled={submitting}
-                    autoComplete="off"
-                  />
-                </div>
-              ))}
+              {allFields.map((field) => {
+                const isRequired = missingSet.has(field);
+                return (
+                  <div key={field} className="pending-modal-field">
+                    <label htmlFor={`pending-${field}`} className="pending-modal-field-label">
+                      {fieldLabel(field)}
+                      {isRequired && <span className="pending-modal-required"> *</span>}
+                    </label>
+                    <input
+                      id={`pending-${field}`}
+                      type="text"
+                      value={values[field] ?? ""}
+                      onChange={(e) => handleChange(field, e.target.value)}
+                      className={`pending-modal-input${isRequired ? " is-required" : ""}`}
+                      disabled={submitting}
+                      autoComplete="off"
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             {error && <div className="pending-modal-error">{error}</div>}
@@ -175,7 +203,7 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
                 type="button"
                 className="pending-modal-btn-primary"
                 onClick={handleResolve}
-                disabled={!allFilled || submitting}
+                disabled={!allRequiredFilled || submitting}
               >
                 {submitting ? "Enviando…" : "Salvar e continuar"}
               </button>

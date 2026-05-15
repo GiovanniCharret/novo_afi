@@ -1281,6 +1281,20 @@ def new_concatenar_por_ponteiro_filtra_tabela_produtos(df, contexto):
             tokens = janela.loc[janela['center_num'].between(esq, dir), 'text'].astype(str).tolist()
             produto[campo] = ' '.join(t.strip() for t in tokens if t and t.strip())
 
+        # FASE PROD — F8b: track partial extraction ANTES da chain de
+        # _campo_ou_humano. Garante que, quando qualquer um falhar (ex.: ncm
+        # vazio), o operador veja no modal os OUTROS campos que o parser
+        # extraiu desse mesmo produto. Sem isso, descricao/quant/unit/price
+        # ficavam fora do prefilled e o operador tinha que redigitar tudo —
+        # divergências mínimas na digitação geravam business_keys distintos
+        # entre uploads do mesmo PDF (bug 2026-05-14).
+        # `_pending_track` filtra strings vazias internamente.
+        _pending_track("descricao",     produto.get('descricao'))
+        _pending_track("ncm",           produto.get('ncm'))
+        _pending_track("quant",         produto.get('quant'))
+        _pending_track("preco_unitario", produto.get('unit'))
+        _pending_track("valor",         produto.get('price'))
+
         contexto_produto = f"{contexto} (produto {i + 1}/{len(linhas_ancora)})"
         descricao_val = _campo_ou_humano(produto.get('descricao'), "descricao",      contexto_produto)
         ncm_val       = _campo_ou_humano(produto.get('ncm'),       "ncm",            contexto_produto)

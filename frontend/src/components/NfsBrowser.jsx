@@ -140,14 +140,6 @@ export default function NfsBrowser({ selectedContratoId }) {
           <p className="section-kicker">Consulta</p>
           <h2 className="card-title">Notas fiscais por contrato</h2>
         </div>
-        <button
-          className="btn-ghost"
-          type="button"
-          disabled={nfs.length === 0}
-          onClick={() => exportNfsResumo(nfs, contratoSelecionado?.numero)}
-        >
-          Exportar Excel
-        </button>
       </div>
 
       <div className="nfs-picker">
@@ -228,6 +220,14 @@ export default function NfsBrowser({ selectedContratoId }) {
             <span className="nfs-count">
               {loading ? "Atualizando…" : `${nfs.length} de ${totalNoContrato} NFs`}
             </span>
+            <button
+              className="btn-ghost"
+              type="button"
+              disabled={nfs.length === 0}
+              onClick={() => exportNfsResumo(nfs, contratoSelecionado?.numero)}
+            >
+              Exportar Excel
+            </button>
           </div>
 
           {error && <p className="inline-error">{error}</p>}

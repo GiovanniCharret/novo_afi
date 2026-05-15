@@ -1593,6 +1593,16 @@ tr:hover td { background: #f8fbff; }
   box-shadow: 0 0 0 2px rgba(27, 128, 196, 0.15);
 }
 
+.pending-modal-input.is-required {
+  border-color: #c2410c;
+  background: #fff7ed;
+}
+
+.pending-modal-input.is-required:focus {
+  border-color: #c2410c;
+  box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.18);
+}
+
 .pending-modal-input:disabled {
   background: #f1f5f9;
   cursor: not-allowed;
