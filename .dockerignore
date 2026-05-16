@@ -1,0 +1,55 @@
+# Causa raiz do bug "vite: not found" no stage frontend-builder:
+# COPY frontend /app/frontend copiava node_modules/ do host Windows
+# (cujos "symlinks" .bin/* são wrappers .sh de 397B) sobrescrevendo
+# o node_modules Linux que `npm install` acabou de criar no container.
+**/node_modules
+**/dist
+backend/app/static
+
+# Python build/cache
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.venv
+venv
+env
+ENV
+
+# Artefatos de runtime que não pertencem à imagem
+backend/banco_de_nf
+backend/app/parser_debug
+output_dfs
+nfs_analise
+*.db
+*.sqlite
+*.sqlite3
+log.json
+
+# Repo metadata
+.git
+.gitignore
+.github
+
+# Editores / SO
+.vscode
+.idea
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Segredos locais — definir via docker-compose / env, não vazar na imagem
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs
+
+# Diagnóstico/scratch desta sessão (será removido)
+diag.sh
+npm_diag.log
+npm_check.txt
