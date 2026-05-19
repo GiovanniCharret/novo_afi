@@ -340,6 +340,14 @@ def extrair_valor(texto_fim, texto_meio):
             continue
         trecho = texto_fim[idx: idx + 320]
         linhas = [ln.strip() for ln in trecho.splitlines() if ln.strip()]
+        # Prioriza a linha do próprio rótulo: layouts como
+        # "VALOR TOTAL DO SERVIÇO = R$ 936.337,50" trazem o valor inline.
+        # Só cai para a linha de baixo quando o rótulo está numa célula
+        # separada do valor (grids empilhados).
+        if linhas:
+            valores_rotulo = re.findall(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b", linhas[0])
+            if valores_rotulo:
+                return valores_rotulo[-1]
         if len(linhas) >= 2:
             valores_linha = re.findall(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b", linhas[1])
             if valores_linha:
@@ -358,6 +366,11 @@ def extrair_valor(texto_fim, texto_meio):
                 continue
             trecho = texto_meio[idx: idx + 320]
             linhas = [ln.strip() for ln in trecho.splitlines() if ln.strip()]
+            # Prioriza a linha do próprio rótulo (idem bloco do texto_fim).
+            if linhas:
+                valores_rotulo = re.findall(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b", linhas[0])
+                if valores_rotulo:
+                    return valores_rotulo[-1]
             if len(linhas) >= 2:
                 valores_linha = re.findall(r"\b\d{1,3}(?:\.\d{3})*,\d{2}\b", linhas[1])
                 if valores_linha:
@@ -373,20 +386,42 @@ def extrair_valor(texto_fim, texto_meio):
 # MONTAGEM DO TEMPLATE + FALLBACK HUMANO
 # =============================================================================
 
-def _solicitar_campo_humano(campo, contexto=""):
-    """Pausa o batch e pede ao operador que digite o valor do campo não extraído.
+class ParserCampoFaltante(Exception):
+    """Campo obrigatório que o parser não conseguiu extrair automaticamente.
 
-    Ponto de extensão: inserir instâncias automáticas adicionais (ex.: LLM multimodal)
-    ANTES do input humano — quando nenhuma resolver, o humano digita.
+    Carrega `prefilled` — o que o parser JÁ capturou desta NF — para que o
+    preenchimento humano (modal do backend, ou um loop de terminal) mostre só
+    o que falta de fato, sem o operador redigitar o que já foi extraído.
+
+    `main.py` importa esta classe (`from ocr_reader import ParserCampoFaltante`)
+    e a levanta também — é o canal único de "campo faltante" do parser.
     """
-    print(f"\n[REVISÃO HUMANA] Arquivo: {contexto}")
-    print(f"  Campo '{campo}' não pôde ser extraído automaticamente.")
-    # ── ponto de extensão ─────────────────────────────────────────────────────
-    # Ex.:  valor = _extrair_via_llm(campo, contexto)
-    #       if valor: return valor
-    # ─────────────────────────────────────────────────────────────────────────
-    valor = input(f"  Digite o valor para '{campo}' (ou Enter para deixar em branco): ").strip()
-    return valor or None
+
+    def __init__(self, campo, prefilled=None):
+        self.campo = campo
+        self.prefilled = dict(prefilled or {})
+        super().__init__(f"Campo obrigatório não extraído: '{campo}'")
+
+
+def _solicitar_campo_humano(campo, contexto=""):
+    """Sinaliza um campo obrigatório não extraído pelo OCR.
+
+    Antes chamava `input()` (revisão humana no terminal). Agora levanta
+    `ParserCampoFaltante`, carregando o que o pass de OCR já montou — o dict
+    `nf` que `_montar_nf_multiplos_passes` está preenchendo no frame chamador.
+    Quem trata a exceção (backend non-interactive ou um loop de terminal)
+    decide como pedir o valor ao operador.
+    """
+    import sys
+    prefilled = {}
+    frame = sys._getframe(1)
+    while frame is not None:
+        nf = frame.f_locals.get("nf")
+        if isinstance(nf, dict):
+            prefilled = {k: v for k, v in nf.items() if v not in (None, "")}
+            break
+        frame = frame.f_back
+    raise ParserCampoFaltante(campo, prefilled)
 
 
 # =============================================================================

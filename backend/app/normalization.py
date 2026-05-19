@@ -39,6 +39,29 @@ def parse_brazilian_decimal(value: object) -> Decimal | None:
         return None
 
 
+class NfRowValidationError(ValueError):
+    """Campo numérico obrigatório de uma linha de NF ausente ou ilegível no
+    retorno do parser. Subclasse de ValueError — capturada pelo `except`
+    per-file do upload, que marca o arquivo como `erro_parsing` com motivo
+    claro. Ver docs/BUG_validacao_numerica_pre_insert.md."""
+
+
+def parse_required_decimal(value: object, field_name: str) -> Decimal:
+    """Converte um campo numérico obrigatório (formato BR) para Decimal.
+
+    Diferente de `parse_brazilian_decimal` — que devolve None em falha — esta
+    levanta `NfRowValidationError` nomeando o campo. Assim o upload trata o
+    dado malformado como `erro_parsing` em vez de gravar `0` silencioso
+    (corrupção) ou `None` (que viola o `NOT NULL` dentro do `flush()`)."""
+    parsed = parse_brazilian_decimal(value)
+    if parsed is None:
+        raise NfRowValidationError(
+            f"Campo numérico obrigatório '{field_name}' ausente ou ilegível "
+            f"(valor recebido do parser: {value!r})."
+        )
+    return parsed
+
+
 def build_business_key(row: dict) -> str:
     numero_nf = normalize_text(row.get("numero_nf"))
     cnpj = normalize_cnpj(row.get("cnpj"))

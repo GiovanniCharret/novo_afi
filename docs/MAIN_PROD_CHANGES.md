@@ -1,5 +1,11 @@
 # MAIN_PROD_CHANGES.md
 
+> ⚠️ **OBSOLETO desde 2026-05-19 (reestruturação Opção A).** O `main.py` não é
+> mais editado para produção: os arquivos do parser vivem intactos em
+> `backend/app/leitor_pdf/` e toda a adaptação de produção foi extraída para
+> `backend/app/parser_runner.py`. Ver **`docs/PARSER_RUNNER.md`** — é a
+> referência atual. Este arquivo fica como registro histórico do modelo antigo.
+
 Changelog canônico das adaptações de produção sobre o `backend/app/main.py`.
 
 ## Por que este arquivo existe

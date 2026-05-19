@@ -32,6 +32,7 @@ from .security import (
 )
 from .storage import get_pdf_path
 from .normalization import (
+    NfRowValidationError,
     build_business_key,
     compute_sha256,
     normalize_cnpj,
@@ -39,6 +40,7 @@ from .normalization import (
     normalize_text,
     parse_brazilian_date,
     parse_brazilian_decimal,
+    parse_required_decimal,
 )
 from .parser_adapter import LegacyParserAdapter
 
@@ -187,6 +189,21 @@ def get_or_create_user(session: Session, username: str) -> User:
     return user
 
 
+# Campos numéricos obrigatórios de uma linha de NF, na chave que o parser usa
+# (default_nf_template). Ver docs/BUG_validacao_numerica_pre_insert.md.
+NUMERIC_ROW_FIELDS = ("quant", "preco_unitario", "valor")
+
+
+def _invalid_numeric_fields(row: dict) -> list[str]:
+    """Campos numéricos que o parser entregou ausentes ou ilegíveis (não
+    convertem para Decimal — ex.: NF-12259, `"R$ 160.569,92"`).
+
+    Devolve as chaves do parser (`quant`/`preco_unitario`/`valor`) para irem
+    como `missing` de uma pendência F8b — o operador preenche pelo modal e o
+    `/resolve` faz `{**prefilled, **filled}` por essas mesmas chaves."""
+    return [k for k in NUMERIC_ROW_FIELDS if parse_brazilian_decimal(row.get(k)) is None]
+
+
 def create_nf_entry(
     session: Session,
     row: dict,
@@ -202,9 +219,15 @@ def create_nf_entry(
         fornecedor=normalize_nullable_text(row.get("fornecedor")),
         descricao=normalize_text(row.get("descricao")),
         ncm=normalize_nullable_text(row.get("ncm")),
-        quantidade=parse_brazilian_decimal(row.get("quant")),
-        preco_unitario=parse_brazilian_decimal(row.get("preco_unitario")),
-        valor_total=parse_brazilian_decimal(row.get("valor")) or 0,
+        # Campos numéricos obrigatórios (NOT NULL no schema). Validados aqui,
+        # antes do flush. Safety net / last line of defense — o caminho
+        # primário roteia campo ilegível para o modal F8b antes de chegar
+        # aqui (ver _invalid_numeric_fields + o generator de /api/uploads).
+        # Quando este raise dispara (ex.: NF multi-linha), NfRowValidationError
+        # vira erro_parsing. Ver docs/BUG_validacao_numerica_pre_insert.md.
+        quantidade=parse_required_decimal(row.get("quant"), "quantidade"),
+        preco_unitario=parse_required_decimal(row.get("preco_unitario"), "preco_unitario"),
+        valor_total=parse_required_decimal(row.get("valor"), "valor_total"),
         contrato=normalize_nullable_text(row.get("contrato")),
         contrato_id=contrato_id,
         upload_file_id=upload_file_id,
@@ -866,6 +889,26 @@ def create_app() -> FastAPI:
                                 parser.parse_pdf_bytes, filename, file_bytes, debug_dir, contrato_numero
                             )
 
+                            # Validação backend pós-parser: o parser pode dizer
+                            # "processado" e ainda assim entregar campo numérico
+                            # ilegível (ex.: NF-12259, "R$ 160.569,92"). Em vez
+                            # de erro_parsing, roteia para o MESMO fluxo de
+                            # preenchimento humano do F8b — convertendo o
+                            # outcome em pending_input, que o bloco abaixo trata
+                            # sem nenhuma duplicação. Restrito a NF de 1 linha
+                            # (modelo single-row da pendência F8b); NF
+                            # multi-linha cai no safety net NfRowValidationError
+                            # -> erro_parsing no loop de inserção.
+                            # Ver docs/BUG_validacao_numerica_pre_insert.md.
+                            if outcome.status == "processado" and len(outcome.rows) == 1:
+                                campos_invalidos = _invalid_numeric_fields(outcome.rows[0])
+                                if campos_invalidos:
+                                    outcome.status = "pending_input"
+                                    outcome.reason = "campo_numerico_ilegivel"
+                                    outcome.prefilled = outcome.rows[0]
+                                    outcome.missing = campos_invalidos
+                                    outcome.rows = []
+
                             # F8b: parser detectou campo faltante. Cria nf_pending,
                             # emite file_pending_input e suspende o generator no
                             # event do registry (timeout 30min). Resolve no /resolve
@@ -1003,18 +1046,25 @@ def create_app() -> FastAPI:
                             duplicate_contrato_ids: set[str] = set()
                             duplicates_sem_contrato = 0
 
-                            for row in outcome.rows:
-                                business_key = build_business_key(row)
-                                existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
-                                if existing is not None:
-                                    duplicate_count += 1
-                                    if existing.contrato_id:
-                                        duplicate_contrato_ids.add(existing.contrato_id)
-                                    else:
-                                        duplicates_sem_contrato += 1
-                                    continue
-                                create_nf_entry(db, row, contrato_id=contrato_id, upload_file_id=record.id)
-                                inserted_count += 1
+                            # SAVEPOINT por arquivo: um erro de banco ao inserir
+                            # as linhas deste PDF (NOT NULL, unique, etc.) faz
+                            # ROLLBACK só deste arquivo — sem envenenar a Session
+                            # nem derrubar o lote inteiro no rollback final. O
+                            # except abaixo o marca como erro_parsing e o loop
+                            # segue. Ver docs/BUG_sessao_sqlalchemy_envenenada.md.
+                            with db.begin_nested():
+                                for row in outcome.rows:
+                                    business_key = build_business_key(row)
+                                    existing = db.scalar(select(NfEntry).where(NfEntry.business_key == business_key))
+                                    if existing is not None:
+                                        duplicate_count += 1
+                                        if existing.contrato_id:
+                                            duplicate_contrato_ids.add(existing.contrato_id)
+                                        else:
+                                            duplicates_sem_contrato += 1
+                                        continue
+                                    create_nf_entry(db, row, contrato_id=contrato_id, upload_file_id=record.id)
+                                    inserted_count += 1
 
                             file_status = "processado" if inserted_count > 0 else "duplicado"
                             status_reason = None
@@ -1053,16 +1103,28 @@ def create_app() -> FastAPI:
 
                         except Exception as error:
                             parser_error = str(error)
+                            # A Session segue utilizável: erros de banco ao
+                            # inserir linhas ocorrem dentro do SAVEPOINT acima,
+                            # cujo ROLLBACK atinge só este arquivo. O loop
+                            # continua e o db.commit() final persiste os PDFs
+                            # bem-sucedidos do lote.
                             # F4 — record já existe (criado antes do try). Atualiza
                             # em vez de criar um novo para não duplicar a linha.
+                            # Campo numérico ilegível (NfRowValidationError) tem
+                            # motivo próprio e acionável; demais erros ficam no
+                            # texto genérico.
+                            if isinstance(error, NfRowValidationError):
+                                status_reason = parser_error
+                            else:
+                                status_reason = "Erro ao consolidar o retorno do parser."
                             record.status = "erro_parsing"
-                            record.status_reason = "Erro ao consolidar o retorno do parser."
+                            record.status_reason = status_reason
                             record.parser_error = parser_error
                             yield _sse({
                                 "event": "file_done",
                                 "filename": filename,
                                 "status": "erro_parsing",
-                                "status_reason": "Erro ao consolidar o retorno do parser.",
+                                "status_reason": status_reason,
                                 "parser_error": parser_error,
                                 "inserted_count": 0,
                                 "duplicate_count": 0,
@@ -1215,8 +1277,12 @@ def create_app() -> FastAPI:
                 upload_file_id=pending.upload_file_id,
             )
         except Exception as e:
-            # NOT NULL violation, data parse error, etc. — diferente de dedup
-            # (já tratado acima). Mantém pendência em 'aguardando' para retry.
+            # NfRowValidationError, NOT NULL violation, etc. — diferente de
+            # dedup (já tratado acima). Se o erro veio de um flush, a Session
+            # ficou envenenada; rollback a recupera antes do HTTPException
+            # desenrolar. Pendência permanece 'aguardando' (nada commitado),
+            # liberando retry. Ver docs/BUG_sessao_sqlalchemy_envenenada.md.
+            db.rollback()
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 f"Não foi possível salvar a NF: {e}",

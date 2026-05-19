@@ -16,9 +16,20 @@ const FIELD_LABELS = {
   contrato: "Contrato",
 };
 
+// Dicas de formato (placeholder) — evitam que o operador digite num formato que
+// o /resolve rejeita com 422 (parse_brazilian_decimal / parse_brazilian_date).
+const FIELD_HINTS = {
+  numero_nf: "ex.: 000012259",
+  data_emissao: "DD/MM/AAAA",
+  cnpj: "00.000.000/0000-00",
+  quant: "ex.: 1",
+  preco_unitario: "ex.: 1.234,56",
+  valor: "ex.: 1.234,56",
+};
+
 // Ordem canônica de renderização no form — identificadores no topo, depois
 // metadados, depois detalhes do produto. Operador lê de cima pra baixo no
-// mesmo fluxo que aparece no DANFE.
+// mesmo fluxo que aparece no DANFE. Todos são colunas NOT NULL em nf_entries.
 const ORDERED_FIELDS = [
   "numero_nf",
   "data_emissao",
@@ -31,6 +42,10 @@ const ORDERED_FIELDS = [
   "preco_unitario",
   "valor",
 ];
+
+// Campos numéricos em formato BR — validados client-side (espelham
+// normalization.parse_brazilian_decimal no backend).
+const DECIMAL_FIELDS = new Set(["quant", "preco_unitario", "valor"]);
 
 function fieldLabel(key) {
   return FIELD_LABELS[key] ?? key;
@@ -49,6 +64,39 @@ function formatInitialValue(value) {
   return String(value);
 }
 
+function isBlank(value) {
+  return (value ?? "").trim().length === 0;
+}
+
+// Espelha normalization.parse_brazilian_decimal: remove '.', troca ',' por '.'
+// e tenta converter para número. Pré-check client-side do que o backend aceita.
+function brDecimalIsValid(value) {
+  const sanitized = value.trim().replace(/\./g, "").replace(",", ".");
+  if (sanitized === "") return false;
+  return Number.isFinite(Number(sanitized));
+}
+
+// Espelha parse_brazilian_date: o backend exige um DD/MM/AAAA no texto.
+function brDateIsValid(value) {
+  return /\b\d{2}\/\d{2}\/\d{4}\b/.test(value.trim());
+}
+
+// Erro de formato de um campo preenchido (string vazia = ok aqui; o vazio é
+// tratado pelo gate de obrigatórios). Só valida campos que o /resolve rejeita
+// com 422 — texto livre não é validado.
+function fieldError(key, value) {
+  if (isBlank(value)) return "";
+  if (DECIMAL_FIELDS.has(key)) {
+    return brDecimalIsValid(value)
+      ? ""
+      : "Use número no formato brasileiro (ex.: 1.234,56).";
+  }
+  if (key === "data_emissao") {
+    return brDateIsValid(value) ? "" : "Use o formato DD/MM/AAAA.";
+  }
+  return "";
+}
+
 /**
  * F8b — modal interativo de preenchimento de NF (Fase C1).
  *
@@ -58,18 +106,16 @@ function formatInitialValue(value) {
  * chamadas — o modal não fecha por ESC ou clique fora, intencionalmente.
  *
  * Layout: split 2 colunas. Esquerda: PDF inline via iframe da rota F4.
- * Direita: form com TODOS os campos como inputs editáveis. Campos que o
- * parser conseguiu extrair vêm pré-populados; campos em `missing` vêm
- * vazios e com marcador required. Operador pode corrigir qualquer um.
- * Strings vazias deixadas em campos não-required são descartadas no
- * backend (não sobrescrevem o prefilled).
+ * Direita: form com TODOS os campos como inputs editáveis.
+ *
+ * Obrigatoriedade (revisão 2026-05-19): as 11 colunas do template são NOT
+ * NULL, então QUALQUER campo em branco bloqueia o submit — não só os que o
+ * backend listou em `missing`. Necessário porque o caminho de OCR (PDF
+ * escaneado) falha vários campos mas o parser reporta um por vez; confiar só
+ * em `missing` deixava o operador salvar com campos vazios e levar 422.
  */
 export default function PendingInputModal({ pending, onResolved, onCancelled }) {
   const { nfPendingId, uploadFileId, filename, prefilled = {}, missing = [] } = pending;
-
-  // Set de campos required (operador precisa preencher) — derivado do missing
-  // que o backend mandou.
-  const missingSet = new Set(missing);
 
   // Campos exóticos enviados pelo backend (ex.: 'numero_de_produtos_nesta_nf')
   // que não estão na ordem canônica. Mostram no fim.
@@ -87,11 +133,25 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
-  // Salvar habilitado quando todos os campos required têm valor não-vazio.
-  const allRequiredFilled = missing.every(
-    (field) => (values[field] ?? "").trim().length > 0
-  );
+  // Quantos campos o parser realmente extraiu — define o tom do subtítulo.
+  const prefilledCount = allFields.filter(
+    (f) => !isBlank(formatInitialValue(prefilled[f]))
+  ).length;
+
+  // Campos ainda em branco (bloqueiam o submit e ganham marcador *).
+  const blankFields = allFields.filter((f) => isBlank(values[f]));
+
+  // Erros de formato dos campos preenchidos.
+  const fieldErrors = {};
+  for (const f of allFields) {
+    const err = fieldError(f, values[f]);
+    if (err) fieldErrors[f] = err;
+  }
+
+  // Salvar habilitado quando nada está em branco e nada tem erro de formato.
+  const canSubmit = blankFields.length === 0 && Object.keys(fieldErrors).length === 0;
 
   function handleChange(field, value) {
     setValues((prev) => ({ ...prev, [field]: value }));
@@ -99,7 +159,7 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
   }
 
   async function handleResolve() {
-    if (!allRequiredFilled || submitting) return;
+    if (!canSubmit || submitting) return;
     setSubmitting(true);
     setError("");
     try {
@@ -147,11 +207,9 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
           <div className="pending-modal-eyebrow">Preenchimento necessário</div>
           <h2 className="pending-modal-title">{filename}</h2>
           <p className="pending-modal-subtitle">
-            O parser identificou esta NF mas não conseguiu extrair{" "}
-            {missing.length === 1
-              ? `o campo "${fieldLabel(missing[0])}"`
-              : `${missing.length} campos obrigatórios`}
-            . Confira os demais campos extraídos e corrija se necessário.
+            {prefilledCount === 0
+              ? "O parser não conseguiu extrair os campos desta NF — provavelmente um PDF escaneado. Preencha os campos conferindo o documento ao lado."
+              : "O parser extraiu parte dos campos desta NF. Preencha os que estão em branco (marcados com *) e confira os demais com o documento ao lado."}
           </p>
         </div>
 
@@ -175,22 +233,36 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
           <div className="pending-modal-form">
             <div className="pending-modal-fields">
               {allFields.map((field) => {
-                const isRequired = missingSet.has(field);
+                const needsValue = isBlank(values[field]);
+                const formatErr = fieldErrors[field];
+                const inputClass =
+                  "pending-modal-input" +
+                  (needsValue ? " is-required" : "") +
+                  (formatErr ? " has-error" : "");
+                const errId = formatErr ? `pending-${field}-error` : undefined;
                 return (
                   <div key={field} className="pending-modal-field">
                     <label htmlFor={`pending-${field}`} className="pending-modal-field-label">
                       {fieldLabel(field)}
-                      {isRequired && <span className="pending-modal-required"> *</span>}
+                      {needsValue && <span className="pending-modal-required"> *</span>}
                     </label>
                     <input
                       id={`pending-${field}`}
                       type="text"
                       value={values[field] ?? ""}
                       onChange={(e) => handleChange(field, e.target.value)}
-                      className={`pending-modal-input${isRequired ? " is-required" : ""}`}
+                      className={inputClass}
+                      placeholder={FIELD_HINTS[field] || ""}
                       disabled={submitting}
                       autoComplete="off"
+                      aria-invalid={formatErr ? "true" : undefined}
+                      aria-describedby={errId}
                     />
+                    {formatErr && (
+                      <div id={errId} className="pending-modal-field-error">
+                        {formatErr}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -203,23 +275,52 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
                 type="button"
                 className="pending-modal-btn-primary"
                 onClick={handleResolve}
-                disabled={!allRequiredFilled || submitting}
+                disabled={!canSubmit || submitting}
               >
                 {submitting ? "Enviando…" : "Salvar e continuar"}
               </button>
-              <button
-                type="button"
-                className="pending-modal-btn-ghost"
-                onClick={handleCancel}
-                disabled={submitting}
-              >
-                Cancelar batch
-              </button>
+              {!confirmingCancel && (
+                <button
+                  type="button"
+                  className="pending-modal-btn-ghost"
+                  onClick={() => setConfirmingCancel(true)}
+                  disabled={submitting}
+                >
+                  Cancelar batch
+                </button>
+              )}
             </div>
 
+            {confirmingCancel && (
+              <div className="pending-modal-cancel-confirm">
+                <span>
+                  Cancelar interrompe este upload e descarta os PDFs do lote
+                  que ainda não foram processados. Tem certeza?
+                </span>
+                <div className="pending-modal-cancel-confirm-actions">
+                  <button
+                    type="button"
+                    className="pending-modal-btn-danger"
+                    onClick={handleCancel}
+                    disabled={submitting}
+                  >
+                    {submitting ? "Cancelando…" : "Confirmar cancelamento"}
+                  </button>
+                  <button
+                    type="button"
+                    className="pending-modal-btn-ghost"
+                    onClick={() => setConfirmingCancel(false)}
+                    disabled={submitting}
+                  >
+                    Voltar
+                  </button>
+                </div>
+              </div>
+            )}
+
             <p className="pending-modal-foot">
-              Cancelar interrompe este upload e descarta os PDFs que ainda não
-              foram processados.
+              Campos marcados com * estão em branco e são obrigatórios. Todos
+              os campos podem ser corrigidos conferindo o PDF ao lado.
             </p>
           </div>
         </div>

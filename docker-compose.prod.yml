@@ -1,0 +1,85 @@
+# docker-compose.prod.yml — Compose de PRODUÇÃO (Ubuntu 24 + Docker, Hostinger).
+#
+# O `docker-compose.yml` é de DESENVOLVIMENTO (bind-mount de ./backend +
+# --reload). Este arquivo é o de produção. Diferenças:
+#
+#   - SEM bind-mount de ./backend → o código vem da imagem (`docker compose
+#     build`). Isso (a) faz o frontend que a imagem builda ser de fato servido
+#     — no dev o bind-mount cobre o `app/static` da imagem; (b) elimina os
+#     conflitos de `git pull`, porque o container deixa de escrever
+#     `__pycache__/` e `cnpj.json` dentro da árvore git do host.
+#   - SEM --reload → uvicorn de produção.
+#   - PDFs enviados num diretório próprio que persiste entre deploys.
+#   - Segredos vêm do `.env` (criar ao lado deste arquivo, no servidor).
+#
+# Deploy (a partir da raiz do repositório, no servidor):
+#   git pull origin final_deploy
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Ver docs/PARSER_RUNNER.md e CLAUDE.md.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: novo_afi_backend
+    working_dir: /app/backend
+    # Produção: sem --reload. Processo único de propósito — o registry de
+    # pendências F8b (`pending_registry.py`) é in-memory e mono-réplica;
+    # NÃO adicionar `--workers > 1` sem antes resolver isso.
+    command: uvicorn app.server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://novo_afi:novo_afi@db:5432/novo_afi}
+      # Obrigatórios em produção — o compose ABORTA se não estiverem no .env.
+      SESSION_SECRET: ${SESSION_SECRET:?defina SESSION_SECRET no .env}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?defina PUBLIC_BASE_URL (domínio real) no .env}
+      # SMTP — e-mail ainda não ativo em produção; vazio → email_service usa o
+      # stub. Quando ativar, preencher no .env.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      POPLLER_PATH: /usr/bin
+      TESSERACT_CMD: ""
+    volumes:
+      # base_contratos.json: fonte de verdade na raiz, montado read-only
+      # (contrato_config.py o lê em backend/app/).
+      - ./base_contratos.json:/app/backend/app/base_contratos.json:ro
+      # PDFs enviados: bind-mount do diretório (gitignored — não conflita com
+      # `git pull`). Persiste os PDFs entre deploys e preserva os que já
+      # existiam no servidor. Backup: rsync deste diretório (ver CLAUDE.md).
+      - ./backend/banco_de_nf:/app/backend/banco_de_nf
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    container_name: novo_afi_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-novo_afi}
+      POSTGRES_USER: ${POSTGRES_USER:-novo_afi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-novo_afi}
+    # Sem `ports`: o banco NÃO é exposto ao host/internet — só o backend o
+    # acessa, pela rede interna do compose (host `db`).
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-novo_afi} -d ${POSTGRES_DB:-novo_afi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  # Dados do Postgres. Mesmo nome do docker-compose.yml de dev → se o servidor
+  # já tinha esse volume de deploys anteriores, os dados são preservados.
+  postgres_data:

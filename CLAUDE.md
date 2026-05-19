@@ -9,7 +9,8 @@ Documentation lives in `planning/` and `docs/`:
 - `planning/DEFINITION_OF_DONE.md` — checklist transversal de conclusão (testes, schema, build, docs, critérios negativos, aprovação humana). Aplicada na Fase D de toda feature.
 - `planning/ADVERSARIAL_REVIEW.md` — revisão adversarial de `planning/` (ambiguidades, lacunas, brechas que permitem violar o espírito das regras). Consultar ao redigir/alterar regras de processo.
 - `planning/PENDING_DECISIONS.md` — itens **explicitamente deferidos** para decisão institucional futura (não decisões em aberto neste ciclo).
-- `docs/MAIN_PROD_CHANGES.md` — changelog canônico das adaptações de produção sobre `backend/app/main.py` (parser). **Toda mudança em `main.py` é registrada aqui** — ver "Regras específicas de desenvolvimento".
+- `docs/PARSER_RUNNER.md` — **arquitetura do parser**: `backend/app/leitor_pdf/` (arquivos do projeto de desenvolvimento do parser) + `backend/app/parser_runner.py` (camada de produção). Ler antes de tocar no parser.
+- `docs/orientacoes_dev.md` — **instruções para o projeto de dev do parser** (`leitor_de_pdf/`): o que `main.py` e `ocr_reader.py` precisam expor (`ParserCampoFaltante`) para rodar em produção aqui. (`docs/MAIN_PROD_CHANGES.md` é o changelog do modelo antigo — editar `main.py` com marcadores — agora obsoleto.)
 - `planning/BEHAVIORAL_GUIDELINES.md` — process/behavior rules; **always apply**.
 - `AGENTS.md` (raiz) e `frontend/AGENTS.md` — guidelines gerais e específicas do frontend (estrutura, estilo, commits). Tem sobreposição com este arquivo; em caso de conflito, este `CLAUDE.md` é canônico.
 
@@ -24,7 +25,7 @@ A nova versão precisa de uma área para seleção de contratos, uma área de co
 
 - **Backend**: FastAPI + SQLAlchemy + PostgreSQL (psycopg3) — servido em `http://localhost:8000`
 - **Frontend**: React 19 + Vite 7 (build estatico servido pelo FastAPI)
-- **Parser ativo (v10)**: `backend/app/main.py` — invocado como subprocess pelo `LegacyParserAdapter` (`backend/app/parser_adapter.py`). Importa módulos irmãos `ocr_reader.py`, `cnpj_lookup.py`, `description_cleaner.py`, `contrato_config.py`. **Após F8a (2026-05-06)** o parser roda non-interactive: bloco `if __name__ == "__main__":` aceita `--contrato NUMERO --input-dir PATH --output-dir PATH --non-interactive`; `_solicitar_campo_humano` levanta `ParserCampoFaltante` em modo non-interactive em vez de `input()`; 17 `raise ValueError` estruturais convertidos para `ParserEstruturaQuebrada(ValueError)`; classificação no adapter via `isinstance` + exit codes (2 = campo faltante, 3 = estrutural). **Pendente em F8b**: tabela `nf_pending` + endpoint `/resolve` + modal — hoje `ParserCampoFaltante` cai em `erro_parsing` em vez de pendência interativa. **Refactor segue regras de preservação** — não apaga funções, mantém versão DEV comentada acima da PROD; toda mudança registrada em `docs/MAIN_PROD_CHANGES.md`.
+- **Parser**: vive em `backend/app/leitor_pdf/` — `main.py`, `ocr_reader.py`, `description_cleaner.py` e o dado `block_cnpj.json`, do projeto de desenvolvimento do parser (repo `leitor_de_pdf`). Os módulos irmãos `cnpj_lookup.py` e `contrato_config.py` ficam em `backend/app/`. **Não receber lógica de produção** — a única interface que o parser expõe para a produção é `_solicitar_campo_humano` levantar `ParserCampoFaltante(campo, prefilled)` (campo faltante; classe definida em `ocr_reader.py`). A adaptação de produção (non-interactive, exit codes 2/3, `pending_rows.json`) vive em `backend/app/parser_runner.py`, que roda o `leitor_pdf/main.py` via `runpy` e é invocado como subprocess pelo `LegacyParserAdapter` (`backend/app/parser_adapter.py`). Exit 2 = campo faltante → pendência interativa (`nf_pending`, endpoints `/resolve`/`/cancel`, modal, recovery cross-reboot — ver "Pendências de preenchimento F8b"). **Ler `docs/PARSER_RUNNER.md` antes de mexer no parser** — reestruturação de 2026-05-19 (Opção A), substitui o modelo antigo de editar `main.py` com marcadores `FASE DEV`/`FASE PROD`.
 - **Parser legado (deprecated)**: `backend/app/main_v9.deprecated.py` — versão anterior, mantida só como referência histórica. O sufixo `.deprecated.` torna o módulo não-importável de propósito.
 - **Infra local**: Docker Compose
 
@@ -46,7 +47,7 @@ npm install
 npm run build   # emite os assets em backend/app/static
 ```
 
-O build emite `assets/app.js` + `assets/app.css` (vite.config.js renomeia `style.css` → `app.css` via rollup). Como o FastAPI serve o build estático, **alterações em `frontend/src/` só aparecem após `npm run build`**. O backend roda com `--reload`, então mudanças em Python recarregam automaticamente.
+O build emite `assets/index-<hash>.js` + `assets/index-<hash>.css` com hash de conteúdo no nome (vite.config.js usa `[name]-[hash]` no rollupOptions). O `index.html` gerado referencia os nomes com hash automaticamente — cada build muda a URL do bundle, então o navegador nunca serve um bundle velho do cache após um deploy. Como o FastAPI serve o build estático, **alterações em `frontend/src/` só aparecem após `npm run build`**. O backend roda com `--reload`, então mudanças em Python recarregam automaticamente.
 
 ### Testes do backend
 
@@ -78,7 +79,18 @@ Suítes existentes:
 | `tests/test_upload_with_contrato.py` | F2 — contrato obrigatório na sessão |
 | `tests/test_contratos_endpoints.py` | F2 — endpoints de contratos |
 | `tests/test_seed_contratos.py` | F2 — seed idempotente do `base_contratos.json` |
-| `tests/test_parser_non_interactive.py` | F8a — exit codes 2/3 do parser e exceções tipadas |
+| `tests/test_nf_entries_filters.py` | F3b — filtros de `GET /api/nf-entries` |
+| `tests/test_pdf_endpoint.py` | F4 — serve PDF do disco, isolamento por dono |
+| `tests/test_totais_contrato.py` | F6 — agregação `GET /api/contratos/{id}/totais` |
+| `tests/test_auth_real.py` | F1 — login/registro/confirmação/reset reais |
+| `tests/test_email_service.py` | F1/F7 — envio SMTP + stub in-memory |
+| `tests/test_duplicate_reason.py` | dedup — mensagem enriquecida por contrato |
+| `tests/test_sha256_dedup.py` | dedup — re-upload byte-idêntico |
+| `tests/test_parser_runner.py` | parser_runner — interface (import, exit codes, `--help`, campo faltante) |
+| `tests/test_nf_pending_schema.py` | F8b — schema da tabela `nf_pending` |
+| `tests/test_pending_endpoints.py` | F8b — endpoints `/resolve` e `/cancel` |
+| `tests/test_pending_registry.py` | F8b — registry in-memory de `asyncio.Event` |
+| `tests/test_pending_recovery.py` | F8b — job `expire_orphan_pendings` (recovery) |
 
 Os testes usam SQLite em arquivo temporário (`tmp_path/test.db`) por teste, com `reset_db_state()` + `init_db()` na fixture `client`. A fixture também aponta `UPLOAD_STORAGE_DIR` para um diretório temporário, então testes de upload não poluem `backend/banco_de_nf/`. Não dependem de Docker e **não rodam migrations Alembic** — usam `create_all` direto.
 
@@ -101,8 +113,10 @@ browser
         └── API FastAPI (backend/app/server.py)
               ├── SessionMiddleware (autenticação por cookie de sessão)
               ├── PostgreSQL via SQLAlchemy (backend/app/db.py + models.py)
+              ├── pending_registry (backend/app/pending_registry.py — Events F8b)
               └── LegacyParserAdapter (backend/app/parser_adapter.py)
-                    └── subprocess → backend/app/main.py (parser v10)
+                    └── subprocess → parser_runner.py
+                          └── runpy → leitor_pdf/main.py (parser, do projeto de dev)
 ```
 
 ### Fluxo de upload
@@ -111,7 +125,7 @@ browser
 1. Frontend envia `POST /api/uploads` com lista de arquivos PDF.
 2. O backend salva cada PDF em `backend/banco_de_nf/<batch_id>/<stored_filename>`. **Após F4**: `stored_filename` é UUID4 + `.pdf` gerado por `save_uploaded_pdf` (separado de `original_filename`); ambos vão pro `UploadFileRecord`.
 3. **Após F4**: `UploadFileRecord` é criado upfront com `status="processando"` e `db.flush()` antes do parser rodar, para que `nf_entries.upload_file_id` (FK) tenha um id válido durante a inserção das linhas. O status final é setado depois.
-4. `LegacyParserAdapter.parse_pdf_bytes(filename, content, debug_dir, contrato_numero)` invoca `backend/app/main.py` via subprocess (timeout 180s) com flags `--non-interactive --contrato N --input-dir X --output-dir Y`. **Após F8a**: `contrato_numero=None` cai no placeholder `DEFAULT_CONTRATO_PRE_F2 = "ECFS 101/2005"` (vira código morto após F2 wirear `request.session["contrato_id"]`). Adapter classifica `process.returncode`: 2 = `ParserCampoFaltante` (Tipo 1), 3 = `ParserEstruturaQuebrada` (Tipo 2), outros != 0 = falha genérica. Em F8b, exit 2 vai virar `nf_pending` + modal em vez de `erro_parsing`.
+4. `LegacyParserAdapter.parse_pdf_bytes(filename, content, debug_dir, contrato_numero)` invoca `backend/app/parser_runner.py` via subprocess (timeout 180s) com flags `--non-interactive --contrato N --input-dir X --output-dir Y`. O `parser_runner` roda o `leitor_pdf/main.py` via `runpy` em modo non-interactive (ver `docs/PARSER_RUNNER.md`). Adapter classifica `process.returncode`: 2 = campo faltante (Tipo 1), 3 = erro estrutural (Tipo 2), outros != 0 = falha genérica. Exit 2 vira uma `nf_pending` + evento SSE `file_pending_input` + modal de preenchimento (em vez de `erro_parsing`).
 5. O parser gera um `.xlsx` em `output_dfs/` que é lido como DataFrame. Os artefatos (`log.json`, `output_dfs/`, `stdout.txt`, `stderr.txt`) são copiados para `backend/app/parser_debug/<batch_id>/<arquivo>/` para diagnóstico.
 6. Cada linha do DataFrame é inserida em `nf_entries` se a `business_key` for inédita; caso contrário, conta como `duplicado`. **Após F2/F4**: novas `nf_entries` recebem `contrato_id` (da sessão) e `upload_file_id` (do record criado no passo 3).
 7. O resultado por arquivo (`processado`, `duplicado`, `rejeitado`, `erro_parsing`) atualiza o `UploadFileRecord` existente — não cria um novo.
@@ -136,13 +150,13 @@ Tabelas principais:
 | Tabela | Responsabilidade |
 |---|---|
 | `users` | Usuários autenticados. **F1 ✅** (2026-05-13/14, migration 0004): tem `email VARCHAR(255) UNIQUE NULL`, `email_confirmed BOOLEAN`, `confirmation_token_hash VARCHAR(64)`, `token_expires_at`, `reset_token_hash VARCHAR(64)`, `reset_expires_at`. `username` virou `nullable=True`. Tokens armazenados como `sha256(raw)` — raw só sai pelo e-mail (Decisão F1-c). |
-| `upload_batches` | Agrupamento de um envio em lote por usuário. **F2 ✅**: tem `contrato_id FK → contratos.id` (nullable — preserva batches pré-F2; novos exigem via `require_contrato`). **Após F8**: ganha `status` (`processando` \| `concluido` \| `abandonado`). |
-| `upload_files` | Resultado por arquivo dentro de um lote. Status: `processando` (transitório, F4+) \| `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (novo, após F8). **F4 ✅**: tem `stored_filename` (TEXT nullable, UUID4 em disco; backfill na migration 0003) ao lado de `original_filename`. |
-| `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **F2 ✅**: tem `contrato_id` (FK nullable; populado em uploads pós-F2). **F4 ✅**: tem `upload_file_id` (FK nullable → `upload_files.id`; populado em uploads pós-F4 — pré-F4 fica NULL, ver Decisão F4-d). **Após F8**: as 11 colunas de `default_nf_template` viram `NOT NULL` (Decisão #8). |
+| `upload_batches` | Agrupamento de um envio em lote por usuário. **F2 ✅**: tem `contrato_id FK → contratos.id` (nullable — preserva batches pré-F2; novos exigem via `require_contrato`). Coluna `status` (`processando`/`concluido`/`abandonado`) ainda **não implementada** — planejada. |
+| `upload_files` | Resultado por arquivo dentro de um lote. Status: `processando` (transitório, F4+) \| `processado` \| `duplicado` \| `rejeitado` \| `erro_parsing` \| `aguardando_preenchimento` (transitório enquanto o modal F8b está aberto). **F4 ✅**: tem `stored_filename` (TEXT nullable, UUID4 em disco; backfill na migration 0003) ao lado de `original_filename`; `file_sha256` para dedup byte-idêntico. |
+| `nf_entries` | Lancamentos consolidados — tabela principal consultada pelo frontend. **F2 ✅**: tem `contrato_id` (FK nullable; populado em uploads pós-F2). **F4 ✅**: tem `upload_file_id` (FK nullable → `upload_files.id`; populado em uploads pós-F4 — pré-F4 fica NULL, ver Decisão F4-d). **F8b ✅**: as 11 colunas de `default_nf_template` são todas `NOT NULL` (migration 0005 deletou rows com NULL/vazio nas 5 que ainda faltavam — Decisão #8 / F8b-f). |
 | `contratos` *(F2 ✅)* | Contratos da base, populados via seed do `base_contratos.json` no `lifespan`. ~140 entradas. PK é UUID5 determinístico derivado de `numero` (re-seed mantém IDs estáveis). Coluna `ativo BOOLEAN` permite filtrar sem deletar. |
-| `nf_pending` *(F8)* | NFs com campo obrigatório faltando aguardando preenchimento manual via modal. Schema completo em `planning/PLAN.md` → "Mudanças Transversais de Schema". |
+| `nf_pending` *(F8b ✅, migration 0005)* | NFs com campo obrigatório faltando aguardando preenchimento manual via modal. `id` PK UUID, `upload_file_id`/`upload_batch_id` FKs `ON DELETE CASCADE`, `contrato_id` FK obrigatório, `prefilled_json`/`missing_fields_json` (payload do parser), `status ∈ {aguardando, resolvido, cancelado, expirado}`, `expires_at` = `created_at + 30min` (Decisão F8b-c). |
 
-**Schema management**: Alembic ativo em produção/dev. `scripts/start.ps1` roda `alembic upgrade head` antes de subir o backend (`docker compose run --rm backend alembic upgrade head` — idempotente). Migrations em `backend/alembic/versions/` (`0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`). **Testes não rodam migrations** — `tests/conftest.py` chama `init_db()` (`create_all`) direto sobre SQLite temporário, então qualquer mudança de schema precisa coexistir nas duas trilhas (modelos + nova revision Alembic) ou o teste fica defasado em relação ao banco real.
+**Schema management**: Alembic ativo em produção/dev. `scripts/start.ps1` roda `alembic upgrade head` antes de subir o backend (`docker compose run --rm backend alembic upgrade head` — idempotente). Migrations em `backend/alembic/versions/` (`0001_baseline.py`, `0002_f2_contratos.py`, `0003_f4_pdf_paths.py`, `0004_f1_auth_real.py`, `0005_f8b_nf_pending.py`). **Testes não rodam migrations** — `tests/conftest.py` chama `init_db()` (`create_all`) direto sobre SQLite temporário, então qualquer mudança de schema precisa coexistir nas duas trilhas (modelos + nova revision Alembic) ou o teste fica defasado em relação ao banco real.
 
 **Migration 0003 detalhe**: roda backfill agressivo (`os.listdir` em cada batch_dir) para popular `upload_files.stored_filename` em rows pré-F4. Em ambientes sem `UPLOAD_STORAGE_DIR` ou sem o dir físico, a migration apenas cria as colunas e segue (sem erro). Operação é idempotente — re-rodar não duplica.
 
@@ -160,7 +174,7 @@ Fluxo real com e-mail + bcrypt + token de confirmação 24h + reset 1h. Decisõe
 
 ### Seed de dados (F2 ✅)
 
-`base_contratos.json` na raiz do projeto é a fonte de verdade dos contratos (~140 entradas, campos `sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato` — valores `LPT` ou `MLA`). O `docker-compose.yml:22` faz bind mount read-only de `./base_contratos.json` para `/app/backend/app/base_contratos.json` dentro do container — assim tanto o seed F2 (`seed_contratos.py:23`) quanto o `contrato_config.py:16` (parser DEV) leem do mesmo arquivo sem precisar duplicar conteúdo, e a regra de preservação do parser não é violada. **Truncar/apagar o arquivo da raiz quebra o startup do FastAPI** (JSONDecodeError no `lifespan`). Seed roda automaticamente no `lifespan` com `INSERT ... ON CONFLICT (numero) DO UPDATE`. Contratos com `valor_contrato = 0` são inseridos normalmente e filtráveis na UI via `?com_valor=true`.
+`base_contratos.json` na raiz do projeto é a fonte de verdade dos contratos (~140 entradas, campos `sigla, cnpj, tranche, uf, valor_contrato, valor_cde, participacao_cde, tipo_contrato` — valores `LPT` ou `MLA`). O `docker-compose.yml:22` faz bind mount read-only de `./base_contratos.json` para `/app/backend/app/base_contratos.json` dentro do container — assim tanto o seed F2 (`seed_contratos.py:23`) quanto o `contrato_config.py` (módulo do parser, em `backend/app/`) leem do mesmo arquivo sem precisar duplicar conteúdo. **Truncar/apagar o arquivo da raiz quebra o startup do FastAPI** (JSONDecodeError no `lifespan`). Seed roda automaticamente no `lifespan` com `INSERT ... ON CONFLICT (numero) DO UPDATE`. Contratos com `valor_contrato = 0` são inseridos normalmente e filtráveis na UI via `?com_valor=true`.
 
 ### Storage de PDFs (Decisão #4 + F4 ✅)
 
@@ -192,7 +206,7 @@ PDFs originais salvos em `backend/banco_de_nf/<batch_id>/<stored_filename>` (con
 | `SMTP_PASSWORD` *(F1 ✅, F7)* | — | Senha da caixa SMTP. |
 | `SMTP_FROM` *(F1 ✅, F7)* | — | Endereço remetente. Hostinger pode exigir = `SMTP_USER`. |
 | `ADMIN_EMAIL` *(F7)* | — | Destinatário dos alertas de erro tipo 2 do parser (Decisão #8). |
-| `OPENROUTER_API_KEY` *(parser_IA — DESATIVADO)* | — | Chave OpenRouter para `description_cleaner`. Chamada está comentada em `backend/app/main.py:2000` — variável não é lida hoje. |
+| `OPENROUTER_API_KEY` *(parser_IA — DESATIVADO)* | — | Chave OpenRouter para `description_cleaner`. Chamada está comentada em `backend/app/leitor_pdf/main.py` — variável não é lida hoje. |
 | `OPENROUTER_MODEL` *(parser_IA — DESATIVADO)* | `openai/gpt-oss-120b` | Modelo via OpenRouter. Idem acima. |
 | `DEBUG` | `false` | Legado pré-F1 — foi substituído por `APP_ENV` para distinguir dev/prod. Mantido por compat com scripts antigos, mas não usado pelo backend hoje. |
 
@@ -210,13 +224,19 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 | `file_saved` | `filename` | PDF salvo em `banco_de_nf/<batch_id>/` |
 | `file_parsing` | `filename` | Parser iniciado |
 | `file_done` | `filename, status, inserted_count, duplicate_count, ...` | Parser concluído |
-| `file_pending_input` *(F8)* | `nf_pending_id, prefilled_fields, missing_fields, original_filename` | Parser detectou NF com campo obrigatório faltando — frontend abre modal. **Bloqueia o batch** até `POST /api/uploads/pending/{id}/resolve`. |
+| `file_pending_input` *(F8b ✅)* | `nf_pending_id, prefilled_fields, missing_fields, original_filename` | Parser detectou NF com campo obrigatório faltando — frontend abre modal. **Bloqueia o batch** até `POST /api/uploads/pending/{id}/resolve` ou `/cancel`. |
 | `batch_done` | `batch_id` | Todos os arquivos do lote concluídos (incluindo pendências resolvidas) |
 | `error` | `message` | Falha geral antes de qualquer arquivo |
 
 **Por que `get_session()` em vez de `Depends(get_db)`**: o FastAPI fecha sessões de `Depends` quando o objeto de resposta é criado, antes de o stream ser consumido. O `get_session()` (context manager manual em `db.py`) mantém a sessão aberta durante todo o `generate()`.
 
 **Por que `asyncio.to_thread`**: `subprocess.run` com `capture_output=True` pode bloquear até 180s. Rodar em thread pool libera o event loop para enviar os eventos SSE entre arquivos.
+
+### Pendências de preenchimento F8b ✅
+
+Quando o parser sai com exit 2 (`ParserCampoFaltante`), o backend cria uma row `nf_pending` (`status='aguardando'`, `expires_at` = +30min) e o generator SSE emite `file_pending_input`, **bloqueando o batch**. O generator então aguarda um `asyncio.Event` registrado em `backend/app/pending_registry.py` — registry **in-memory** porque o Event sincroniza duas tasks do mesmo processo (generator awaiting + endpoint resolve/cancel acordando). O frontend resolve a pendência via `POST /api/uploads/pending/{id}/resolve` (preenche os campos faltantes → insere a `nf_entry`) ou `/cancel` (descarta). Ambos setam o Event, liberando o generator.
+
+**Recovery cross-reboot**: se o processo cai com pendências abertas, o Event some mas a row `nf_pending` permanece no DB. O job `expire_orphan_pendings` roda no `lifespan` do FastAPI e marca rows `aguardando` com `expires_at < now()` como `expirado`. Mono-réplica hoje — o registry in-memory vira insuficiente em multi-processo (documentado no docstring do módulo).
 
 ## API — endpoints relevantes
 
@@ -228,6 +248,8 @@ O endpoint `POST /api/uploads` retorna um `StreamingResponse` com `media_type="t
 | `GET /api/nf-entries` | F3b ✅: query params `?contrato_id&q&data_inicio&data_fim&valor_min&valor_max&tipo_nota`. Defaults `None` preservam regressão (tabela_persistida da Upload). `q` faz `ILIKE` em `numero_nf | fornecedor | cnpj | descricao` via `OR`. Payload inclui `contrato_id` e `upload_file_id` (F4 ✅). |
 | `GET /api/uploads/files/{id}/pdf?download=` | F4 ✅: serve PDF do disco. JOIN com `users` filtra por dono — outro usuário recebe 404 (não 403). `Content-Disposition: inline` default. |
 | `GET /api/contratos/{id}/totais` | F6 ✅: agregação por contrato (`SUM(valor_total)` + `COUNT(DISTINCT numero_nf)` em `nf_entries.contrato_id`). Retorna `soma_nfs_enviadas`, `total_nfs_no_banco`, `pct_enviado_sobre_contrato`, `pct_enviado_sobre_cde`. Helper `_pct` retorna `null` quando denominador é 0 (frontend renderiza empty state em vez de NaN). |
+| `POST /api/uploads/pending/{id}/resolve` | F8b ✅: recebe os campos faltantes de uma `nf_pending`, insere a `nf_entry` e libera o generator SSE bloqueado (seta o `asyncio.Event`). |
+| `POST /api/uploads/pending/{id}/cancel` | F8b ✅: descarta a `nf_pending` (`status='cancelado'`) e libera o generator SSE. |
 | `POST /api/auth/register` | F1 ✅: cria user com `email_confirmed=False` + token UUID4 hex + e-mail. 409 se email duplicado, 422 se senha < 10 chars. |
 | `GET /api/auth/confirm?token=...` | F1 ✅: confirma e-mail via `sha256(token)` + check de expiry (24h). 400 inválido/expirado (mesma mensagem — não vaza). |
 | `POST /api/auth/login` | F1 ✅ refeito: `{email, password}`. 401 idêntico para email inexistente e senha errada. 403 se `email_confirmed=False`. Compat: `{username:"user",password:"password"}` continua em `APP_ENV=development` (Decisão F1-e). |
@@ -291,8 +313,8 @@ A interface segue a identidade visual institucional do governo federal brasileir
 
 ## Regras específicas de desenvolvimento
 
-- Reaproveitar o parser (`backend/app/main.py`, v10) em vez de reescrevê-lo. A versão anterior fica em `main_v9.deprecated.py` apenas como referência.
-- **Refactor de `backend/app/main.py` segue regras especiais** (preservar versão de desenvolvimento): não apagar funções/variáveis existentes, adicionar versão de produção logo abaixo da DEV com marcador `# FASE PROD`, comentar (não deletar) chamadas substituídas com marcador `# FASE DEV`. Cada mudança deve ser registrada em `docs/MAIN_PROD_CHANGES.md`. Razão: o parser evolui fora deste repositório e novas versões são puxadas periodicamente — mudanças destrutivas quebram o tracking. Detalhes em `planning/PLAN.md` → "Migração do Parser".
+- **Os arquivos do parser em `backend/app/leitor_pdf/` não recebem lógica de produção.** Toda adaptação de produção vai em `backend/app/parser_runner.py`. A única interface parser↔produção é `_solicitar_campo_humano` levantar `ParserCampoFaltante(campo, prefilled)` — isso é design do parser, mantido também no projeto de dev (`leitor_de_pdf/`). Atualizar o parser = copiar os arquivos novos de dev para `leitor_pdf/` (conferindo que o contrato `ParserCampoFaltante` segue valendo). Ver `docs/PARSER_RUNNER.md`. (O modelo antigo — editar `main.py` com marcadores `FASE DEV`/`FASE PROD` e registrar em `docs/MAIN_PROD_CHANGES.md` — foi substituído por esta estrutura em 2026-05-19, Opção A.)
+- `backend/app/main_v9.deprecated.py` é a versão histórica do parser, mantida só como referência (o sufixo `.deprecated.` torna o módulo não-importável).
 - A lógica de deduplicação deve viver no backend, não no frontend.
 - O banco é a fonte de verdade — a sessão do usuário não é.
 - Não usar `position: sticky` em `th` dentro de container `overflow-x: auto` — causa sobreposição entre cabeçalho e linhas. Usar `background` opaco no `th` como alternativa.

@@ -560,21 +560,21 @@ export default function App() {
             className={`topbar-link${currentView === "upload" ? " is-active" : ""}`}
             onClick={() => setCurrentView("upload")}
           >
-            Upload
+            Upload de Notas
           </button>
           <button
             type="button"
             className={`topbar-link${currentView === "notas" ? " is-active" : ""}`}
             onClick={() => setCurrentView("notas")}
           >
-            Notas
+            Consulta de Notas
           </button>
           <button
             type="button"
             className={`topbar-link${currentView === "contratos" ? " is-active" : ""}`}
             onClick={() => setCurrentView("contratos")}
           >
-            Contratos
+            Trocar Contrato
           </button>
         </nav>
         <div className="topbar-right">

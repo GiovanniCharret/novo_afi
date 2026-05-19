@@ -9,11 +9,15 @@ from pathlib import Path
 import pandas as pd
 
 
-SCRIPT_PATH = Path(__file__).resolve().parent / "main.py"
+# `parser_runner.py` é a camada de produção: roda o `leitor_pdf/main.py`
+# (idêntico ao projeto de desenvolvimento do parser) via runpy, em modo
+# non-interactive. Ver parser_runner.py e docs/PARSER_RUNNER.md.
+SCRIPT_PATH = Path(__file__).resolve().parent / "parser_runner.py"
 
-# F8a — exit codes definidos no bloco `if __name__ == "__main__":` de main.py.
-# Mantidos em sincronia: linha do main.py com `sys.exit(2)` é Tipo 1 (campo faltante),
-# `sys.exit(3)` é Tipo 2 (estrutura quebrada). Qualquer outro != 0 é falha genérica.
+# Exit codes definidos por `parser_runner.py`:
+# 2 = Tipo 1 (campo faltante → grava pending_rows.json → modal F8b);
+# 3 = Tipo 2 (erro estrutural — ValueError propagado do pipeline);
+# qualquer outro != 0 = falha genérica.
 EXIT_CODE_CAMPO_FALTANTE = 2
 EXIT_CODE_ESTRUTURA_QUEBRADA = 3
 
@@ -195,7 +199,7 @@ class LegacyParserAdapter:
         return spreadsheets[0] if spreadsheets else None
 
     def _read_pending_rows(self, output_dir: Path) -> dict | None:
-        """F8b: lê pending_rows.json escrito pelo main.py antes do exit 2.
+        """F8b: lê pending_rows.json escrito pelo parser_runner antes do exit 2.
 
         Retorna o payload `{original_filename, contexto, missing, prefilled}`
         ou None se o arquivo não existe / está corrompido. None disparar o
