@@ -721,8 +721,8 @@ export default function App() {
         <section className="card table-card">
           <div className="card-header">
             <div>
-              <p className="section-kicker">Consulta</p>
-              <h2 className="card-title">Anexo I</h2>
+              <p className="section-kicker">Notas enviadas</p>
+              <h2 className="card-title">Para conferir todas as notas, entre em Consulta de Notas</h2>
             </div>
             <div className="table-header-right">
               <span className="row-count">
@@ -743,7 +743,7 @@ export default function App() {
 
           {!entriesGlobal.loading && currentEntries.length === 0 ? (
             <div className="empty-state">
-              <p>Nenhuma nota carregada ainda. Envie PDFs para popular a base.</p>
+              <p>Aqui só aparecem as notas do seu upload</p>
             </div>
           ) : (
             <div className="table-wrapper">

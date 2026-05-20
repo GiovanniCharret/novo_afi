@@ -392,9 +392,6 @@ class ParserCampoFaltante(Exception):
     Carrega `prefilled` — o que o parser JÁ capturou desta NF — para que o
     preenchimento humano (modal do backend, ou um loop de terminal) mostre só
     o que falta de fato, sem o operador redigitar o que já foi extraído.
-
-    `main.py` importa esta classe (`from ocr_reader import ParserCampoFaltante`)
-    e a levanta também — é o canal único de "campo faltante" do parser.
     """
 
     def __init__(self, campo, prefilled=None):
@@ -406,11 +403,8 @@ class ParserCampoFaltante(Exception):
 def _solicitar_campo_humano(campo, contexto=""):
     """Sinaliza um campo obrigatório não extraído pelo OCR.
 
-    Antes chamava `input()` (revisão humana no terminal). Agora levanta
-    `ParserCampoFaltante`, carregando o que o pass de OCR já montou — o dict
-    `nf` que `_montar_nf_multiplos_passes` está preenchendo no frame chamador.
-    Quem trata a exceção (backend non-interactive ou um loop de terminal)
-    decide como pedir o valor ao operador.
+    Levanta `ParserCampoFaltante` carregando o que o pass de OCR já montou —
+    o dict `nf` que `_montar_nf_multiplos_passes` preenche no frame chamador.
     """
     import sys
     prefilled = {}

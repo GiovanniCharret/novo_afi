@@ -95,7 +95,9 @@ df_anexo1_consolidado = tabela_anexo1_modelo
 
 
 # Mapeia variáveis do pipeline (dicts canônicos) -> chave do campo na NF.
-# Usado por `_coletar_prefilled` para reunir o que já foi extraído.
+# CONGELADO — renomear estas variáveis sem atualizar este mapa faz o
+# `prefilled` degradar silenciosamente (modal pede campo já extraído).
+# Vide docs/orientacoes_dev.md, seção "Pontos de drift entre dev e prod".
 _PREFILL_METADADOS = {
     "cnpj_fornecedor": "cnpj",
     "nome_fornecedor": "fornecedor",
@@ -109,7 +111,6 @@ _PREFILL_TRANSACAO = ("descricao", "ncm", "quant", "preco_unitario", "valor")
 def _coletar_prefilled():
     """Varre os frames da pilha e reúne o que o pipeline já extraiu desta NF
     (metadados + 1ª transação) para o `prefilled` da `ParserCampoFaltante`.
-
     Tolerante: variável ainda não atribuída simplesmente não entra no dict.
     """
     import sys
@@ -134,10 +135,8 @@ def _coletar_prefilled():
 def _solicitar_campo_humano(campo, contexto):
     """Sinaliza um campo obrigatório não extraído pelo pipeline.
 
-    Antes chamava `input()` (revisão humana no terminal). Agora levanta
-    `ParserCampoFaltante` (definida em `ocr_reader.py`), carregando em
-    `prefilled` o que o parser já capturou desta NF — quem trata decide como
-    pedir o valor ao operador (backend non-interactive ou loop de terminal).
+    Levanta `ParserCampoFaltante` (definida em `ocr_reader.py`) carregando em
+    `prefilled` o que o parser já capturou desta NF.
     """
     raise ParserCampoFaltante(campo, _coletar_prefilled())
 
