@@ -154,7 +154,21 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
   const canSubmit = blankFields.length === 0 && Object.keys(fieldErrors).length === 0;
 
   function handleChange(field, value) {
-    setValues((prev) => ({ ...prev, [field]: value }));
+    setValues((prev) => {
+      const next = { ...prev, [field]: value };
+      // NF de serviço: preco_unitario sempre = valor (construct_transation
+      // do parser hardcoda essa igualdade em main.py:1552). Quando o operador
+      // digita `valor` e preco_unitario ainda está em branco, espelha
+      // automaticamente — ele pode sobrescrever depois se quiser.
+      if (
+        field === "valor"
+        && (prev.tipo_nota || "").trim().toLowerCase() === "service"
+        && !(prev.preco_unitario ?? "").trim()
+      ) {
+        next.preco_unitario = value;
+      }
+      return next;
+    });
     if (error) setError("");
   }
 

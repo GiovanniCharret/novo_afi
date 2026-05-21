@@ -129,20 +129,6 @@ def _coletar_prefilled():
             for k in _PREFILL_TRANSACAO:
                 if k not in prefilled and trans[0].get(k) not in (None, ""):
                     prefilled[k] = trans[0][k]
-        # Rota de SERVIÇO antes de construct_transation rodar — quando o
-        # pipeline aborta em 2.9 ou 2.10, `list_product_service_transation`
-        # ainda é None, mas dá pra completar manualmente:
-        #   - descricao: já está em `df_service_description` (local do laço)
-        #     se concatenar_conteudo_service_table teve sucesso.
-        #   - ncm = "não se aplica" e quant = "1": são defaults hardcoded
-        #     por construct_transation para serviço, então são pré-conhecidos.
-        if "descricao" not in prefilled:
-            desc = escopo.get("df_service_description")
-            if isinstance(desc, str) and desc.strip():
-                prefilled["descricao"] = desc.strip()
-        if escopo.get("invoice_type") == "service":
-            prefilled.setdefault("ncm", "não se aplica")
-            prefilled.setdefault("quant", "1")
         frame = frame.f_back
     return prefilled
 
@@ -2184,34 +2170,6 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
             #   df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
             #   df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
             #   df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
-
-            # 3.2 EARLY — rota de serviço extrai os metadados (cnpj/fornecedor/
-            # data/numero/tipo_nota) ANTES de descricao/valor. Sem isso, se
-            # `_solicitar_campo_humano` levantar em 2.9 ou 2.10, o `prefilled`
-            # da ParserCampoFaltante sai vazio (essas variáveis nem existiam
-            # no namespace). A seção 3.2 original (após o if-else) continua
-            # rodando — segunda execução é idempotente (mesmo input em
-            # cnpj_invoice/date_invoice/num_nf; consulta_nome_fornecedor cacheia).
-            cnpj_fornecedor = cnpj_invoice(df_product_service_desciption['primeiro_terco'])
-            if cnpj_fornecedor is None:
-                cnpj_digitado = _solicitar_campo_humano("cnpj", contexto=nome_saida)
-                cnpj_fornecedor = {'cnpj': cnpj_digitado}
-            try:
-                nome_fornecedor = consulta_nome_fornecedor(cnpj_fornecedor['cnpj'])
-            except Exception:
-                fornecedor_digitado = _solicitar_campo_humano("fornecedor", contexto=nome_saida)
-                nome_fornecedor = {'fornecedor': fornecedor_digitado}
-            try:
-                data_nota_fiscal = date_invoice(df_product_service_desciption['primeiro_terco'])
-            except (ValueError, IndexError):
-                data_digitada = _solicitar_campo_humano("data_emissao", contexto=nome_saida)
-                data_nota_fiscal = {'data_emissao': data_digitada}
-            try:
-                numero_nota_fiscal = num_nf(df_product_service_desciption['primeiro_terco'])
-            except ValueError:
-                numero_digitado = _solicitar_campo_humano("numero_nf", contexto=nome_saida)
-                numero_nota_fiscal = {'numero_nf': numero_digitado}
-            tipo_nota_fical = {'tipo_nota': invoice_type}
 
             # 2.9 - Transformar todo o conteúdo dentro de 'discriminação dos serviços'
             try:

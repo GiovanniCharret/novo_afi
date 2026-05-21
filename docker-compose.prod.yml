@@ -46,6 +46,11 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # description_cleaner — LLM que limpa a coluna descricao (cleaner.batch_clean
+      # em main.py). Sem chave, o cleaner cai no caminho no-op e devolve texto cru.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b}
+      LLM_WORKERS: ${LLM_WORKERS:-8}
       POPLLER_PATH: /usr/bin
       TESSERACT_CMD: ""
     volumes:

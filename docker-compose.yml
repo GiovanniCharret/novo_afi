@@ -23,6 +23,11 @@ services:
       SMTP_USER: atendimento@gerenciadornfs.com
       SMTP_PASSWORD: Enbpar1234!
       SMTP_FROM: atendimento@gerenciadornfs.com
+      # description_cleaner — LLM que limpa a coluna descricao (cleaner.batch_clean
+      # em main.py). Sem chave, o cleaner cai no caminho no-op e devolve texto cru.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-120b}
+      LLM_WORKERS: ${LLM_WORKERS:-8}
       POPLLER_PATH: /usr/bin
       TESSERACT_CMD: ""
     volumes:
