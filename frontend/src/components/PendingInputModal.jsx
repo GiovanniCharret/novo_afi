@@ -101,7 +101,7 @@ function fieldError(key, value) {
  * F8b — modal interativo de preenchimento de NF (Fase C1).
  *
  * Aberto quando o SSE emite `file_pending_input`. Bloqueia o batch até que
- * o operador clique "Salvar e continuar" (POST /resolve) ou "Cancelar batch"
+ * o operador clique "Salvar e continuar" (POST /resolve) ou "Interromper upload"
  * (POST /cancel). O backend só destrava o generator SSE após uma dessas
  * chamadas — o modal não fecha por ESC ou clique fora, intencionalmente.
  *
@@ -300,7 +300,7 @@ export default function PendingInputModal({ pending, onResolved, onCancelled }) 
                   onClick={() => setConfirmingCancel(true)}
                   disabled={submitting}
                 >
-                  Cancelar batch
+                  Interromper upload
                 </button>
               )}
             </div>
