@@ -21,6 +21,11 @@ SCRIPT_PATH = Path(__file__).resolve().parent / "parser_runner.py"
 EXIT_CODE_CAMPO_FALTANTE = 2
 EXIT_CODE_ESTRUTURA_QUEBRADA = 3
 
+# Campos-chave do nf_template usados para distinguir a planilha consolidada de
+# dumps auxiliares/debug que o parser também grava em output_dfs. Subconjunto
+# representativo — colunas de debug (pdfplumber: text/x0/top/...) nunca os têm.
+_NF_KEY_COLUMNS = {"numero_nf", "data_emissao", "cnpj", "valor"}
+
 
 @dataclass
 class ParserOutcome:
@@ -195,8 +200,34 @@ class LegacyParserAdapter:
         return entries
 
     def _find_output_spreadsheet(self, output_dir: Path) -> Path | None:
-        spreadsheets = sorted(output_dir.glob("*.xlsx"))
-        return spreadsheets[0] if spreadsheets else None
+        """Localiza a planilha consolidada (schema do nf_template) em output_dfs.
+
+        O parser pode gravar planilhas auxiliares/debug no MESMO diretório
+        (ex.: `*_nota_com_problema.xlsx`, dumps de tabela quando o flag de
+        debug `arquivo_investigado` casa com o nome do arquivo). Essas têm
+        colunas de pdfplumber (`text`, `x0`, `top`, ...) e NÃO o schema da NF —
+        ler uma delas por engano faz a consolidação falhar com "Data invalida"
+        (sem coluna `data_emissao`). Por isso não basta `glob("*.xlsx")[0]`.
+
+        Estratégia:
+          1. Nome canônico `tabela_de_lancamentos_consolidado_*.xlsx` (o que o
+             `main.py` grava no fim — ver docs/PARSER_RUNNER.md).
+          2. Fallback por schema: primeira `.xlsx` cujas colunas contenham os
+             campos-chave do nf_template — pula dumps de debug mesmo que o
+             nome canônico mude numa versão futura do parser.
+        """
+        consolidado = sorted(output_dir.glob("tabela_de_lancamentos_consolidado_*.xlsx"))
+        if consolidado:
+            return consolidado[0]
+
+        for path in sorted(output_dir.glob("*.xlsx")):
+            try:
+                colunas = set(pd.read_excel(path, nrows=0).columns)
+            except Exception:
+                continue
+            if _NF_KEY_COLUMNS.issubset(colunas):
+                return path
+        return None
 
     def _read_pending_rows(self, output_dir: Path) -> dict | None:
         """F8b: lê pending_rows.json escrito pelo parser_runner antes do exit 2.

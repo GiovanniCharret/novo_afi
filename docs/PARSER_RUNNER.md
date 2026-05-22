@@ -85,6 +85,27 @@ chave válida de `base_contratos.json`; `main.py` lê PDFs de `./nfs_analise`
 e grava o xlsx em `./output_dfs` (relativo ao cwd — o adapter roda o
 subprocess com cwd no temp dir).
 
+### Seleção da planilha consolidada em `output_dfs`
+
+`main.py` pode gravar **mais de uma** `.xlsx` em `output_dfs`: além da
+consolidada (`tabela_de_lancamentos_consolidado_<contrato>.xlsx`, escrita no
+fim), o parser dumpa planilhas auxiliares/debug quando o flag de
+desenvolvimento `arquivo_investigado` casa com o nome do arquivo (ex.:
+`primeiro_terco_nota_com_problema.xlsx`, `miolo_descricao_nota_com_problema.xlsx`).
+Essas têm colunas de pdfplumber (`text`, `x0`, `top`, …), **não** o schema da
+NF. Por isso `LegacyParserAdapter._find_output_spreadsheet` **não** pega
+`glob("*.xlsx")[0]` (que cairia num dump por ordem alfabética → consolidação
+falha com "Data invalida", sem coluna `data_emissao`). Ele:
+
+1. prefere o nome canônico `tabela_de_lancamentos_consolidado_*.xlsx`;
+2. como fallback, escolhe a primeira `.xlsx` cujas colunas contenham os
+   campos-chave do `nf_template` (`_NF_KEY_COLUMNS`), pulando dumps de debug.
+
+Regressão de 2026-05-22: introduzida ao trocar o parser por uma versão de dev
+com `arquivo_investigado = '199'` ativo (dump disparava em qualquer NF com
+"199" no nome). O fix vive no adapter (produção), não no parser — o parser tem
+o direito de gravar planilhas auxiliares no dir de dev.
+
 ## Como atualizar o parser (pull de uma versão nova de dev)
 
 Copie os arquivos novos para `backend/app/leitor_pdf/`. O `parser_runner.py`

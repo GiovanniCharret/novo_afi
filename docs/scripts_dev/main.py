@@ -26,7 +26,7 @@ from cnpj_lookup import consulta_nome_fornecedor
 from description_cleaner import cleaner
 
 # DEPURADOR
-arquivo_investigado = '105'
+arquivo_investigado = '199'
 
 # LLM — modo de limpeza da coluna descricao: "precisao" | "recall"
 MODO_LLM = "precisao"
@@ -96,10 +96,7 @@ df_anexo1_consolidado = tabela_anexo1_modelo
 
 
 # Mapeia variáveis do pipeline (dicts canônicos) -> chave do campo na NF.
-# CONGELADO — renomear estas variáveis sem atualizar este mapa faz o
-# `prefilled` degradar silenciosamente (modal pede campo já extraído).
-# Vide docs/orientacoes_dev.md, seção "Pontos de drift entre dev e prod".
-_PREFILL_METADADOS = {
+_PREFILL_METADADOS = {  # CONGELADO — vide docs/orientacoes_dev.md "Pontos de drift"
     "cnpj_fornecedor": "cnpj",
     "nome_fornecedor": "fornecedor",
     "data_nota_fiscal": "data_emissao",
@@ -129,6 +126,20 @@ def _coletar_prefilled():
             for k in _PREFILL_TRANSACAO:
                 if k not in prefilled and trans[0].get(k) not in (None, ""):
                     prefilled[k] = trans[0][k]
+        # Rota de SERVIÇO antes de construct_transation rodar — quando o
+        # pipeline aborta em 2.9 ou 2.10, `list_product_service_transation`
+        # ainda é None, mas dá pra completar manualmente:
+        #   - descricao: já está em `df_service_description` (local do laço)
+        #     se concatenar_conteudo_service_table teve sucesso.
+        #   - ncm = "não se aplica" e quant = "1": são defaults hardcoded
+        #     por construct_transation para serviço, então são pré-conhecidos.
+        if "descricao" not in prefilled:
+            desc = escopo.get("df_service_description")
+            if isinstance(desc, str) and desc.strip():
+                prefilled["descricao"] = desc.strip()
+        if escopo.get("invoice_type") == "service":
+            prefilled.setdefault("ncm", "não se aplica")
+            prefilled.setdefault("quant", "1")
         frame = frame.f_back
     return prefilled
 
@@ -1217,6 +1228,155 @@ def new_concatenar_por_ponteiro_filtra_tabela_produtos(df, contexto):
     return pd.DataFrame(saida)
 
 
+def new_concatenar_header_multilinha_filtra_tabela_produtos(df, contexto):
+    """
+    Especialista 3 — variação de new_concatenar... para DANFE NF-e com HEADER
+    MULTI-LINHA (modelo 55). Enfileirada por ÚLTIMO na cascata.
+
+    POR QUE EXISTE
+    --------------
+    new_concatenar detecta o header só na 1ª linha física (janela HEADER_TOL=5px) e
+    casa os aliases contra o texto dessa linha. Em DANFE onde o título de uma coluna
+    quebra em duas linhas físicas ('Valor' / 'unitário', 'Base cálc.' / 'ICMS'), a 2ª
+    linha fica fora da janela: o alias 'valor unit' não casa com 'Valor' sozinho, a
+    faixa da coluna UNIT nunca é mapeada, e a célula sai vazia. Além disso, o header
+    'Qtde.' das NF-e não contém o alias 'quant'. Resultado no caso âncora MICROPOWER
+    NF 199: A devolve QUANT e UNIT vazias e o orquestrador a rejeita; B
+    (concatenar...) levanta porque o preço unitário recebeu string_class 'Valor', não
+    'UNIT'. Vide docs/BUG_HEADER_MULTILINHA_MICROPOWER.md (opção B).
+
+    O QUE MUDA EM RELAÇÃO A new_concatenar (o resto é idêntico)
+    -----------------------------------------------------------
+    1. Fusão multi-linha: tokens descpt entre a 1ª linha do header e o 1º NCM são
+       anexados ao header virtual da coluna cuja faixa [esq, dir] contém seu
+       center_x ('Valor' + 'unitário' -> 'valor unitario', e o alias 'valor unit'
+       passa a casar).
+    2. Alias 'qtde' na lista de quant (DANFE NF-e imprime 'Qtde.').
+    3. Janela do produto começa após TODAS as linhas do header (top < 1º NCM), e não
+       só após a 1ª — senão a 2ª linha do header ('unitário') entraria no produto.
+    4. Corta o bloco pós-tabela (CÁLCULO DO ISSQN, DADOS ADICIONAIS, ...) antes de
+       montar a janela — em NF-e modelo 55 esse bloco fica dentro de tabela_produtos
+       e seus valores '0,00' seriam absorvidos pelas faixas das colunas.
+
+    Pura como as outras (sem _solicitar_campo_humano, sem raise por produto): em
+    qualquer shape não coberto devolve df vazio/incompleto e o orquestrador segue.
+    """
+    LINE_TOL = 2.0
+    HEADER_TOL = 5.0
+    # Marcadores de fim-de-tabela em NF-e modelo 55 — tudo abaixo do 1º deles que
+    # apareça DEPOIS dos produtos não é produto (ISSQN, dados adicionais).
+    BOUNDARY_KW = ['calculo do issqn', 'base de calculo do issqn',
+                   'dados adicionais', 'valor total dos servicos']
+
+    def _norm(s):
+        s = "" if pd.isna(s) else str(s)
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        return s.lower().strip()
+
+    df = df.copy().reset_index(drop=True)
+    if df.empty:
+        return pd.DataFrame(columns=['string_class', 'text'])
+
+    df = df.sort_values('top', kind='mergesort').reset_index(drop=True)
+    df['top_num'] = pd.to_numeric(df['top'], errors='coerce')
+    df['center_num'] = pd.to_numeric(df['center_x'], errors='coerce')
+    df['linha_id'] = (df['top_num'].diff().abs().fillna(0) > LINE_TOL).cumsum()
+    top_min = df['top_num'].min()
+
+    # 1º NCM (8 dígitos em qualquer coluna) — fronteira header/produtos.
+    so_digitos = df['text'].astype(str).str.replace(r'\D', '', regex=True)
+    mask_ncm_global = so_digitos.str.len() == 8
+    if not mask_ncm_global.any():
+        return pd.DataFrame(columns=['string_class', 'text'])
+    first_ncm_top = float(df.loc[mask_ncm_global, 'top_num'].min())
+
+    # 1. Header da 1ª linha física define as colunas (idêntico a new_concatenar).
+    df_header_l1 = df[(df['top_num'] <= top_min + HEADER_TOL) & (df['string_class'] == 'descpt')].copy()
+    todos_headers = df_header_l1.sort_values('center_num').reset_index(drop=True)
+    if todos_headers.empty:
+        return pd.DataFrame(columns=['string_class', 'text'])
+
+    limites = []
+    for i in range(len(todos_headers)):
+        row = todos_headers.iloc[i]
+        x0, x1 = float(row['x0']), float(row['x1'])
+        esq = (float(todos_headers.iloc[i - 1]['x1']) + x0) / 2 if i > 0 else 0.0
+        dir = (x1 + float(todos_headers.iloc[i + 1]['x0'])) / 2 if i < len(todos_headers) - 1 else x1 + 50.0
+        limites.append({'header_norm': _norm(row['text']), 'esq': esq, 'dir': dir})
+
+    # 2. Fusão multi-linha — diferença #1 para new_concatenar.
+    df_header_l2 = df[(df['top_num'] > top_min + HEADER_TOL)
+                      & (df['top_num'] < first_ncm_top)
+                      & (df['string_class'] == 'descpt')]
+    for _, tok in df_header_l2.iterrows():
+        cx = float(tok['center_num'])
+        for lim in limites:
+            if lim['esq'] <= cx <= lim['dir']:
+                lim['header_norm'] = (lim['header_norm'] + ' ' + _norm(tok['text'])).strip()
+                break
+
+    # 'qtde' incluído — diferença #2.
+    aliases = {
+        'descricao': ['descricao do produto', 'discriminacao do produto', 'detalhe do produto'],
+        'ncm':       ['ncm/sh', 'ncm sh', 'ncm'],
+        'quant':     ['quantidade', 'qtde', 'quant'],
+        'unit':      ['valor unit', 'preco unit', 'vlr unit', 'vl unit', 'unit'],
+        'price':     ['valor total', 'vl total', 'vlr total', 'total'],
+    }
+    faixas = {}
+    for campo, alias_list in aliases.items():
+        for alias in alias_list:
+            for lim in limites:
+                if alias in lim['header_norm']:
+                    faixas[campo] = (lim['esq'], lim['dir'])
+                    break
+            if campo in faixas:
+                break
+
+    if 'ncm' not in faixas or 'descricao' not in faixas:
+        return pd.DataFrame(columns=['string_class', 'text'])
+    _, dir_desc = faixas['descricao']
+    faixas['descricao'] = (0.0, dir_desc)
+
+    # 3. Corta o bloco pós-tabela antes da janela — diferença #4.
+    txt_norm = df['text'].astype(str).map(_norm)
+    mask_boundary = (df['top_num'] > first_ncm_top) & txt_norm.apply(
+        lambda t: any(k in t for k in BOUNDARY_KW))
+    if mask_boundary.any():
+        top_boundary = float(df.loc[mask_boundary, 'top_num'].min())
+        df = df[df['top_num'] < top_boundary].reset_index(drop=True)
+        so_digitos = df['text'].astype(str).str.replace(r'\D', '', regex=True)
+
+    # 4. NCM-âncora restrito à faixa NCM + janela por produto.
+    ncm_x0, ncm_x1 = faixas['ncm']
+    mask_ncm = (so_digitos.str.len() == 8) & df['center_num'].between(ncm_x0, ncm_x1)
+    linhas_ancora = sorted(df.loc[mask_ncm, 'linha_id'].unique().tolist())
+    if not linhas_ancora:
+        return pd.DataFrame(columns=['string_class', 'text'])
+
+    # Janela começa após TODAS as linhas do header (top < 1º NCM) — diferença #3.
+    cabecalho_linha = int(df.loc[df['top_num'] < first_ncm_top, 'linha_id'].max())
+    max_linha = int(df['linha_id'].max())
+    saida = []
+    for i, L in enumerate(linhas_ancora):
+        inicio = (linhas_ancora[i - 1] + 1) if i > 0 else (cabecalho_linha + 1)
+        fim = linhas_ancora[i + 1] if i + 1 < len(linhas_ancora) else (max_linha + 1)
+        janela = df[df['linha_id'].between(inicio, fim - 1)]
+        produto = {}
+        for campo, faixa in faixas.items():
+            esq, dir = faixa
+            tokens = janela.loc[janela['center_num'].between(esq, dir), 'text'].astype(str).tolist()
+            produto[campo] = ' '.join(t.strip() for t in tokens if t and t.strip())
+        saida.append({'string_class': 'Descrição do produto', 'text': produto['descricao']})
+        saida.append({'string_class': 'NCM/SH',                'text': produto['ncm']})
+        saida.append({'string_class': 'QUANT',                 'text': produto.get('quant', '')})
+        saida.append({'string_class': 'UNIT',                  'text': produto.get('unit', '')})
+        saida.append({'string_class': 'price',                 'text': produto.get('price', '')})
+
+    return pd.DataFrame(saida)
+
+
 # =============================================================================
 # CASCATA DE ESPECIALISTAS PARA EXTRAÇÃO DA TABELA DE PRODUTOS
 # =============================================================================
@@ -1282,11 +1442,13 @@ def _diagnosticar_tabela_produtos(df):
 
 # Ordem importa: o primeiro especialista que produzir tabela íntegra vence.
 # new_concatenar cobre o caso 'feliz' (header bem definido, NCM tokenizado).
-# concatenar (antigo) cobre NFs onde o new falha — header multi-linha, NCM
-# colado à descrição, etc.
+# concatenar (antigo) cobre NFs onde o new falha — NCM colado à descrição, etc.
+# new_concatenar_header_multilinha cobre DANFE NF-e com header de coluna em duas
+# linhas físicas ('Valor'/'unitário') + bloco ISSQN dentro da tabela (MICROPOWER NF 199).
 ESPECIALISTAS_TABELA_PRODUTOS = [
     new_concatenar_por_ponteiro_filtra_tabela_produtos,
     concatenar_por_ponteiro_filtra_tabela_produtos,
+    new_concatenar_header_multilinha_filtra_tabela_produtos,
 ]
 
 
@@ -2096,10 +2258,10 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
             # fracionando_nf_produto() localiza os cortes por palavras-chave em 'text',
             # sem depender de string_class refinada — pode rodar sobre df_classes_concatenadas.
             df_product_service_desciption = fracionando_nf_produto(df_classes_concatenadas)
-            #if arquivo_investigado in nome_saida:
-            #    df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
-            #    df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
-            #    df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
+            if arquivo_investigado in nome_saida:
+                df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
+                df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
+                df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
             
             # 2.5.2 - Refina APENAS o primeiro terço (metadados: data, CNPJ, total da nota).
             # refine_table_classification usa todos os descpt como âncoras — adequado aqui
@@ -2170,6 +2332,28 @@ for seq, arquivo in enumerate(tqdm(arquivos_pdf)):
             #   df_product_service_desciption['primeiro_terco'].to_excel(f'{SAIDA_RAIZ}/primeiro_terco_nota_com_problema.xlsx')
             #   df_product_service_desciption['tabela_produtos'].to_excel(f'{SAIDA_RAIZ}/miolo_descricao_nota_com_problema.xlsx')
             #   df_product_service_desciption['ultimo_terco'].to_excel(f'{SAIDA_RAIZ}/ultimo_terco_nota_com_problema.xlsx')
+
+            # 3.2 EARLY — metadados ANTES de 2.9/2.10 (vide docs/orientacoes_dev.md, "Pontos de drift").
+            # _solicitar_campo_humano levanta ParserCampoFaltante; ter os metadados no namespace
+            # antes de 2.9/2.10 garante que o prefilled os carregue quando a exceção subir em 2.9/2.10.
+            # A seção 3.2 (após o if/else) roda de novo — idempotente no caminho de sucesso, e em
+            # caso de falha aqui a exceção curto-circuita antes de chegar lá.
+            cnpj_fornecedor = cnpj_invoice(df_product_service_desciption['primeiro_terco'])
+            if cnpj_fornecedor is None:
+                cnpj_fornecedor = {'cnpj': _solicitar_campo_humano("cnpj", contexto=nome_saida)}
+            try:
+                nome_fornecedor = consulta_nome_fornecedor(cnpj_fornecedor['cnpj'])
+            except Exception:
+                nome_fornecedor = {'fornecedor': _solicitar_campo_humano("fornecedor", contexto=nome_saida)}
+            try:
+                data_nota_fiscal = date_invoice(df_product_service_desciption['primeiro_terco'])
+            except (ValueError, IndexError):
+                data_nota_fiscal = {'data_emissao': _solicitar_campo_humano("data_emissao", contexto=nome_saida)}
+            try:
+                numero_nota_fiscal = num_nf(df_product_service_desciption['primeiro_terco'])
+            except ValueError:
+                numero_nota_fiscal = {'numero_nf': _solicitar_campo_humano("numero_nf", contexto=nome_saida)}
+            tipo_nota_fical = {'tipo_nota': invoice_type}
 
             # 2.9 - Transformar todo o conteúdo dentro de 'discriminação dos serviços'
             try:

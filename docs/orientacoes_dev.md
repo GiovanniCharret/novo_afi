@@ -111,6 +111,20 @@ def _coletar_prefilled():
             for k in _PREFILL_TRANSACAO:
                 if k not in prefilled and trans[0].get(k) not in (None, ""):
                     prefilled[k] = trans[0][k]
+        # Rota de SERVIÇO antes de construct_transation rodar — quando o
+        # pipeline aborta em 2.9 ou 2.10, `list_product_service_transation`
+        # ainda é None, mas dá pra completar manualmente:
+        #   - descricao: já está em `df_service_description` (local do laço)
+        #     se concatenar_conteudo_service_table teve sucesso.
+        #   - ncm = "não se aplica" e quant = "1": são defaults hardcoded
+        #     por construct_transation para serviço, então são pré-conhecidos.
+        if "descricao" not in prefilled:
+            desc = escopo.get("df_service_description")
+            if isinstance(desc, str) and desc.strip():
+                prefilled["descricao"] = desc.strip()
+        if escopo.get("invoice_type") == "service":
+            prefilled.setdefault("ncm", "não se aplica")
+            prefilled.setdefault("quant", "1")
         frame = frame.f_back
     return prefilled
 
@@ -124,7 +138,59 @@ def _solicitar_campo_humano(campo, contexto):
     raise ParserCampoFaltante(campo, _coletar_prefilled())
 ```
 
-### ⚠️ Manutenção do `_PREFILL_METADADOS`
+## Pontos de drift entre dev e prod
+
+Mudanças que o backend aplicou no `main.py` de produção e que **precisam ser
+replicadas no `main.py` de desenvolvimento** para o `prefilled` funcionar — sem
+elas o modal degrada (pede campos que o parser já tinha condições de extrair).
+O comentário `# CONGELADO` em `_PREFILL_METADADOS` aponta para esta seção.
+
+### Reorder "3.2 EARLY" — metadados antes de descrição/valor (rota de serviço)
+
+Na rota de serviço (o `else` de `if invoice_type == 'product'`), os metadados
+`cnpj_fornecedor`, `nome_fornecedor`, `data_nota_fiscal`, `numero_nota_fiscal`
+e `tipo_nota_fical` devem ser extraídos **antes** da seção 2.9 (`descricao`) e
+2.10 (`valor`). O motivo: se `_solicitar_campo_humano` levantar a exceção em
+2.9 ou 2.10, `_coletar_prefilled` varre os frames atrás dessas variáveis — e se
+elas ainda não foram atribuídas, o `prefilled` sai vazio e o operador redigita
+tudo. Extrair os metadados primeiro garante que eles estejam no namespace no
+momento em que a exceção sobe.
+
+A seção 3.2 original (após o bloco `if/else`) **continua existindo e roda de
+novo** — a segunda execução é idempotente: `cnpj_invoice`/`date_invoice`/
+`num_nf` recebem o mesmo input e `consulta_nome_fornecedor` cacheia. Ou seja,
+o bloco "3.2 EARLY" é um adiantamento, não uma substituição.
+
+Estrutura esperada do `else` de serviço (resumida):
+
+```python
+else:  # rota de serviço
+    # ... fracionando_nf_servico ...
+
+    # 3.2 EARLY — metadados ANTES de 2.9/2.10:
+    cnpj_fornecedor = cnpj_invoice(...)
+    if cnpj_fornecedor is None:
+        cnpj_fornecedor = {'cnpj': _solicitar_campo_humano("cnpj", contexto=nome_saida)}
+    try:
+        nome_fornecedor = consulta_nome_fornecedor(cnpj_fornecedor['cnpj'])
+    except Exception:
+        nome_fornecedor = {'fornecedor': _solicitar_campo_humano("fornecedor", contexto=nome_saida)}
+    try:
+        data_nota_fiscal = date_invoice(...)
+    except (ValueError, IndexError):
+        data_nota_fiscal = {'data_emissao': _solicitar_campo_humano("data_emissao", contexto=nome_saida)}
+    try:
+        numero_nota_fiscal = num_nf(...)
+    except ValueError:
+        numero_nota_fiscal = {'numero_nf': _solicitar_campo_humano("numero_nf", contexto=nome_saida)}
+    tipo_nota_fical = {'tipo_nota': invoice_type}
+
+    # 2.9 - descricao  → pode levantar "descricao"
+    # 2.10 - valor      → pode levantar "valor"  (aqui o prefilled já tem os metadados)
+    # 2.11 - construct_transation(...)
+```
+
+### Manutenção do `_PREFILL_METADADOS`
 
 `_coletar_prefilled` encontra os campos extraídos pelos **nomes das variáveis**
 do pipeline. Se um refactor renomear `cnpj_fornecedor`, `data_nota_fiscal`,
@@ -132,6 +198,12 @@ do pipeline. Se um refactor renomear `cnpj_fornecedor`, `data_nota_fiscal`,
 `list_product_service_transation`, **atualize `_PREFILL_METADADOS` /
 `_PREFILL_TRANSACAO` no mesmo commit**. Se esquecer, o campo simplesmente não
 entra no `prefilled` (degrada — o modal pede ele de novo —, não quebra).
+
+O bloco de **rota de serviço** dentro de `_coletar_prefilled` (o que lê
+`df_service_description` e aplica `ncm="não se aplica"` / `quant="1"` quando
+`invoice_type == "service"`) depende de dois nomes adicionais:
+`df_service_description` (local do laço de serviço) e `invoice_type`. Se algum
+for renomeado, atualize o bloco junto.
 
 ## Demais premissas que o `parser_runner` assume
 
@@ -152,6 +224,14 @@ backend para ajustar o `parser_runner.py`):
       `_solicitar_campo_humano` que a levanta.
 - [ ] `main.py` importa `ParserCampoFaltante` de `ocr_reader` e o
       `_solicitar_campo_humano` a levanta via `_coletar_prefilled`.
+- [ ] `_coletar_prefilled` inclui o bloco de rota de serviço (`df_service_description`
+      → descricao + defaults `ncm`/`quant` quando `invoice_type == "service"`).
+- [ ] Rota de serviço extrai os metadados **antes** de 2.9/2.10 (reorder "3.2 EARLY").
 - [ ] `_PREFILL_METADADOS` reflete os nomes atuais das variáveis do pipeline.
 - [ ] Nenhuma lógica de produção (argparse / exit codes / flags) foi adicionada.
+- [ ] Flag de debug `arquivo_investigado` desligado (string que **não** casa com
+      nenhum nome de arquivo). Com `'199'` ou `''`, o parser dumpa planilhas
+      auxiliares em `output_dfs` — a produção tolera (seleciona a consolidada
+      por nome/schema, ver docs/PARSER_RUNNER.md), mas é IO desperdiçado e
+      polui o dir de debug. Foi a causa da regressão de 2026-05-22.
 - [ ] Novo arquivo de dados lido por `__file__`? Avise o backend.
