@@ -274,6 +274,8 @@ O frontend é uma SPA cujo núcleo ainda é monolítico: upload, tabela_persisti
 - `NfsBrowser.jsx` *(F3b)* — aba "Notas" para consulta filtrada de NFs por contrato, com dropdown, filtros (busca livre, data, valor, tipo), tabela e footer com soma BRL. Inclui coluna PDF com botões 👁/⬇ (F4) — disabled para NFs pré-F4 sem `upload_file_id`.
 - `ContratosBrowser.jsx` *(F3, 2026-05-13)* — aba "Contratos", browser da base estática. Filtros: busca livre `q`, selects de UF/Tipo/Tranche (derivados do payload no mount), toggles "apenas com valor definido" e "incluir inativos". **Clique em linha dispara `POST /api/session/contrato` + leva para Upload** (Decisão F3-c revisada em 2026-05-13). Linhas inativas têm cursor `not-allowed`.
 - `TotalizadoresCard.jsx` *(F6, 2026-05-13)* — strip compacto horizontal (não card) que aparece entre filter bar e tabela na aba Notas. Grid 3 colunas: contagem de NFs distintas + barra `vs. contrato` + barra `vs. CDE` (com `(Z% do contrato)` na meta line). Tom discreto — não compete por atenção. Empty state inline quando `valor_contrato = 0`.
+- `PendingInputModal.jsx` *(F8b)* — modal que abre quando o SSE emite `file_pending_input` (parser saiu com exit 2, campo obrigatório faltando). Split iframe (PDF original à esquerda) + formulário (campos com prefill à direita). Botões "Confirmar e inserir" → `POST /api/uploads/pending/{id}/resolve` ou "Cancelar" → `/cancel`. Bloqueia o batch SSE até desfecho.
+- `LiberacoesView.jsx` *(brainstorm 2026-05-25)* — **demo estática** da 4ª view "Liberações". Sem fetch — dados ilustrativos hardcoded no topo do arquivo. Cards "Estado atual" + "Precedência" + timeline de 7 marcos. Botão "Solicitar liberação →" mostra `alert()` apontando pro brainstorm em `design pagina liberacoes/F-liberacoes.html` (pasta gitignored). Promover pra feature real exige o spike de integração Eletrobras (Avanço Físico) descrito na seção 07 do mesmo HTML.
 
 Funções utilitárias em `frontend/src/lib/`:
 
@@ -282,7 +284,7 @@ Funções utilitárias em `frontend/src/lib/`:
 - `ufNomes.js` *(2026-05-13)* — mapa UF → nome completo + constantes `SEM_UF_KEY`/`SEM_UF_NOME`. Usado pelo ContratoSelector e ContratosBrowser.
 - `parseBR.js` *(2026-05-13, F6)* — converte string BR (`"1.234,56"`) para Number. Reuso entre NfsBrowser (soma do footer da tabela) e App.jsx (footer do Anexo I).
 
-App.jsx tem state `currentView ∈ {"upload","notas","contratos"}` que comuta entre as três telas via 3 links no topbar (não há menu de tabs — removido em 2026-05-12 por poluição visual). Contrato pode ser trocado **sem logout** clicando numa linha do ContratosBrowser.
+App.jsx tem state `currentView ∈ {"upload","notas","contratos","liberacoes"}` que comuta entre as quatro telas via 4 links no topbar (não há menu de tabs — removido em 2026-05-12 por poluição visual). A 4ª tela `liberacoes` foi adicionada em 2026-05-25 como demo estática do brainstorm — ver `LiberacoesView.jsx` acima. Contrato pode ser trocado **sem logout** clicando numa linha do ContratosBrowser.
 
 ### Cache de sessão por contrato (F3-c upgrade, 2026-05-13)
 

@@ -9,13 +9,15 @@
 ## Estrutura
 
 - `src/main.jsx` — ponto de entrada do frontend.
-- `src/App.jsx` — **SPA cujo núcleo continua monolítico**: login, upload, tabela_persistida, status badges, SSE consumer. State `currentView ∈ {"upload","notas","contratos"}` comuta entre as três telas via links no topbar. Mantém Map `contratoSlices` para cache de sessão por contrato (F3-c, 2026-05-13).
+- `src/App.jsx` — **SPA cujo núcleo continua monolítico**: login, upload, tabela_persistida, status badges, SSE consumer. State `currentView ∈ {"upload","notas","contratos","liberacoes"}` comuta entre as quatro telas via links no topbar. Mantém Map `contratoSlices` para cache de sessão por contrato (F3-c, 2026-05-13).
 - `src/components/`
   - `AuthScreen.jsx` *(F1, 2026-05-13/14)* — state machine com 7 sub-views: `login`, `register`, `confirm-needed`, `confirm-result`, `forgot`, `forgot-sent`, `reset`. Detecta `?confirm=X` / `?reset=X` na URL no mount. `IS_LOCAL_DEV` flag mostra hint discreta com `dev@local`/`password` quando hostname é `localhost`.
   - `ContratoSelector.jsx` *(F2)* — tela intermediária pós-login. Dois níveis: Estado → Contrato.
   - `NfsBrowser.jsx` *(F3b)* — aba "Notas". Dropdown de contrato + filtros + tabela + footer com soma BRL. Coluna PDF com botões 👁/⬇ (F4). Strip `TotalizadoresCard` entre filtros e tabela.
   - `ContratosBrowser.jsx` *(F3)* — aba "Contratos". Browser da base estática com filtros (`q`, UF, tipo, tranche, toggles). Clique em linha troca o contrato ativo e leva para Upload.
   - `TotalizadoresCard.jsx` *(F6, 2026-05-13)* — strip horizontal compacto com 3 colunas (NFs distintas | barra vs. contrato | barra vs. CDE). Usado dentro do NfsBrowser. Fetch único em `/api/contratos/{id}/totais`.
+  - `PendingInputModal.jsx` *(F8b)* — modal de preenchimento manual disparado quando o SSE emite `file_pending_input`. Split iframe do PDF + form com campos prefilled. Resolve via `POST /api/uploads/pending/{id}/resolve` ou `/cancel`; bloqueia o batch até desfecho.
+  - `LiberacoesView.jsx` *(brainstorm 2026-05-25)* — **demo estática** da 4ª view "Liberações". Sem fetch — dados ilustrativos hardcoded. Cards "Estado atual" + "Precedência" + timeline dos 7 marcos do Manual LpT (Tabela 1). Botão "Solicitar liberação →" é inerte (mostra `alert()`). Wireframe original em `design pagina liberacoes/F-liberacoes.html` (pasta gitignored). Promover pra feature real exige spike de integração Eletrobras descrito na seção 07 do brainstorm.
 - `src/lib/`
   - `exportExcel.js` — 2 variantes: `exportEntriesCompletas` (Upload, 11 colunas) e `exportNfsResumo` (Notas, 7 colunas).
   - `describeContrato.js` — formato canônico `SIGLA · tranche · tipo (numero)` usado em topbar, dropdown Notas, tooltip Contratos.
