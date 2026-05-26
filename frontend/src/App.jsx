@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AuthScreen from "./components/AuthScreen";
 import ContratoSelector from "./components/ContratoSelector";
 import ContratosBrowser from "./components/ContratosBrowser";
+import LiberacoesView from "./components/LiberacoesView";
 import NfsBrowser from "./components/NfsBrowser";
 import PendingInputModal from "./components/PendingInputModal";
 import { describeContrato } from "./lib/describeContrato";
@@ -576,6 +577,13 @@ export default function App() {
           >
             Trocar Contrato
           </button>
+          <button
+            type="button"
+            className={`topbar-link${currentView === "liberacoes" ? " is-active" : ""}`}
+            onClick={() => setCurrentView("liberacoes")}
+          >
+            Liberações
+          </button>
         </nav>
         <div className="topbar-right">
           {/* F2 — contrato ativo na topbar. F3 (2026-05-12): mesmo formato do dropdown da Notas. */}
@@ -606,6 +614,8 @@ export default function App() {
             }}
           />
         )}
+
+        {currentView === "liberacoes" && <LiberacoesView />}
 
         {currentView === "upload" && (<>
         <div className={`upload-row${hasResults ? " upload-row--split" : ""}`}>

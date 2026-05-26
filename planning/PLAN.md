@@ -49,7 +49,7 @@ Violar uma aresta acima é defeito, não escolha — qualquer entrega de F2 sem 
 6. F3  ✅ browser de contratos + cache por contrato      (concluída 2026-05-13)
 7. F6  ✅ totalizadores                                  (concluída 2026-05-13)
 8. F1  ✅ login real + e-mail + reset + dev seed         (concluída 2026-05-14)
-9. F8b — nf_pending + modal + schema NOT NULL            (em curso — Fase A aprovada 2026-05-14)
+9. F8b ✅ nf_pending + modal + schema NOT NULL           (concluída — migration 0005, registry in-memory, recovery cross-reboot)
 10. F7  — e-mails transacionais                          (deferido — F7 não é crítico segundo dono)
 ```
 

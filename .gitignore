@@ -81,3 +81,6 @@ desktop.ini
 # --- Logs ---
 *.log
 logs/
+
+# --- Material de design / brainstorm (não vai pro repo) ---
+design pagina liberacoes/

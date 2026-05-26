@@ -9,6 +9,7 @@ Documentation lives in `planning/` and `docs/`:
 - `planning/DEFINITION_OF_DONE.md` — checklist transversal de conclusão (testes, schema, build, docs, critérios negativos, aprovação humana). Aplicada na Fase D de toda feature.
 - `planning/ADVERSARIAL_REVIEW.md` — revisão adversarial de `planning/` (ambiguidades, lacunas, brechas que permitem violar o espírito das regras). Consultar ao redigir/alterar regras de processo.
 - `planning/PENDING_DECISIONS.md` — itens **explicitamente deferidos** para decisão institucional futura (não decisões em aberto neste ciclo).
+- `bug_fix/` — artefatos de bugs em investigação (PDFs problemáticos, screenshots, planilhas comparativas). Convencionado em `planning/PROJECT_BUILDING.md`.
 - `docs/PARSER_RUNNER.md` — **arquitetura do parser**: `backend/app/leitor_pdf/` (arquivos do projeto de desenvolvimento do parser) + `backend/app/parser_runner.py` (camada de produção). Ler antes de tocar no parser.
 - `docs/orientacoes_dev.md` — **instruções para o projeto de dev do parser** (`leitor_de_pdf/`): o que `main.py` e `ocr_reader.py` precisam expor (`ParserCampoFaltante`) para rodar em produção aqui. (`docs/MAIN_PROD_CHANGES.md` é o changelog do modelo antigo — editar `main.py` com marcadores — agora obsoleto.)
 - `planning/BEHAVIORAL_GUIDELINES.md` — process/behavior rules; **always apply**.
@@ -45,9 +46,10 @@ A nova versão precisa de uma área para seleção de contratos, uma área de co
 cd frontend
 npm install
 npm run build   # emite os assets em backend/app/static
+npm run dev     # HMR via Vite (porta 5173) — não substitui o build servido pelo FastAPI
 ```
 
-O build emite `assets/index-<hash>.js` + `assets/index-<hash>.css` com hash de conteúdo no nome (vite.config.js usa `[name]-[hash]` no rollupOptions). O `index.html` gerado referencia os nomes com hash automaticamente — cada build muda a URL do bundle, então o navegador nunca serve um bundle velho do cache após um deploy. Como o FastAPI serve o build estático, **alterações em `frontend/src/` só aparecem após `npm run build`**. O backend roda com `--reload`, então mudanças em Python recarregam automaticamente.
+O build emite `assets/index-<hash>.js` + `assets/index-<hash>.css` com hash de conteúdo no nome (vite.config.js usa `[name]-[hash]` no rollupOptions). O `index.html` gerado referencia os nomes com hash automaticamente — cada build muda a URL do bundle, então o navegador nunca serve um bundle velho do cache após um deploy. Como o FastAPI serve o build estático em produção/Docker, **alterações em `frontend/src/` só aparecem na app servida pelo backend após `npm run build`**. Para iteração rápida de UI, `npm run dev` sobe o Vite dev server com HMR — chamadas à API precisam apontar para o backend em `localhost:8000` (configurar proxy no `vite.config.js` se ainda não estiver). O backend roda com `--reload`, então mudanças em Python recarregam automaticamente.
 
 ### Testes do backend
 
@@ -126,7 +128,7 @@ browser
 2. O backend salva cada PDF em `backend/banco_de_nf/<batch_id>/<stored_filename>`. **Após F4**: `stored_filename` é UUID4 + `.pdf` gerado por `save_uploaded_pdf` (separado de `original_filename`); ambos vão pro `UploadFileRecord`.
 3. **Após F4**: `UploadFileRecord` é criado upfront com `status="processando"` e `db.flush()` antes do parser rodar, para que `nf_entries.upload_file_id` (FK) tenha um id válido durante a inserção das linhas. O status final é setado depois.
 4. `LegacyParserAdapter.parse_pdf_bytes(filename, content, debug_dir, contrato_numero)` invoca `backend/app/parser_runner.py` via subprocess (timeout 180s) com flags `--non-interactive --contrato N --input-dir X --output-dir Y`. O `parser_runner` roda o `leitor_pdf/main.py` via `runpy` em modo non-interactive (ver `docs/PARSER_RUNNER.md`). Adapter classifica `process.returncode`: 2 = campo faltante (Tipo 1), 3 = erro estrutural (Tipo 2), outros != 0 = falha genérica. Exit 2 vira uma `nf_pending` + evento SSE `file_pending_input` + modal de preenchimento (em vez de `erro_parsing`).
-5. O parser gera um `.xlsx` em `output_dfs/` que é lido como DataFrame. Os artefatos (`log.json`, `output_dfs/`, `stdout.txt`, `stderr.txt`) são copiados para `backend/app/parser_debug/<batch_id>/<arquivo>/` para diagnóstico.
+5. O parser gera um `.xlsx` em `output_dfs/` que é lido como DataFrame. **Seleção da planilha** (`LegacyParserAdapter._find_output_spreadsheet`, regressão fixada em 2026-05-22): o parser pode gravar mais de um xlsx em `output_dfs/` quando rodando uma versão de dev com `arquivo_investigado` ativo (dumps de debug com colunas do pdfplumber, não do schema da NF). O adapter prefere o nome canônico `tabela_de_lancamentos_consolidado_*.xlsx` e, em fallback, escolhe a primeira `.xlsx` cujas colunas contenham as chaves do `nf_template` (`_NF_KEY_COLUMNS`) — pegar `glob("*.xlsx")[0]` faz a consolidação falhar com "Data invalida". Ver `docs/PARSER_RUNNER.md`. Os artefatos (`log.json`, `output_dfs/`, `stdout.txt`, `stderr.txt`) são copiados para `backend/app/parser_debug/<batch_id>/<arquivo>/` para diagnóstico.
 6. Cada linha do DataFrame é inserida em `nf_entries` se a `business_key` for inédita; caso contrário, conta como `duplicado`. **Após F2/F4**: novas `nf_entries` recebem `contrato_id` (da sessão) e `upload_file_id` (do record criado no passo 3).
 7. O resultado por arquivo (`processado`, `duplicado`, `rejeitado`, `erro_parsing`) atualiza o `UploadFileRecord` existente — não cria um novo.
 
