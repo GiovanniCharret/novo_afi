@@ -603,7 +603,7 @@ export default function App() {
 
       <main className="main-content">
         {currentView === "notas" && (
-          <NfsBrowser selectedContratoId={selectedContrato?.id} />
+          <NfsBrowser selectedContrato={selectedContrato} />
         )}
 
         {currentView === "contratos" && (

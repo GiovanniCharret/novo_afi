@@ -986,39 +986,10 @@ tr:hover td { background: #f8fbff; }
 /* ── F3b: NfsBrowser ─────────────────────────────────────── */
 
 .nfs-card { padding: 0; overflow: hidden; }
-.nfs-card .card-header { padding: 20px 22px 0; margin-bottom: 12px; }
+.nfs-card .card-header { padding: 28px 24px 8px; margin-bottom: 18px; }
+.nfs-card .section-kicker { margin-bottom: 6px; }
+.nfs-card .nfs-filter-bar { padding-top: 16px; }
 
-.nfs-picker {
-  padding: 14px 22px;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-light);
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.nfs-picker label {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-.nfs-picker select {
-  flex: 1;
-  min-width: 280px;
-  max-width: 560px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  font-family: inherit;
-  background: #fff;
-  color: var(--text-primary);
-}
-.nfs-picker select:focus {
-  outline: none;
-  border-color: var(--blue);
-  box-shadow: 0 0 0 2px rgba(27,128,196,0.15);
-}
 .nfs-filter-bar {
   display: flex;
   flex-wrap: wrap;
