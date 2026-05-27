@@ -4,7 +4,14 @@
  * Dados ilustrativos hardcoded — não consulta backend. Substitui o wireframe
  * da seção 04 de `design pagina liberacoes/F-liberacoes.html`. Para virar
  * feature real, ver as seções 06 (schema) e 09 (próximos passos) do mesmo HTML.
+ *
+ * O drawer "Solicitar liberação" (3 passos) é interativo na demo mas não
+ * conversa com o backend — botão Baixar/Enviar disparam stubs.
  */
+import { useState } from "react";
+import SolicitarLiberacaoDrawer from "./SolicitarLiberacaoDrawer.jsx";
+
+const CONTRATO_CODIGO = "ECFS-123-2024";
 
 const ESTADO_ATUAL = {
   comprovado_pct: 47,
@@ -48,11 +55,14 @@ const PARCELAS = [
   },
   {
     nome: "3ª Liberação",
+    numero: 3,
+    pctContrato: "20% do contrato",
     valor: "R$ 2.500.000",
     gatilho: "Fin/Fis 30%",
     status: "ready",
     meta: "Fin 47% ≥ 30% ✓ · Fís 35% ≥ 30% ✓ · Precedência ✓",
     actionLabel: "Solicitar liberação →",
+    action: "solicitar",
   },
   {
     nome: "4ª Liberação",
@@ -62,22 +72,42 @@ const PARCELAS = [
     meta: "Falta 3% financeiro · 15% físico",
   },
   {
-    nome: "5ª · 6ª · Final",
-    valor: null,
+    nome: "5ª Liberação",
+    valor: "R$ 1.250.000",
+    gatilho: "Fin/Fis 60%",
+    status: "blocked",
+    meta: "Falta atingir 4ª",
+  },
+  {
+    nome: "Encerramento do contrato",
+    valor: "Liberação Estimada de R$ 1.250.000",
     gatilho: null,
-    status: "collapsed",
-    meta: "Recolhidas — expandir para ver detalhes",
+    status: "blocked",
+    meta: "Valores dependem de avanço físisco, avanço contábil comprovado e comprovantes de pagamento",
+    actionLabel: "Iniciar encerramento →",
+    action: "encerrar",
   },
 ];
 
 const STATUS_LABELS = {
   done: "Liberada",
-  ready: null, // mostra botão no lugar do label
   blocked: "Bloqueada",
-  collapsed: "⌄",
 };
 
 export default function LiberacoesView() {
+  const [drawerParcela, setDrawerParcela] = useState(null);
+
+  const handleAction = (parcela) => {
+    if (parcela.action === "solicitar") {
+      setDrawerParcela(parcela);
+    } else if (parcela.action === "encerrar") {
+      alert(
+        "Drawer 'Iniciar encerramento' — não implementado nesta demo.\n\n" +
+          "Ver design pagina liberacoes/F-liberacoes.html seção 04."
+      );
+    }
+  };
+
   return (
     <div className="liberacoes-view">
       <section className="card lib-card lib-card--intro">
@@ -175,17 +205,11 @@ export default function LiberacoesView() {
               </div>
               <div className="lib-tl-meta">{p.meta}</div>
             </div>
-            {p.status === "ready" ? (
+            {p.actionLabel ? (
               <button
                 type="button"
                 className="lib-tl-action"
-                onClick={() => {
-                  // Demo estática: drawer real ainda não existe.
-                  alert(
-                    "Drawer 'Solicitar liberação' — não implementado nesta demo.\n\n" +
-                    "Ver design pagina liberacoes/F-liberacoes.html seção 05."
-                  );
-                }}
+                onClick={() => handleAction(p)}
               >
                 {p.actionLabel}
               </button>
@@ -197,6 +221,13 @@ export default function LiberacoesView() {
           </div>
         ))}
       </section>
+
+      <SolicitarLiberacaoDrawer
+        parcela={drawerParcela}
+        estadoAtual={ESTADO_ATUAL}
+        contratoCodigo={CONTRATO_CODIGO}
+        onClose={() => setDrawerParcela(null)}
+      />
     </div>
   );
 }

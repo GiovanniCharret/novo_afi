@@ -5,9 +5,9 @@ services:
       dockerfile: backend/Dockerfile
     container_name: novo_afi_backend
     working_dir: /app/backend
-    command: uvicorn app.server:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.server:app --host 0.0.0.0 --port 8001 --reload
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
       # Defaults preservam o comportamento de dev local. Em produção, criar
       # `.env` ao lado deste docker-compose.yml com os valores reais — o

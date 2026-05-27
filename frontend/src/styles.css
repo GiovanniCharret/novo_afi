@@ -1991,3 +1991,271 @@ tr:hover td { background: #f8fbff; }
 .lib-tl-status--done { color: var(--lib-olive); font-weight: 600; }
 .lib-tl-status--blocked { color: var(--text-muted); }
 .lib-tl-status--collapsed { color: var(--text-muted); font-size: 1rem; }
+
+/* Drawer "Solicitar liberação" — abre sobre a Liberações view.
+   Mantém a paleta clay/olive escopada de .liberacoes-view; o backdrop
+   cobre toda a viewport, o drawer slide-in pela direita. */
+.lib-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 19, 0.35);
+  z-index: 1000;
+  animation: lib-drawer-fade 0.18s ease-out;
+}
+@keyframes lib-drawer-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.lib-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 100vw;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  z-index: 1001;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  animation: lib-drawer-in 0.2s ease-out;
+  --lib-clay:  #D97757;
+  --lib-olive: #788C5D;
+}
+@keyframes lib-drawer-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+.lib-drawer-header {
+  padding: 14px 20px;
+  background: #f0f4f8;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.lib-drawer-header h3 {
+  font-size: 0.98rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  margin: 0;
+}
+.lib-drawer-sub {
+  display: block;
+  margin-top: 2px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.lib-drawer-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.lib-drawer-close:hover { background: rgba(0, 0, 0, 0.05); color: var(--text-primary); }
+
+.lib-drawer-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.lib-drawer-field { margin-bottom: 16px; }
+
+.lib-drawer-label {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.lib-drawer-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.lib-drawer-value strong { font-weight: 600; }
+
+.lib-drawer-req {
+  color: var(--lib-clay);
+  font-size: 0.78rem;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+.lib-drawer-download {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: #fafaf7;
+}
+.lib-drawer-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.lib-drawer-download-info {
+  flex: 1;
+  min-width: 0;
+}
+.lib-drawer-filename {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-drawer-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.lib-drawer-download-btn {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.78rem;
+  padding: 5px 12px;
+  border: 1px solid var(--lib-clay);
+  color: var(--lib-clay);
+  background: var(--bg-card);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.lib-drawer-download-btn:hover {
+  background: var(--lib-clay);
+  color: var(--bg-card);
+}
+
+.lib-drawer-drop {
+  border: 1.5px dashed var(--border-light);
+  border-radius: 6px;
+  padding: 20px 12px;
+  background: #fafaf7;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  outline: none;
+}
+.lib-drawer-drop:hover,
+.lib-drawer-drop:focus-visible,
+.lib-drawer-drop.is-dragging {
+  border-color: var(--lib-clay);
+  background: rgba(217, 119, 87, 0.05);
+}
+.lib-drawer-drop-icon {
+  font-size: 22px;
+  color: var(--text-muted);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.lib-drawer-drop-text {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.lib-drawer-drop-link {
+  color: var(--lib-clay);
+  text-decoration: underline;
+}
+.lib-drawer-drop-hint {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.lib-drawer-filled {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--lib-olive);
+  border-radius: 6px;
+  background: rgba(120, 140, 93, 0.06);
+}
+.lib-drawer-filled-info {
+  flex: 1;
+  min-width: 0;
+}
+.lib-drawer-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.lib-drawer-clear:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+.lib-drawer-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-light);
+  background: #fafaf7;
+  flex-shrink: 0;
+}
+.lib-drawer-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.lib-drawer-btn {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.82rem;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.lib-drawer-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+.lib-drawer-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.lib-drawer-btn--primary {
+  background: var(--lib-clay);
+  border-color: var(--lib-clay);
+  color: var(--bg-card);
+}
+.lib-drawer-btn--primary:hover:not(:disabled) {
+  background: #c66647;
+  border-color: #c66647;
+  color: var(--bg-card);
+}
+.lib-drawer-btn--primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--lib-clay);
+  border-color: var(--lib-clay);
+  color: var(--bg-card);
+}
+.lib-drawer-hint-foot {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 8px;
+}
